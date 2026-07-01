@@ -2,17 +2,22 @@
 extends EditorPlugin
 ## godot-core-kit 编辑器插件入口。
 ##
-## 消费方启用本插件时,按顺序注册 autoload:先 Log(最底层、零依赖),
-## 再 CoreKit(依赖 Log)。顺序决定初始化顺序,CoreKit._ready() 会用到 Log。
+## 消费方启用本插件时,按 AUTOLOADS 顺序注册全部 autoload:Log 最先(最底层、
+## 零依赖),其后的 EventBus/SceneManager/ObjectPool/SaveManager 各自独立、可引用
+## Log,CoreKit 最后。顺序决定初始化顺序,凡引用 Log 的单例都排在 Log 之后。
 ## 每项带 has_setting 幂等判断,避免与开发工程 project.godot 预声明重复注册。
 ## 禁用时逆序移除。
 ##
-## 顺序不变式仅对"全新启用"成立:若消费方已单独注册了 CoreKit 而没有 Log
-## (如 0.1.0 就地升级到 0.2.0),再启用本插件会把 Log 追加到 CoreKit 之后而
-## 破坏顺序。全新安装与本开发工程(两者都预声明了两个 autoload)不受影响。
+## 顺序不变式仅对"全新启用"成立:若消费方已部分注册了后续 autoload 而没有 Log
+## (如就地跨版本升级),再启用本插件会把 Log 追加到它们之后而破坏顺序。全新安装
+## 与本开发工程(project.godot 已按同序预声明全部 autoload)不受影响。
 
 const AUTOLOADS := [
 	["Log", "res://addons/godot-core-kit/log.gd"],
+	["EventBus", "res://addons/godot-core-kit/event_bus.gd"],
+	["SceneManager", "res://addons/godot-core-kit/scene_manager.gd"],
+	["ObjectPool", "res://addons/godot-core-kit/object_pool.gd"],
+	["SaveManager", "res://addons/godot-core-kit/save_manager.gd"],
 	["CoreKit", "res://addons/godot-core-kit/core_kit.gd"],
 ]
 
