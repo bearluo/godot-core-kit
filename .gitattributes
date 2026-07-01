@@ -1,0 +1,22 @@
+# Normalize line endings to LF and let Git auto-detect text files.
+* text=auto eol=lf
+
+# Godot text resource formats.
+*.gd     text
+*.tscn   text
+*.tres   text
+*.godot  text
+*.cfg    text
+*.import text
+*.svg    text
+
+# Common binary asset types (do not touch EOL).
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.webp   binary
+*.ogg    binary
+*.wav    binary
+*.mp3    binary
+*.ttf    binary
+*.otf    binary
