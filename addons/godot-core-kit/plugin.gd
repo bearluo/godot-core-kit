@@ -6,6 +6,10 @@ extends EditorPlugin
 ## 再 CoreKit(依赖 Log)。顺序决定初始化顺序,CoreKit._ready() 会用到 Log。
 ## 每项带 has_setting 幂等判断,避免与开发工程 project.godot 预声明重复注册。
 ## 禁用时逆序移除。
+##
+## 顺序不变式仅对"全新启用"成立:若消费方已单独注册了 CoreKit 而没有 Log
+## (如 0.1.0 就地升级到 0.2.0),再启用本插件会把 Log 追加到 CoreKit 之后而
+## 破坏顺序。全新安装与本开发工程(两者都预声明了两个 autoload)不受影响。
 
 const AUTOLOADS := [
 	["Log", "res://addons/godot-core-kit/log.gd"],

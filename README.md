@@ -16,17 +16,20 @@
 
 ```
 godot-core-kit/
-├── project.godot                 # 开发工程配置（Compatibility 渲染器；启用插件；autoload CoreKit）
+├── project.godot                 # 开发工程配置（Compatibility 渲染器；启用插件；autoload Log 与 CoreKit）
 ├── icon.svg                      # 工程图标
 ├── addons/
 │   └── godot-core-kit/           # ← 复用给游戏项目的就是这个目录
 │       ├── plugin.cfg            # 插件元信息
-│       ├── plugin.gd             # EditorPlugin：启用插件时注册 autoload CoreKit
+│       ├── plugin.gd             # EditorPlugin：启用插件时注册 autoload Log、CoreKit
+│       ├── log.gd                # Log 单例：分级日志（DEBUG/INFO/WARN/ERROR）
 │       └── core_kit.gd           # 运行时全局单例（骨架，后续挂各子系统）
 ├── demo/
 │   ├── demo.tscn                 # 冒烟测试场景（工程主场景）
 │   └── demo.gd
-└── docs/superpowers/specs/       # 设计文档
+├── test/
+│   └── test_log.gd               # headless 断言测试
+└── docs/superpowers/             # 设计文档（specs）与实现计划（plans）
 ```
 
 ## 在游戏项目中引用
