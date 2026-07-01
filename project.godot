@@ -14,6 +14,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Log="*res://addons/godot-core-kit/log.gd"
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
 
 [editor_plugins]

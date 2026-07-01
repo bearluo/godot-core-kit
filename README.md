@@ -47,15 +47,17 @@ plug("<你的 GitLab 地址>/godot-core-kit", {"include": ["addons/godot-core-ki
 
 ### 启用
 
-引入后，在游戏项目「项目设置 > 插件」里启用 **godot-core-kit**。启用时插件会自动把
-`CoreKit` 注册为 autoload，之后任意脚本可直接使用：
+引入后，在游戏项目「项目设置 > 插件」里启用 **godot-core-kit**。启用时插件会自动注册
+`Log` 与 `CoreKit` 两个 autoload，之后任意脚本可直接使用：
 
 ```gdscript
-CoreKit.info("hello from game")
+Log.info("hello from game")      # 分级日志：Log.debug/info/warn/error
+Log.set_level(Log.Level.WARN)    # 运行时收紧阈值
 print(CoreKit.VERSION)
 ```
 
 ## 版本
 
-0.1.0 — 骨架：仅 `CoreKit` 全局入口与 `info()` 占位方法。后续子系统（日志、事件总线、
-场景管理、对象池、存档等）另行设计与实现。
+0.2.0 — 新增 `Log` 日志子系统：全局单例，四级分级（DEBUG/INFO/WARN/ERROR）、
+统一格式 `[时间][级别] 消息`、全局阈值过滤、彩色输出、WARN/ERROR 接入编辑器
+调试器面板。后续子系统（事件总线、场景管理、对象池、存档等）另行设计与实现。

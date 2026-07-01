@@ -2,18 +2,27 @@
 extends EditorPlugin
 ## godot-core-kit 编辑器插件入口。
 ##
-## 消费方在「项目设置 > 插件」里启用本插件时，自动把 CoreKit 注册为 autoload；
-## 禁用时移除。带幂等判断，避免与开发工程 project.godot 中的预声明重复注册。
+## 消费方启用本插件时,按顺序注册 autoload:先 Log(最底层、零依赖),
+## 再 CoreKit(依赖 Log)。顺序决定初始化顺序,CoreKit._ready() 会用到 Log。
+## 每项带 has_setting 幂等判断,避免与开发工程 project.godot 预声明重复注册。
+## 禁用时逆序移除。
 
-const AUTOLOAD_NAME := "CoreKit"
-const AUTOLOAD_PATH := "res://addons/godot-core-kit/core_kit.gd"
+const AUTOLOADS := [
+	["Log", "res://addons/godot-core-kit/log.gd"],
+	["CoreKit", "res://addons/godot-core-kit/core_kit.gd"],
+]
 
 
 func _enter_tree() -> void:
-	if not ProjectSettings.has_setting("autoload/" + AUTOLOAD_NAME):
-		add_autoload_singleton(AUTOLOAD_NAME, AUTOLOAD_PATH)
+	for entry in AUTOLOADS:
+		var autoload_name: String = entry[0]
+		var autoload_path: String = entry[1]
+		if not ProjectSettings.has_setting("autoload/" + autoload_name):
+			add_autoload_singleton(autoload_name, autoload_path)
 
 
 func _exit_tree() -> void:
-	if ProjectSettings.has_setting("autoload/" + AUTOLOAD_NAME):
-		remove_autoload_singleton(AUTOLOAD_NAME)
+	for i in range(AUTOLOADS.size() - 1, -1, -1):
+		var autoload_name: String = AUTOLOADS[i][0]
+		if ProjectSettings.has_setting("autoload/" + autoload_name):
+			remove_autoload_singleton(autoload_name)
