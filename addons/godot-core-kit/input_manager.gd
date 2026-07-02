@@ -132,7 +132,8 @@ func _input(event: InputEvent) -> void:
 
 func _apply_binding(action: String, event: InputEvent) -> void:
 	InputMap.action_erase_events(action)
-	InputMap.action_add_event(action, event)
+	# duplicate() 防止 InputMap 持有调用方传入的同一个 InputEvent 引用(别名)。
+	InputMap.action_add_event(action, event.duplicate())
 
 
 func _update_device(event: InputEvent) -> void:

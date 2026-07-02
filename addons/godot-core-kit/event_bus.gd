@@ -1,7 +1,8 @@
 extends Node
 ## EventBus —— godot-core-kit 全局发布/订阅事件总线(骨架首版)。
 ##
-## 以 autoload "EventBus" 注册。用字符串事件名解耦"发布方"与"订阅方",
+## 由 CoreKit 门面在 _init 中构造并 add_child,不再是独立注册的 project autoload,
+## 经 CoreKit.bus 访问(唯一 autoload 是 CoreKit 本身)。用字符串事件名解耦"发布方"与"订阅方",
 ## 补充(而非取代)Godot 原生 signal:两节点有直接引用关系时仍优先用原生
 ## signal/connect;EventBus 只用于没有引用关系、订阅方不确定的广播场景。
 ##
@@ -11,8 +12,8 @@ extends Node
 ## Node/Object)的 Callable,无需轮询或手动 unsubscribe。
 ##
 ## 用法:
-##   EventBus.subscribe("player_died", _on_player_died)
-##   EventBus.publish("player_died", {"hp": 0})
+##   CoreKit.bus.subscribe("player_died", _on_player_died)
+##   CoreKit.bus.publish("player_died", {"hp": 0})
 ##
 ## 注意(RefCounted 监听者的边界情况):Callable 绑定到 RefCounted(含普通
 ## `class ... extends RefCounted`、Resource 等)方法时,Callable 本身持有

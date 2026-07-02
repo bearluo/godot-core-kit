@@ -1,7 +1,8 @@
 extends Node
 ## SceneManager —— godot-core-kit 全局场景切换单例（首版：仅替换，无场景栈）。
 ##
-## 以 autoload "SceneManager" 注册（注册步骤属后续集成任务，不在本文件内）。统一入口
+## 由 CoreKit 门面在 _init 中构造并 add_child，不再是独立注册的 project autoload，
+## 经 CoreKit.scenes 访问（唯一 autoload 是 CoreKit 本身）。统一入口
 ## change_scene(target, options) 把"替换当前活动场景"这件事从零散的
 ## get_tree().change_scene_to_*() 调用收敛为一个可选带淡入淡出过渡、带切换生命周期信号
 ## 的协程。同步 load()（不用线程，Web 导出安全）；默认过渡 NONE，可选 FADE
@@ -9,9 +10,9 @@ extends Node
 ## （_is_changing 守卫），不做排队。
 ##
 ## 用法：
-##   SceneManager.change_scene("res://levels/level_2.tscn")
-##   SceneManager.change_scene(preload("res://levels/boss.tscn"), {"transition": SceneManager.Transition.FADE})
-##   await SceneManager.change_scene(...)   # 原地等待切换完成
+##   CoreKit.scenes.change_scene("res://levels/level_2.tscn")
+##   CoreKit.scenes.change_scene(preload("res://levels/boss.tscn"), {"transition": CoreKit.scenes.Transition.FADE})
+##   await CoreKit.scenes.change_scene(...)   # 原地等待切换完成
 
 signal scene_changing(target_path: String)
 signal scene_changed(scene_path: String, scene: Node)
