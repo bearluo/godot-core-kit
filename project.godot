@@ -1,6 +1,10 @@
 ; Engine configuration file.
 ; It's best edited using the editor UI and not directly,
 ; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -20,10 +24,15 @@ SceneManager="*res://addons/godot-core-kit/scene_manager.gd"
 ObjectPool="*res://addons/godot-core-kit/object_pool.gd"
 SaveManager="*res://addons/godot-core-kit/save_manager.gd"
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
+
+[dotnet]
+
+project/assembly_name="godot-core-kit (dev)"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot-core-kit/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot-core-kit/plugin.cfg", "res://addons/godot_ai/plugin.cfg")
 
 [rendering]
 

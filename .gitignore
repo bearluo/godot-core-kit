@@ -13,3 +13,6 @@ export_presets.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# 第三方开发工具插件(本地 AI 编辑器桥,不随库分发/入库)
+addons/godot_ai/
