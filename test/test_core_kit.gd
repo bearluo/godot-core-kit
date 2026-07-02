@@ -1,0 +1,92 @@
+extends SceneTree
+## CoreKit 门面接线 headless 断言测试——测的就是 autoload 接线本身,
+## 因此例外地直接使用 /root/CoreKit(与其余测试"直接实例化脚本"的模式不同)。
+## 运行:godot --headless --path . -s res://test/test_core_kit.gd
+##
+## 环境坑(与 test_state_machine.gd / test_audio_manager.gd 一致):-s 自定义
+## SceneTree 脚本的 _initialize() 在主循环开始前执行,此时 root 尚未真正"入树",
+## CoreKit 自身已在 _init 中构造好全部子节点(属性/子节点顺序此刻已就绪),但
+## CoreKit._ready()(bind_settings/bind_ticker 接线发生处)要等主循环跑起来才
+## 触发,故须先 await 一帧,再做接线断言。
+
+
+func _initialize() -> void:
+	var failures := 0
+	var kit = root.get_node_or_null("CoreKit")
+	if kit == null:
+		print("FAIL 0: /root/CoreKit autoload 缺失")
+		print("test_core_kit: 1 FAILURE(S)")
+		quit(1)
+		return
+
+	await process_frame  # 补一帧,让 CoreKit._ready() 的 bind_* 接线跑完
+
+	# 1. 版本
+	if kit.VERSION != "0.4.0":
+		print("FAIL 1: VERSION 应为 0.4.0,实际 %s" % kit.VERSION)
+		failures += 1
+
+	# 2. 十个门面属性非 null 且脚本路径正确
+	var expected := [
+		["log", "res://addons/godot-core-kit/log.gd"],
+		["settings", "res://addons/godot-core-kit/settings.gd"],
+		["bus", "res://addons/godot-core-kit/event_bus.gd"],
+		["scenes", "res://addons/godot-core-kit/scene_manager.gd"],
+		["pool", "res://addons/godot-core-kit/object_pool.gd"],
+		["saves", "res://addons/godot-core-kit/save_manager.gd"],
+		["ticker", "res://addons/godot-core-kit/frame_scheduler.gd"],
+		["input", "res://addons/godot-core-kit/input_manager.gd"],
+		["audio", "res://addons/godot-core-kit/audio_manager.gd"],
+		["res", "res://addons/godot-core-kit/resource_manager.gd"],
+	]
+	for pair in expected:
+		var sub = kit.get(pair[0])
+		if sub == null:
+			print("FAIL 2: CoreKit.%s 为 null" % pair[0])
+			failures += 1
+			continue
+		var script: Resource = sub.get_script()
+		if script == null or script.resource_path != pair[1]:
+			print("FAIL 2: CoreKit.%s 的脚本不是 %s" % [pair[0], pair[1]])
+			failures += 1
+
+	# 3. 子节点顺序 = 构造顺序(_ready 触发序可复现)
+	var order := ["Log", "Settings", "EventBus", "SceneManager", "ObjectPool",
+		"SaveManager", "FrameScheduler", "InputManager", "AudioManager", "ResourceManager"]
+	if kit.get_child_count() != order.size():
+		print("FAIL 3: 子节点数应为 %d,实际 %d" % [order.size(), kit.get_child_count()])
+		failures += 1
+	else:
+		for i in order.size():
+			if String(kit.get_child(i).name) != order[i]:
+				print("FAIL 3: 第 %d 个子节点应为 %s,实际 %s" % [i, order[i], kit.get_child(i).name])
+				failures += 1
+
+	# 4. 接线:bind_settings / bind_ticker 已生效
+	if kit.input._settings != kit.settings:
+		print("FAIL 4: input 未绑定 settings")
+		failures += 1
+	if kit.audio._settings != kit.settings:
+		print("FAIL 4: audio 未绑定 settings")
+		failures += 1
+	if kit.res._ticker != kit.ticker:
+		print("FAIL 4: res 未绑定 ticker")
+		failures += 1
+
+	# 5. 老 API 经门面冒烟
+	var box := {"payload": null}
+	kit.bus.subscribe("__facade_smoke__", func(payload) -> void: box["payload"] = payload)
+	kit.bus.publish("__facade_smoke__", 42)
+	if box["payload"] != 42:
+		print("FAIL 5: EventBus 经门面发布订阅失败")
+		failures += 1
+	if kit.saves._decode("{}") != {}:
+		print("FAIL 5: SaveManager._decode 经门面调用失败")
+		failures += 1
+
+	if failures == 0:
+		print("test_core_kit: ALL PASS")
+		quit(0)
+	else:
+		print("test_core_kit: %d FAILURE(S)" % failures)
+		quit(1)

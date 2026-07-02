@@ -1,7 +1,8 @@
 extends Node
 ## Log —— godot-core-kit 全局日志单例(骨架首版)。
 ##
-## 以 autoload "Log" 注册。四级分级(DEBUG/INFO/WARN/ERROR)+ 统一格式
+## 由 CoreKit 门面在 _init 中构造为子节点,经 CoreKit.log 访问,不再直接
+## 注册为 autoload。四级分级(DEBUG/INFO/WARN/ERROR)+ 统一格式
 ## [HH:MM:SS.mmm][LEVEL] message + 全局阈值过滤(默认 DEBUG,运行时 set_level 可改)
 ## + print_rich 彩色输出。WARN/ERROR 额外走 push_warning/push_error 进编辑器
 ## "错误"面板并带调用栈。纯 GDScript、无文件 IO,支持 Web 导出。

@@ -108,7 +108,7 @@ func get_current_scene_path() -> String:
 	return scene.scene_file_path
 
 
-# --- 可测纯逻辑接缝（不碰场景树、不调 Log）---
+# --- 可测纯逻辑接缝（不碰场景树、不调 CoreKit.log）---
 
 ## target 是 PackedScene 时检查 can_instantiate()；是 String 时检查非空、以 res:// 开头、
 ## 以 .tscn/.scn 结尾（不检查文件是否真实存在，存在性检查留给运行时 ResourceLoader.exists）；

@@ -7,8 +7,8 @@ extends Node
 ## DirAccess/JSON 全平台同步 API,无需 await)。纯 GDScript、无第三方依赖;
 ## 除 CoreKit.log(仅用于版本不匹配警告)外不依赖其它子系统。
 ##
-## 用法:SaveManager.save("hero1", {"hp": 100})
-##       var data := SaveManager.load("hero1")
+## 用法:CoreKit.saves.save("hero1", {"hp": 100})
+##       var data := CoreKit.saves.load("hero1")
 ##
 ## v1 范围之外(YAGNI):无自动收集存档的 registry、无加密、无迁移引擎
 ## (仅保留版本号字段)、无自动存档调度、无存档位元数据(缩略图/时长)、

@@ -8,12 +8,12 @@ extends Node
 ## 导出。可选依赖 Log(记录告警/错误),不依赖 EventBus/SceneManager/SaveManager。
 ##
 ## 用法:
-##   ObjectPool.register("bullet", bullet_scene, 20, 200)
-##   var b := ObjectPool.acquire("bullet")
+##   CoreKit.pool.register("bullet", bullet_scene, 20, 200)
+##   var b := CoreKit.pool.acquire("bullet")
 ##   if b != null:
 ##       add_child(b)
 ##   # ... 子弹逻辑自行决定何时释放 ...
-##   ObjectPool.release(b)
+##   CoreKit.pool.release(b)
 ##
 ## 被池化场景可选实现的复用钩子(不是本类的方法,是一份约定):
 ##   func _pool_reset() -> void
