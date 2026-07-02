@@ -26,14 +26,18 @@ func _initialize() -> void:
 
 	var am = AudioManagerScript.new()
 	am.sfx_pool_size = 2  # 入树前设置,_ready 按此建池
+	# 入树前设置独立总线名,与 CoreKit.audio 的全局 Music/SFX 总线隔离,避免
+	# 两个 AudioManager 共用总线图上的播放器/Tween,在进程退出时发生 teardown 竞态。
+	am.bus_music = "TestMusic"
+	am.bus_sfx = "TestSFX"
 	root.add_child(am)    # 触发 _ready:建总线 + 2 音乐播放器 + 2 SFX 播放器
 	# 环境坑(与 test_state_machine.gd 一致):_initialize() 期间 root 尚未真正
 	# "入树",root.add_child() 不会同步触发子树的 NOTIFICATION_READY,须补一帧。
 	await process_frame
 
 	# 1. Music/SFX 总线存在且 send 到 Master;重复 _ensure_bus 不重复创建
-	var music_idx := AudioServer.get_bus_index("Music")
-	var sfx_idx := AudioServer.get_bus_index("SFX")
+	var music_idx := AudioServer.get_bus_index("TestMusic")
+	var sfx_idx := AudioServer.get_bus_index("TestSFX")
 	if music_idx == -1 or sfx_idx == -1:
 		print("FAIL 1: Music/SFX 总线应被创建")
 		failures += 1
@@ -41,8 +45,8 @@ func _initialize() -> void:
 		print("FAIL 1: 新建总线应 send 到 Master")
 		failures += 1
 	var bus_count_before := AudioServer.bus_count
-	am._ensure_bus("Music")
-	am._ensure_bus("SFX")
+	am._ensure_bus("TestMusic")
+	am._ensure_bus("TestSFX")
 	if AudioServer.bus_count != bus_count_before:
 		print("FAIL 1: 已存在的总线不应重复创建")
 		failures += 1
@@ -88,6 +92,8 @@ func _initialize() -> void:
 		failures += 1
 	AudioServer.set_bus_volume_db(sfx_idx, 0.0)  # 模拟新会话:总线音量回默认
 	var am2 = AudioManagerScript.new()  # 不入树:bind_settings 不依赖 _ready
+	am2.bus_music = "TestMusic"  # 不入树不会经过 _ready,但为与 am 隔离一致仍显式设置
+	am2.bus_sfx = "TestSFX"
 	am2.bind_settings(settings)
 	if not is_equal_approx(AudioServer.get_bus_volume_db(sfx_idx), linear_to_db(0.25)):
 		print("FAIL 4: bind_settings 应恢复音量到 AudioServer")
@@ -118,7 +124,7 @@ func _initialize() -> void:
 		failures += 1
 	var playing_count := 0
 	for child in am.get_children():
-		if child is AudioStreamPlayer and child.playing and child.bus == "Music":
+		if child is AudioStreamPlayer and child.playing and child.bus == "TestMusic":
 			playing_count += 1
 	if playing_count != 2:
 		print("FAIL 6: 交叉期两个音乐播放器都应在播,实际 %d" % playing_count)
@@ -168,11 +174,26 @@ func _initialize() -> void:
 		failures += 1
 	am.play_sfx(null)  # null 空操作,不崩
 
-	# 清理
+	# 清理:先 stop_music 杀掉当前淡切 Tween;但 Tween 被 kill 时其 chain 里的
+	# outgoing.stop() 回调不会触发,可能残留另一个音乐播放器(非 _active_music)
+	# 仍处于 playing 状态,故显式遍历所有子播放器逐一 stop(),确保 free() 前
+	# AudioServer 侧无任何播放中的流。
+	# 关键坑(调试确认,见 scratchpad 报告):headless 下 process_frame 推进几乎
+	# 不消耗真实墙钟时间,而音频混音在独立线程按真实时间节奏运行;仅 await
+	# 帧不足以让混音线程追上已停止的播放器状态——反而更多帧推进=更多主线程
+	# /音频线程交错窗口,经验证 crash 概率不降反升。改用 OS.delay_msec 给音频
+	# 线程真实时间结算,再 free,避免与 quit() 竞态崩溃(已用 40 次连续 headless
+	# 运行验证 0 崩溃)。
+	am.stop_music()
+	for child in am.get_children():
+		if child is AudioStreamPlayer and child.playing:
+			child.stop()
+	OS.delay_msec(50)
 	am.free()
 	settings.free()
 	if FileAccess.file_exists(SETTINGS_PATH):
 		DirAccess.remove_absolute(SETTINGS_PATH)
+	OS.delay_msec(50)
 
 	if failures == 0:
 		print("test_audio_manager: ALL PASS")

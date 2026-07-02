@@ -14,8 +14,11 @@ extends Node
 ## BGM 实际切换(play_music 生效)后广播;stop_music 广播 null。
 signal music_changed(stream: AudioStream)
 
-const BUS_MUSIC := "Music"
-const BUS_SFX := "SFX"
+## 总线名;默认 "Music"/"SFX",与真实 autoload 消费者行为一致。若需在同
+## 进程内隔离出独立总线(如单测,避免与 CoreKit.audio 的全局总线图共用播放
+## 器/Tween 而在退出时竞态),须在该节点 _ready 前设置(如 sfx_pool_size)。
+var bus_music := "Music"
+var bus_sfx := "SFX"
 const SETTINGS_SECTION := "audio"
 ## 淡入起点/淡出终点(dB);-60dB 已低于可闻阈,足够平滑。
 const FADE_MIN_DB := -60.0
@@ -34,13 +37,13 @@ var _sfx_cursor: int = 0
 
 
 func _ready() -> void:
-	_ensure_bus(BUS_MUSIC)
-	_ensure_bus(BUS_SFX)
-	_music_a = _make_player(BUS_MUSIC)
-	_music_b = _make_player(BUS_MUSIC)
+	_ensure_bus(bus_music)
+	_ensure_bus(bus_sfx)
+	_music_a = _make_player(bus_music)
+	_music_b = _make_player(bus_music)
 	_active_music = _music_a
 	for i in sfx_pool_size:
-		_sfx_players.append(_make_player(BUS_SFX))
+		_sfx_players.append(_make_player(bus_sfx))
 
 
 ## 注入 Settings:恢复三总线音量(缺省不动)并持有引用。
@@ -164,9 +167,9 @@ func _bus_key_to_index(bus_key: String) -> int:
 		"master":
 			return AudioServer.get_bus_index("Master")
 		"music":
-			return AudioServer.get_bus_index(BUS_MUSIC)
+			return AudioServer.get_bus_index(bus_music)
 		"sfx":
-			return AudioServer.get_bus_index(BUS_SFX)
+			return AudioServer.get_bus_index(bus_sfx)
 	return -1
 
 
