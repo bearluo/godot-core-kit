@@ -132,6 +132,39 @@ func _initialize() -> void:
 	s3.free()
 	s4.free()
 
+	# 8. 容器值:get 返回深拷贝 + read-modify-write 必须写透(回归 aliasing 静默丢数据)
+	var s8 = _make()
+	s8.set_value("binds", "keys", {"jump": "space", "fire": "ctrl"})
+	# get 返回独立副本:改它不应回写 _data
+	var got: Dictionary = s8.get_value("binds", "keys")
+	got["jump"] = "w"
+	if s8.get_value("binds", "keys")["jump"] != "space":
+		print("FAIL 8: get_value 应返回深拷贝,改动不应污染内部 _data")
+		failures += 1
+	# read-modify-write:改副本再 set 回,必须真的写透并广播
+	var calls8 := []
+	s8.value_changed.connect(func(section: String, key: String, v) -> void: calls8.append(key))
+	var rmw: Dictionary = s8.get_value("binds", "keys")
+	rmw["jump"] = "w"
+	s8.set_value("binds", "keys", rmw)
+	if calls8.size() != 1:
+		print("FAIL 8: read-modify-write 的 set_value 应写透并广播一次,实际 %d" % calls8.size())
+		failures += 1
+	# 真正落盘:新实例读盘应看到修改后的值
+	var s8b = _make()
+	s8b._load_from_disk()
+	if s8b.get_value("binds", "keys")["jump"] != "w":
+		print("FAIL 8: read-modify-write 应真正落盘,磁盘读回 jump 应为 'w'")
+		failures += 1
+	# 内容相同的容器 set 回:不应重复广播/写盘
+	var same: Dictionary = s8.get_value("binds", "keys")
+	s8.set_value("binds", "keys", same)
+	if calls8.size() != 1:
+		print("FAIL 8: 内容未变的容器 set 不应再广播,实际 %d" % calls8.size())
+		failures += 1
+	s8.free()
+	s8b.free()
+
 	# 清理
 	s.free()
 	if FileAccess.file_exists(TEST_PATH):

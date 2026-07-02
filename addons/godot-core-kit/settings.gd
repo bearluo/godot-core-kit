@@ -31,7 +31,12 @@ func get_value(section: String, key: String, default: Variant = null) -> Variant
 	var sec: Dictionary = _data[section]
 	if not sec.has(key):
 		return default
-	return sec[key]
+	var value: Variant = sec[key]
+	# 容器返回深拷贝:调用方 read-modify-write 不会别名到 _data,否则 set_value
+	# 的"值未变化"判等会因同一引用恒真而静默跳过落盘(silent data loss)。
+	if typeof(value) == TYPE_DICTIONARY or typeof(value) == TYPE_ARRAY:
+		return value.duplicate(true)
+	return value
 
 
 func set_value(section: String, key: String, value: Variant) -> void:
@@ -39,9 +44,13 @@ func set_value(section: String, key: String, value: Variant) -> void:
 		return
 	if not _data.has(section):
 		_data[section] = {}
-	_data[section][key] = value
+	# 容器存深拷贝:调用方之后再改自己那份引用,不会静默改到 _data / 落盘不同步。
+	var to_store: Variant = value
+	if typeof(value) == TYPE_DICTIONARY or typeof(value) == TYPE_ARRAY:
+		to_store = value.duplicate(true)
+	_data[section][key] = to_store
 	_save_to_disk()
-	value_changed.emit(section, key, value)
+	value_changed.emit(section, key, to_store)
 
 
 func has_value(section: String, key: String) -> bool:
