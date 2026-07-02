@@ -130,7 +130,7 @@ func acquire(key: String) -> Node:
 ## call_deferred 的原因:release() 常从节点自身碰撞回调(area_entered/body_entered)里
 ## 同步触发,物理体在自己碰撞回调里同步改树有 "flushing queries" 报错风险;记账、隐藏、
 ## _pool_reset() 都是纯属性/字典操作,没有这个风险,保持同步执行。
-func release(node: Node) -> void:
+func release(node) -> void:  # 形参不标注 Node:传入已被外部 free() 的实例给 typed Node 形参会在调用边界抛 invalid freed instance,守卫将失效
 	if node == null or not is_instance_valid(node):
 		Log.warn("ObjectPool.release: node 为 null 或已失效,忽略")
 		return
@@ -145,7 +145,7 @@ func release(node: Node) -> void:
 		return
 
 	var entry: _PoolEntry = _pools[key]
-	var instance_id := node.get_instance_id()
+	var instance_id: int = node.get_instance_id()
 	if not entry.in_use.has(instance_id):
 		Log.warn("ObjectPool.release: node 当前并未处于借出状态(重复 release 或未经 acquire 就归还),忽略")
 		return
@@ -160,7 +160,7 @@ func release(node: Node) -> void:
 
 	entry.available.append(node)
 
-	var parent := node.get_parent()
+	var parent: Node = node.get_parent()
 	if parent != null:
 		parent.remove_child.call_deferred(node)
 

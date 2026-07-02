@@ -159,6 +159,10 @@ func _decode(text: String) -> Dictionary:
 	var envelope: Dictionary = parsed
 	if not envelope.has("_version") or not envelope.has("data"):
 		return {}
+	# _version 必须是标量:非标量(如 {}/[])会让 load() 里的 int(...) 抛错,
+	# 破坏 "任何错误都返回 {}" 的契约,故在此当作损坏处理。
+	if typeof(envelope["_version"]) not in [TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
+		return {}
 	if typeof(envelope["data"]) != TYPE_DICTIONARY:
 		return {}
 	return envelope

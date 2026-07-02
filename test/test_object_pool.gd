@@ -214,6 +214,14 @@ func _initialize() -> void:
 		failures += 1
 	pool.release(novis_reacquired)
 
+	# 15. release() 对已被外部 free() 的节点安全:静默 no-op,不崩溃
+	#     (回归:release 形参曾标注 typed Node,传入已 free 实例会在调用边界抛
+	#      "invalid freed instance",内部 is_instance_valid 守卫根本到不了)
+	pool.register("freed", _make_trivial_scene())
+	var freed_node: Node = pool.acquire("freed")
+	freed_node.free()  # 绕过 release() 直接 free()
+	pool.release(freed_node)  # 传入已失效引用 → 应静默 no-op,不抛错(能执行到下一行即通过)
+
 	pool.free()
 
 	if failures == 0:

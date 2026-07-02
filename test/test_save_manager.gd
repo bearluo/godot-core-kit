@@ -147,6 +147,11 @@ func _test_pure_seams() -> int:
 		print("FAIL _decode 对非 Dictionary 的 data 字段应返回 {}")
 		failures += 1
 
+	# 10b. _version 字段非标量(如 {}/[]):否则 load() 里的 int(...) 会抛错,破坏契约
+	if sm._decode('{"_version":{},"data":{}}') != {}:
+		print("FAIL _decode 对非标量 _version 应返回 {}")
+		failures += 1
+
 	# 11. _encode 输出本身是合法 JSON
 	var encoded: String = sm._encode({"a": 1})
 	var parsed = JSON.parse_string(encoded)
