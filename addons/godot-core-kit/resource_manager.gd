@@ -148,6 +148,12 @@ func _mark_done(path: String) -> void:
 
 
 func _finish_batch() -> void:
+	# 新鲜度守卫:空批/全缓存批经 call_deferred 排的 _finish_batch 到点时,可能已有
+	# 新的真实批在途(调用方紧接着又 preload_batch 了真实路径)。此时既不能清零在途批
+	# 的簿记、也不能误发 batch_completed——留给该批真正完成时(_mark_done 里 _in_flight
+	# 空)再发,保证 batch_completed 每批恰一次。
+	if not _in_flight.is_empty():
+		return
 	_batch_total = 0
 	_batch_loaded = 0
 	batch_completed.emit()

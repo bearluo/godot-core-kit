@@ -194,6 +194,30 @@ func _initialize() -> void:
 		failures += 1
 	rm_t.free()
 
+	# 11. _finish_batch 新鲜度守卫(回归:空批 call_deferred 与随后真实批交错,
+	#     stale deferred 不得误发 batch_completed / 不得清零在途批簿记)
+	var built11: Array = _make_frame_channel()
+	var rm11 = built11[0]
+	var ticker11 = built11[1]
+	var progress11 := []
+	var completed11 := {"n": 0}
+	rm11.batch_progress.connect(func(loaded: int, total: int) -> void: progress11.append([loaded, total]))
+	rm11.batch_completed.connect(func() -> void: completed11["n"] += 1)
+	rm11.preload_batch([PATH_A])   # 真实批:PATH_A 入 _in_flight,_batch_total=1,尚未消化
+	rm11._finish_batch()           # 模拟前一个空批排的 stale call_deferred 此刻到点
+	if completed11["n"] != 0:
+		print("FAIL 11: 在途批未完成时 stale _finish_batch 不应误发 batch_completed,实际 %d" % completed11["n"])
+		failures += 1
+	if rm11._batch_total != 1 or not rm11._in_flight.has(PATH_A):
+		print("FAIL 11: stale _finish_batch 不应清零在途批簿记")
+		failures += 1
+	ticker11._process(0.016)       # 真实批消化完成
+	if completed11["n"] != 1 or progress11[progress11.size() - 1] != [1, 1]:
+		print("FAIL 11: 真实批应恰发一次 batch_completed 且 progress 终值 [1,1],实际 completed=%d progress=%s" % [completed11["n"], progress11])
+		failures += 1
+	rm11.free()
+	ticker11.free()
+
 	if failures == 0:
 		print("test_resource_manager: ALL PASS")
 		quit(0)
