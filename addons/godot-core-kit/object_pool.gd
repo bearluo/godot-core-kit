@@ -49,16 +49,16 @@ var _pools: Dictionary = {}
 ## visible 属性(借出时显示、归还时隐藏);false 时池完全不碰可见性,交给调用方自行
 ## 处理(例如自定义淡入淡出过渡)。
 ## 若 key 已存在且 scene 与原来是同一个 Resource:幂等重复注册,静默忽略。
-## 若 key 已存在但 scene 不同:Log.warn,保留原池,不覆盖。
+## 若 key 已存在但 scene 不同:CoreKit.log.warn,保留原池,不覆盖。
 func register(key: String, scene: PackedScene, prewarm: int = 0, max_count: int = 0, manage_visibility: bool = true) -> void:
 	if scene == null or not scene.can_instantiate():
-		Log.error("ObjectPool.register: key '%s' 的 scene 无效,无法 instantiate(),已跳过注册" % key)
+		CoreKit.log.error("ObjectPool.register: key '%s' 的 scene 无效,无法 instantiate(),已跳过注册" % key)
 		return
 
 	if _pools.has(key):
 		var existing: _PoolEntry = _pools[key]
 		if existing.scene != scene:
-			Log.warn("ObjectPool.register: key '%s' 已注册为不同的 scene,保留原池,忽略本次注册" % key)
+			CoreKit.log.warn("ObjectPool.register: key '%s' 已注册为不同的 scene,保留原池,忽略本次注册" % key)
 		return
 
 	var entry := _PoolEntry.new()
@@ -69,7 +69,7 @@ func register(key: String, scene: PackedScene, prewarm: int = 0, max_count: int 
 
 	var effective_prewarm := prewarm
 	if max_count != 0 and prewarm > max_count:
-		Log.warn("ObjectPool.register: key '%s' 的 prewarm(%d) 超过 max_count(%d),已收紧 prewarm 以满足上限" % [key, prewarm, max_count])
+		CoreKit.log.warn("ObjectPool.register: key '%s' 的 prewarm(%d) 超过 max_count(%d),已收紧 prewarm 以满足上限" % [key, prewarm, max_count])
 		effective_prewarm = max_count
 
 	for i in range(effective_prewarm):
@@ -85,11 +85,11 @@ func has_pool(key: String) -> bool:
 
 
 ## 取一个可用实例:优先复用空闲队列(LIFO),为空则按 max_count 决定新建或返回 null。
-## key 未注册 → Log.error 并返回 null。已达 max_count 且无空闲 → Log.warn 并返回 null。
+## key 未注册 → CoreKit.log.error 并返回 null。已达 max_count 且无空闲 → CoreKit.log.warn 并返回 null。
 ## 返回的节点处于游离态(不在任何场景树上);是否/何时 add_child 由调用方决定。
 func acquire(key: String) -> Node:
 	if not _pools.has(key):
-		Log.error("ObjectPool.acquire: 未注册的 key '%s'" % key)
+		CoreKit.log.error("ObjectPool.acquire: 未注册的 key '%s'" % key)
 		return null
 
 	var entry: _PoolEntry = _pools[key]
@@ -105,7 +105,7 @@ func acquire(key: String) -> Node:
 
 	if node == null:
 		if entry.max_count > 0 and entry.total_count >= entry.max_count:
-			Log.warn("ObjectPool.acquire: 池 '%s' 已达上限(%d),返回 null" % [key, entry.max_count])
+			CoreKit.log.warn("ObjectPool.acquire: 池 '%s' 已达上限(%d),返回 null" % [key, entry.max_count])
 			return null
 		node = entry.scene.instantiate()
 		node.set_meta(META_POOL_KEY, key)
@@ -124,7 +124,7 @@ func acquire(key: String) -> Node:
 
 
 ## 归还一个由 acquire() 借出的节点。安全处理:node 为 null/已失效、非本子系统创建的
-## 节点、对同一节点重复 release,均为静默 no-op(附 Log.warn),绝不抛错/崩溃。
+## 节点、对同一节点重复 release,均为静默 no-op(附 CoreKit.log.warn),绝不抛错/崩溃。
 ## 正常路径:调用节点的可选钩子 _pool_reset()(若定义)→ 隐藏(manage_visibility 且为
 ## CanvasItem/Node3D)→ 记账挪回所属池的空闲队列 → 用 call_deferred 从当前父节点摘下。
 ## call_deferred 的原因:release() 常从节点自身碰撞回调(area_entered/body_entered)里
@@ -132,22 +132,22 @@ func acquire(key: String) -> Node:
 ## _pool_reset() 都是纯属性/字典操作,没有这个风险,保持同步执行。
 func release(node) -> void:  # 形参不标注 Node:传入已被外部 free() 的实例给 typed Node 形参会在调用边界抛 invalid freed instance,守卫将失效
 	if node == null or not is_instance_valid(node):
-		Log.warn("ObjectPool.release: node 为 null 或已失效,忽略")
+		CoreKit.log.warn("ObjectPool.release: node 为 null 或已失效,忽略")
 		return
 
 	if not node.has_meta(META_POOL_KEY):
-		Log.warn("ObjectPool.release: node 不是本子系统创建的节点,忽略")
+		CoreKit.log.warn("ObjectPool.release: node 不是本子系统创建的节点,忽略")
 		return
 
 	var key: String = node.get_meta(META_POOL_KEY)
 	if not _pools.has(key):
-		Log.warn("ObjectPool.release: node 所属的池 '%s' 已不存在,忽略" % key)
+		CoreKit.log.warn("ObjectPool.release: node 所属的池 '%s' 已不存在,忽略" % key)
 		return
 
 	var entry: _PoolEntry = _pools[key]
 	var instance_id: int = node.get_instance_id()
 	if not entry.in_use.has(instance_id):
-		Log.warn("ObjectPool.release: node 当前并未处于借出状态(重复 release 或未经 acquire 就归还),忽略")
+		CoreKit.log.warn("ObjectPool.release: node 当前并未处于借出状态(重复 release 或未经 acquire 就归还),忽略")
 		return
 
 	entry.in_use.erase(instance_id)
@@ -166,7 +166,7 @@ func release(node) -> void:  # 形参不标注 Node:传入已被外部 free() �
 
 
 ## 释放指定 key 当前空闲(available)的全部实例(queue_free)并清空空闲队列;仍在使用中
-## (in_use)的实例不受影响(若非空会 Log.warn,但不阻止 clear 执行)。池的注册信息
+## (in_use)的实例不受影响(若非空会 CoreKit.log.warn,但不阻止 clear 执行)。池的注册信息
 ## (scene/max_count/manage_visibility)保留,不等于 unregister,之后仍可 acquire()
 ## (空闲队列为空时会重新 instantiate)。
 func clear(key: String) -> void:
@@ -175,7 +175,7 @@ func clear(key: String) -> void:
 
 	var entry: _PoolEntry = _pools[key]
 	if entry.in_use.size() > 0:
-		Log.warn("ObjectPool.clear: 池 '%s' 仍有 %d 个实例在使用中,不受 clear 影响" % [key, entry.in_use.size()])
+		CoreKit.log.warn("ObjectPool.clear: 池 '%s' 仍有 %d 个实例在使用中,不受 clear 影响" % [key, entry.in_use.size()])
 
 	var freed_count := entry.available.size()
 	for node in entry.available:

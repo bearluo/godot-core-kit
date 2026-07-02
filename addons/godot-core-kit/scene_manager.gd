@@ -42,13 +42,13 @@ func change_scene(target, options: Dictionary = {}) -> void:
 	var target_path := _resolve_target_path(target)
 
 	if _is_changing:
-		Log.warn("SceneManager.change_scene: 拒绝重入，目标 '%s' 被忽略（当前正在切换中）" % target_path)
+		CoreKit.log.warn("SceneManager.change_scene: 拒绝重入，目标 '%s' 被忽略（当前正在切换中）" % target_path)
 		scene_change_failed.emit(target_path, ERR_BUSY)
 		return
 
 	var validation := _validate_target(target)
 	if validation != OK:
-		Log.error("SceneManager.change_scene: 非法 target '%s'" % target_path)
+		CoreKit.log.error("SceneManager.change_scene: 非法 target '%s'" % target_path)
 		scene_change_failed.emit(target_path, ERR_INVALID_PARAMETER)
 		return
 
@@ -65,7 +65,7 @@ func change_scene(target, options: Dictionary = {}) -> void:
 
 	var packed_scene := _load_packed_scene(target)
 	if packed_scene == null:
-		Log.error("SceneManager.change_scene: 加载失败 '%s'" % target_path)
+		CoreKit.log.error("SceneManager.change_scene: 加载失败 '%s'" % target_path)
 		if use_fade:
 			await _fade_to(0.0, opts["duration"], opts["color"])
 			_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE

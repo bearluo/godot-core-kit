@@ -5,7 +5,7 @@ extends Node
 ## 形式落盘到 user://saves/<slot>.json,JSON 格式、{_version, data} 信封包裹。
 ## 桌面与 Web 导出行为一致(user:// 在 HTML5 由 IndexedDB 支持,FileAccess/
 ## DirAccess/JSON 全平台同步 API,无需 await)。纯 GDScript、无第三方依赖;
-## 除 Log(仅用于版本不匹配警告)外不依赖其它子系统。
+## 除 CoreKit.log(仅用于版本不匹配警告)外不依赖其它子系统。
 ##
 ## 用法:SaveManager.save("hero1", {"hp": 100})
 ##       var data := SaveManager.load("hero1")
@@ -77,7 +77,7 @@ func load(slot: String) -> Dictionary:
 		return {}
 
 	if int(envelope["_version"]) != SCHEMA_VERSION:
-		Log.warn("SaveManager: slot '%s' 版本 %s 与当前 SCHEMA_VERSION %d 不一致,v1 无迁移逻辑,按原样加载" % [safe_slot, str(envelope["_version"]), SCHEMA_VERSION])
+		CoreKit.log.warn("SaveManager: slot '%s' 版本 %s 与当前 SCHEMA_VERSION %d 不一致,v1 无迁移逻辑,按原样加载" % [safe_slot, str(envelope["_version"]), SCHEMA_VERSION])
 
 	loaded.emit(safe_slot)
 	return envelope["data"]

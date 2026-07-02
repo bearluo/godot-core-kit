@@ -8,8 +8,8 @@ extends SceneTree
 ## 注：用运行时 load()（而非顶层 const preload()）取得 scene_manager.gd / demo.tscn。
 ## 原因：headless -s 执行时，-s 主脚本自身及其编译期 preload 依赖图，会在 SceneTree
 ## 把 autoload 注册为脚本全局标识符之前就被整体编译；scene_manager.gd 的 change_scene()
-## 函数体内引用了全局标识符 Log（即使本文件从不调用到该分支），静态分析仍会在编译期报
-## "Identifier not found: Log" 导致 preload 链失败。改为在 _initialize() 内用运行时
+## 函数体内引用了全局标识符 CoreKit（即使本文件从不调用到该分支），静态分析仍会在编译期报
+## "Identifier not found: CoreKit" 导致 preload 链失败。改为在 _initialize() 内用运行时
 ## load()（此时 autoload 已注册完毕）规避这一引擎时序限制；断言内容、顺序不变。
 
 func _initialize() -> void:

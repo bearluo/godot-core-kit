@@ -10,9 +10,9 @@ extends SceneTree
 ##
 ## 加载注:SaveManagerScript 故意延迟到 _initialize() 内部用 load() 取得,
 ## 不用类作用域 const X := preload(...)。原因:save_manager.gd 里引用了
-## 全局 autoload 标识符 Log(仅用于版本不匹配警告);而 `-s` 入口脚本的
+## 全局 autoload 标识符 CoreKit(仅用于版本不匹配警告);而 `-s` 入口脚本的
 ## 类作用域 preload 依赖在 Godot 完成 [autoload] 注册之前就会被编译,
-## 此时 Log 尚不是可解析的标识符,会导致 save_manager.gd 编译失败(得到
+## 此时 CoreKit 尚不是可解析的标识符,会导致 save_manager.gd 编译失败(得到
 ## 一个损坏的脚本对象,.new() 静默失败/返回错误类型,测试形同虚设却仍
 ## 打印 ALL PASS)。延迟到 _initialize() 内部 load() 时,autoload 已注册
 ## 完毕,编译正常。实机验证见 docs/superpowers/plans 对应任务的执行记录。

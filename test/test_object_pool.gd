@@ -1,6 +1,6 @@
 extends SceneTree
 ## ObjectPool headless 断言测试(直接实例化脚本,不依赖 ObjectPool 是否已注册为 autoload;
-## 依赖项目已注册的 Log autoload 用于内部 Log.warn/Log.error 调用)。
+## 依赖项目已注册的 CoreKit autoload 用于内部 CoreKit.log.warn/CoreKit.log.error 调用)。
 ## 运行:godot --headless -s res://test/test_object_pool.gd
 ##
 ## 已知例外:release() 里的 remove_child 是 call_deferred,在单次 _initialize() 里跑完
@@ -10,9 +10,9 @@ extends SceneTree
 
 ## 注:object_pool.gd 用运行时 load()(而非顶层 const preload())取得。原因:headless
 ## -s 执行时,-s 主脚本的编译期 preload 依赖图会在 autoload 注册之前编译,而
-## object_pool.gd 引用了全局 Log autoload,preload 链会因 "Identifier not found: Log" 失败。
+## object_pool.gd 引用了全局 CoreKit autoload,preload 链会因 "Identifier not found: CoreKit" 失败。
 ## 改为在 _initialize() 内用运行时 load()(此时 autoload 已注册)规避引擎时序限制;
-## 断言内容、顺序不变。ProbeScript 不引用 Log,保留 const preload。
+## 断言内容、顺序不变。ProbeScript 不引用 CoreKit,保留 const preload。
 const ProbeScript := preload("res://test/fixtures/object_pool_probe.gd")
 
 

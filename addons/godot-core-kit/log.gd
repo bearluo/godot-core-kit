@@ -6,7 +6,7 @@ extends Node
 ## + print_rich 彩色输出。WARN/ERROR 额外走 push_warning/push_error 进编辑器
 ## "错误"面板并带调用栈。纯 GDScript、无文件 IO,支持 Web 导出。
 ##
-## 用法:Log.info("msg")、Log.warn("x=%d" % x)、Log.set_level(Log.Level.WARN)
+## 用法:CoreKit.log.info("msg")、CoreKit.log.warn("x=%d" % x)、CoreKit.log.set_level(CoreKit.log.Level.WARN)
 
 enum Level { DEBUG, INFO, WARN, ERROR }
 

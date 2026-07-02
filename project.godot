@@ -18,11 +18,6 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-Log="*res://addons/godot-core-kit/log.gd"
-EventBus="*res://addons/godot-core-kit/event_bus.gd"
-SceneManager="*res://addons/godot-core-kit/scene_manager.gd"
-ObjectPool="*res://addons/godot-core-kit/object_pool.gd"
-SaveManager="*res://addons/godot-core-kit/save_manager.gd"
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
