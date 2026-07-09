@@ -12,7 +12,7 @@ func _drive(fs, frames: int) -> void:
 
 func _initialize() -> void:
 	var failures := 0
-	var fs = load("res://addons/godot-core-kit/frame_scheduler.gd").new()
+	var fs = load("res://addons/godot-core-kit/systems/frame_scheduler.gd").new()
 
 	# 1. every_n(cb, 1):每帧都调
 	var count1 := {"n": 0}

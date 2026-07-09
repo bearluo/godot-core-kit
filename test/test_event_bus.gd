@@ -3,7 +3,7 @@ extends SceneTree
 ## 覆盖 docs/superpowers/specs/2026-07-01-event-bus-design.md 规划的 13 个测试用例。
 ## 运行:godot --headless --path . -s res://test/test_event_bus.gd
 
-const EventBusScript := preload("res://addons/godot-core-kit/event_bus.gd")
+const EventBusScript := preload("res://addons/godot-core-kit/core/event_bus.gd")
 
 
 ## 测试用监听者:Node 子类,记录被调用次数与最近一次收到的 payload。

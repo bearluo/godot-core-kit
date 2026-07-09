@@ -16,9 +16,9 @@ extends SceneTree
 var ResourceManagerScript
 var SchedulerScript
 
-const PATH_A := "res://addons/godot-core-kit/log.gd"
-const PATH_B := "res://addons/godot-core-kit/event_bus.gd"
-const PATH_C := "res://addons/godot-core-kit/save_manager.gd"
+const PATH_A := "res://addons/godot-core-kit/core/log.gd"
+const PATH_B := "res://addons/godot-core-kit/core/event_bus.gd"
+const PATH_C := "res://addons/godot-core-kit/systems/save_manager.gd"
 const PATH_BAD := "res://__no_such_resource__.tres"
 
 
@@ -35,8 +35,8 @@ func _make_frame_channel() -> Array:
 
 
 func _initialize() -> void:
-	ResourceManagerScript = load("res://addons/godot-core-kit/resource_manager.gd")
-	SchedulerScript = load("res://addons/godot-core-kit/frame_scheduler.gd")
+	ResourceManagerScript = load("res://addons/godot-core-kit/systems/resource_manager.gd")
+	SchedulerScript = load("res://addons/godot-core-kit/systems/frame_scheduler.gd")
 	var failures := 0
 
 	# 1. get_resource:未命中同步加载入缓存;二次调用同一实例;is_cached/cached_count

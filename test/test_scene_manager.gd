@@ -14,7 +14,7 @@ extends SceneTree
 
 func _initialize() -> void:
 	var failures := 0
-	var SceneManagerScript = load("res://addons/godot-core-kit/scene_manager.gd")
+	var SceneManagerScript = load("res://addons/godot-core-kit/systems/scene_manager.gd")
 	var sm = SceneManagerScript.new()  # 裸 .new()，不 add_child，_ready() 不会跑
 
 	# 1. _validate_target：真实存在的 .tscn 路径 → OK

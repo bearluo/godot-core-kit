@@ -19,7 +19,7 @@ func _make():
 
 
 func _initialize() -> void:
-	SettingsScript = load("res://addons/godot-core-kit/settings.gd")
+	SettingsScript = load("res://addons/godot-core-kit/core/settings.gd")
 	var failures := 0
 
 	# 起点干净(上次异常退出可能残留)

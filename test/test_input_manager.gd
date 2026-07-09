@@ -29,8 +29,8 @@ func _restore_action_default() -> void:
 
 
 func _initialize() -> void:
-	InputManagerScript = load("res://addons/godot-core-kit/input_manager.gd")
-	SettingsScript = load("res://addons/godot-core-kit/settings.gd")
+	InputManagerScript = load("res://addons/godot-core-kit/systems/input_manager.gd")
+	SettingsScript = load("res://addons/godot-core-kit/core/settings.gd")
 	var failures := 0
 
 	if FileAccess.file_exists(SETTINGS_PATH):

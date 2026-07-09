@@ -45,7 +45,7 @@ func _ready() -> void:
 
 	# ResourceManager 冒烟:异步预热(completed 在后续帧广播,验证 deferred 投递)
 	CoreKit.res.batch_completed.connect(func() -> void: CoreKit.log.info("ResourceManager: 预热批完成"))
-	CoreKit.res.preload_batch(["res://addons/godot-core-kit/log.gd"])
+	CoreKit.res.preload_batch(["res://addons/godot-core-kit/core/log.gd"])
 
 	# KitStateMachine 冒烟:代码组一台两态状态机(类库,不经门面)
 	var machine := KitStateMachine.new()

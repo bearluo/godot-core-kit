@@ -54,7 +54,7 @@ func _values_equal(a, b) -> bool:
 
 
 func _initialize() -> void:
-	SaveManagerScript = load("res://addons/godot-core-kit/save_manager.gd")
+	SaveManagerScript = load("res://addons/godot-core-kit/systems/save_manager.gd")
 
 	var failures := 0
 	failures += _test_pure_seams()

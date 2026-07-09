@@ -2,7 +2,7 @@ extends SceneTree
 ## Log headless 断言测试(不依赖 autoload,直接实例化脚本)。
 ## 运行:godot --headless -s res://test/test_log.gd
 
-const LogScript := preload("res://addons/godot-core-kit/log.gd")
+const LogScript := preload("res://addons/godot-core-kit/core/log.gd")
 
 
 func _initialize() -> void:

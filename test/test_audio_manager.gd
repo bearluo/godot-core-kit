@@ -17,8 +17,8 @@ const SETTINGS_PATH := "user://__test_audio_settings__.json"
 
 
 func _initialize() -> void:
-	AudioManagerScript = load("res://addons/godot-core-kit/audio_manager.gd")
-	SettingsScript = load("res://addons/godot-core-kit/settings.gd")
+	AudioManagerScript = load("res://addons/godot-core-kit/systems/audio_manager.gd")
+	SettingsScript = load("res://addons/godot-core-kit/core/settings.gd")
 	var failures := 0
 
 	if FileAccess.file_exists(SETTINGS_PATH):

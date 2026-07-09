@@ -43,7 +43,7 @@ func _make_control_scene() -> PackedScene:
 
 func _initialize() -> void:
 	var failures := 0
-	var pool = load("res://addons/godot-core-kit/object_pool.gd").new()  # 运行时 load,见顶部注释
+	var pool = load("res://addons/godot-core-kit/systems/object_pool.gd").new()  # 运行时 load,见顶部注释
 
 	# 1. register() 后 has_pool(key) 为真;acquire(key) 返回非 null 的有效节点
 	pool.register("a", _make_trivial_scene())

@@ -10,18 +10,18 @@ extends Node
 ## 命名坑:属性 log 会遮蔽全局函数 log()(与旧 Log autoload 同款遮蔽);本脚本
 ## 内部不需要数学 log(),不受影响。
 
-const VERSION := "0.4.0"
+const VERSION := "0.4.1"
 
-const LogScript := preload("res://addons/godot-core-kit/log.gd")
-const SettingsScript := preload("res://addons/godot-core-kit/settings.gd")
-const EventBusScript := preload("res://addons/godot-core-kit/event_bus.gd")
-const SceneManagerScript := preload("res://addons/godot-core-kit/scene_manager.gd")
-const ObjectPoolScript := preload("res://addons/godot-core-kit/object_pool.gd")
-const SaveManagerScript := preload("res://addons/godot-core-kit/save_manager.gd")
-const FrameSchedulerScript := preload("res://addons/godot-core-kit/frame_scheduler.gd")
-const InputManagerScript := preload("res://addons/godot-core-kit/input_manager.gd")
-const AudioManagerScript := preload("res://addons/godot-core-kit/audio_manager.gd")
-const ResourceManagerScript := preload("res://addons/godot-core-kit/resource_manager.gd")
+const LogScript := preload("res://addons/godot-core-kit/core/log.gd")
+const SettingsScript := preload("res://addons/godot-core-kit/core/settings.gd")
+const EventBusScript := preload("res://addons/godot-core-kit/core/event_bus.gd")
+const SceneManagerScript := preload("res://addons/godot-core-kit/systems/scene_manager.gd")
+const ObjectPoolScript := preload("res://addons/godot-core-kit/systems/object_pool.gd")
+const SaveManagerScript := preload("res://addons/godot-core-kit/systems/save_manager.gd")
+const FrameSchedulerScript := preload("res://addons/godot-core-kit/systems/frame_scheduler.gd")
+const InputManagerScript := preload("res://addons/godot-core-kit/systems/input_manager.gd")
+const AudioManagerScript := preload("res://addons/godot-core-kit/systems/audio_manager.gd")
+const ResourceManagerScript := preload("res://addons/godot-core-kit/systems/resource_manager.gd")
 
 var log: LogScript
 var settings: SettingsScript

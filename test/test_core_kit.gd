@@ -22,22 +22,22 @@ func _initialize() -> void:
 	await process_frame  # 补一帧,让 CoreKit._ready() 的 bind_* 接线跑完
 
 	# 1. 版本
-	if kit.VERSION != "0.4.0":
-		print("FAIL 1: VERSION 应为 0.4.0,实际 %s" % kit.VERSION)
+	if kit.VERSION != "0.4.1":
+		print("FAIL 1: VERSION 应为 0.4.1,实际 %s" % kit.VERSION)
 		failures += 1
 
 	# 2. 十个门面属性非 null 且脚本路径正确
 	var expected := [
-		["log", "res://addons/godot-core-kit/log.gd"],
-		["settings", "res://addons/godot-core-kit/settings.gd"],
-		["bus", "res://addons/godot-core-kit/event_bus.gd"],
-		["scenes", "res://addons/godot-core-kit/scene_manager.gd"],
-		["pool", "res://addons/godot-core-kit/object_pool.gd"],
-		["saves", "res://addons/godot-core-kit/save_manager.gd"],
-		["ticker", "res://addons/godot-core-kit/frame_scheduler.gd"],
-		["input", "res://addons/godot-core-kit/input_manager.gd"],
-		["audio", "res://addons/godot-core-kit/audio_manager.gd"],
-		["res", "res://addons/godot-core-kit/resource_manager.gd"],
+		["log", "res://addons/godot-core-kit/core/log.gd"],
+		["settings", "res://addons/godot-core-kit/core/settings.gd"],
+		["bus", "res://addons/godot-core-kit/core/event_bus.gd"],
+		["scenes", "res://addons/godot-core-kit/systems/scene_manager.gd"],
+		["pool", "res://addons/godot-core-kit/systems/object_pool.gd"],
+		["saves", "res://addons/godot-core-kit/systems/save_manager.gd"],
+		["ticker", "res://addons/godot-core-kit/systems/frame_scheduler.gd"],
+		["input", "res://addons/godot-core-kit/systems/input_manager.gd"],
+		["audio", "res://addons/godot-core-kit/systems/audio_manager.gd"],
+		["res", "res://addons/godot-core-kit/systems/resource_manager.gd"],
 	]
 	for pair in expected:
 		var sub = kit.get(pair[0])
