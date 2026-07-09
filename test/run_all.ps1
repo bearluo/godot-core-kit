@@ -1,4 +1,4 @@
-# godot-core-kit 全量验证:import -> 12 个断言测试 -> demo 冒烟
+# godot-core-kit 全量验证:import -> 13 个断言测试 -> demo 冒烟
 # 用法(在仓库根目录): powershell -File test\run_all.ps1
 $ErrorActionPreference = 'Continue'
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -54,7 +54,7 @@ Write-Output "import exit=$($imp.code)"
 
 $tests = @('test_log','test_event_bus','test_scene_manager','test_object_pool',
   'test_save_manager','test_settings','test_frame_scheduler','test_state_machine',
-  'test_input_manager','test_audio_manager','test_resource_manager','test_core_kit')
+  'test_input_manager','test_audio_manager','test_resource_manager','test_kit_context','test_core_kit')
 $fails = 0
 Write-Output "`n=== tests ==="
 foreach ($t in $tests) {
@@ -69,7 +69,7 @@ Write-Output "`n=== demo smoke (--quit-after 60) ==="
 $d = Run-Godot @('--headless','--path','.','res://demo/demo.tscn','--quit-after','60') 90000 'demo'
 Write-Output "demo exit=$($d.code)"
 $demoText = Get-Content $d.out -Raw
-foreach ($e in @('all subsystems smoke-tested','FrameScheduler:','ResourceManager:','-> [Idle]','-> [Run]')) {
+foreach ($e in @('all subsystems smoke-tested','FrameScheduler:','ResourceManager:','KitContext:','-> [Idle]','-> [Run]')) {
   $hit = $demoText -match [regex]::Escape($e)
   Write-Output ("demo marker '{0}' : {1}" -f $e, $(if($hit){'present'}else{'*** MISSING ***'}))
   if (-not $hit) { $fails++ }

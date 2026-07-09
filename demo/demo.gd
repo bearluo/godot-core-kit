@@ -60,6 +60,20 @@ func _ready() -> void:
 	add_child(machine)          # 触发 _ready:进 Idle
 	machine.transition_to("Run")
 
+	# KitContext 冒烟:全局 provide/service + 作用域容器 + 收养随树释放(DI 容器,类库)
+	CoreKit.provide("demo_service", {"id": 7})
+	var ctx := KitContext.new()
+	ctx.name = "DemoCtx"
+	add_child(ctx)
+	ctx.provide("scoped", "level-only")
+	ctx.provide_child("owned_child", Node.new())
+	CoreKit.log.info("KitContext: scoped=%s global=%s builtin_audio=%s owned=%d" % [
+		KitContext.resolve(ctx, "scoped"),
+		KitContext.resolve(ctx, "demo_service"),
+		ctx.service("audio") == CoreKit.audio,
+		ctx.get_child_count()])
+	ctx.free()  # 随树释放,收养的子节点连带回收
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 
