@@ -102,6 +102,10 @@ func _initialize() -> void:
 	if kit.service("__facade_custom__") != 55:
 		print("FAIL 6: 全局 provide/service 冒烟失败")
 		failures += 1
+	kit.provide("__facade_custom__", 66)  # 重复键:应覆盖为新值(并告警)
+	if kit.service("__facade_custom__") != 66:
+		print("FAIL 6: 重复 key 应覆盖为新值")
+		failures += 1
 	if kit.service_or("__facade_absent__", -1) != -1:
 		print("FAIL 6: service_or 应返回 fallback")
 		failures += 1
