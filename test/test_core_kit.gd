@@ -22,8 +22,8 @@ func _initialize() -> void:
 	await process_frame  # 补一帧,让 CoreKit._ready() 的 bind_* 接线跑完
 
 	# 1. 版本
-	if kit.VERSION != "0.4.1":
-		print("FAIL 1: VERSION 应为 0.4.1,实际 %s" % kit.VERSION)
+	if kit.VERSION != "0.5.0":
+		print("FAIL 1: VERSION 应为 0.5.0,实际 %s" % kit.VERSION)
 		failures += 1
 
 	# 2. 十个门面属性非 null 且脚本路径正确
@@ -82,6 +82,28 @@ func _initialize() -> void:
 		failures += 1
 	if kit.saves._decode("{}") != {}:
 		print("FAIL 5: SaveManager._decode 经门面调用失败")
+		failures += 1
+
+	# 6. 全局根:内置已按 key 预注册 + provide/service/has/service_or 冒烟
+	var builtin_keys := ["log", "settings", "bus", "scenes", "pool", "saves",
+		"ticker", "input", "audio", "res"]
+	for k in builtin_keys:
+		if kit.service(k) != kit.get(k):
+			print("FAIL 6: CoreKit.service('%s') 未指向内置子系统" % k)
+			failures += 1
+	if not kit.has("audio"):
+		print("FAIL 6: has('audio') 应为 true")
+		failures += 1
+	kit.provide("audio", 999)  # 保留键:应被拒,audio 仍指向内置
+	if kit.service("audio") != kit.audio:
+		print("FAIL 6: 保留键 audio 不应被 provide 覆盖")
+		failures += 1
+	kit.provide("__facade_custom__", 55)
+	if kit.service("__facade_custom__") != 55:
+		print("FAIL 6: 全局 provide/service 冒烟失败")
+		failures += 1
+	if kit.service_or("__facade_absent__", -1) != -1:
+		print("FAIL 6: service_or 应返回 fallback")
 		failures += 1
 
 	if failures == 0:
