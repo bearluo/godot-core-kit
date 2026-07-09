@@ -4,11 +4,46 @@ $ErrorActionPreference = 'Continue'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $tmp = $env:TEMP
 
+# Resolve 'godot' to a native .exe. A .cmd/.bat wrapper cannot be driven with
+# UseShellExecute=$false (required below for stream redirection), so unwrap it
+# to the real .exe the wrapper forwards to.
+function Resolve-GodotExe {
+  $src = (Get-Command godot -ErrorAction Stop).Source
+  if ($src -match '\.(cmd|bat)$') {
+    $m = Select-String -Path $src -Pattern '"([^"]+\.exe)"' | Select-Object -First 1
+    if ($m) { return $m.Matches[0].Groups[1].Value }
+    throw "Could not resolve godot .exe from wrapper $src"
+  }
+  return $src
+}
+$GodotExe = Resolve-GodotExe
+Write-Output "godot exe: $GodotExe"
+
+# Drive godot via System.Diagnostics.Process, NOT Start-Process. With
+# `Start-Process -NoNewWindow -RedirectStandardOutput`, when the parent's own
+# stdout is a pipe/file (e.g. `powershell -File run_all.ps1 | tail`), output is
+# silently dropped and ExitCode reads back empty. The .NET path redirects
+# deterministically regardless of how the parent was launched. Async stream
+# reads (kicked off before WaitForExit) avoid a full-pipe-buffer deadlock.
 function Run-Godot([string[]]$gargs, [int]$ms, [string]$tag) {
   $out = "$tmp\rt-$tag.out.txt"; $err = "$tmp\rt-$tag.err.txt"
-  $p = Start-Process godot -ArgumentList $gargs -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
-  $null = $p.Handle   # 先取 Handle,后面读 ExitCode 才可靠
-  if (-not $p.WaitForExit($ms)) { $p.Kill(); return @{ tag=$tag; code='TIMEOUT'; pass=$false; out=$out } }
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $GodotExe
+  $psi.Arguments = ($gargs -join ' ')   # none of the args here contains spaces
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.CreateNoWindow = $true
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $so = $p.StandardOutput.ReadToEndAsync()
+  $se = $p.StandardError.ReadToEndAsync()
+  if (-not $p.WaitForExit($ms)) {
+    try { $p.Kill() } catch {}
+    [System.IO.File]::WriteAllText($out, $so.Result)
+    return @{ tag=$tag; code='TIMEOUT'; pass=$false; out=$out }
+  }
+  [System.IO.File]::WriteAllText($out, $so.Result)
+  [System.IO.File]::WriteAllText($err, $se.Result)
   $pass = Select-String -Path $out -Pattern 'ALL PASS' -Quiet
   return @{ tag=$tag; code=$p.ExitCode; pass=$pass; out=$out }
 }
