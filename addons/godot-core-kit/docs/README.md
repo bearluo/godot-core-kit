@@ -1,0 +1,41 @@
+# godot-core-kit 文档
+
+面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 10 个子系统,外加一套 per-entity 状态机类库。
+
+## 从这里开始
+
+- **[architecture.md](architecture.md)** —— 架构总纲:门面模式、目录布局、构造/初始化顺序、依赖纪律、已知引擎坑。第一次读框架先看这篇。
+
+## 子系统
+
+### core/ —— 根基设施
+
+| 文档 | 访问 | 一句话 |
+|---|---|---|
+| [log](core/log.md) | `CoreKit.log` | 分级日志 + 阈值过滤 + 彩色输出 |
+| [event-bus](core/event-bus.md) | `CoreKit.bus` | 字符串事件名的发布/订阅总线 |
+| [settings](core/settings.md) | `CoreKit.settings` | 玩家偏好,写透 `user://settings.json` |
+
+### systems/ —— 业务子系统
+
+| 文档 | 访问 | 一句话 |
+|---|---|---|
+| [scene-manager](systems/scene-manager.md) | `CoreKit.scenes` | 场景切换 |
+| [object-pool](systems/object-pool.md) | `CoreKit.pool` | 对象池复用 |
+| [save-manager](systems/save-manager.md) | `CoreKit.saves` | 存档槽读写 |
+| [frame-scheduler](systems/frame-scheduler.md) | `CoreKit.ticker` | 帧分频器:降频 tick + 预算队列 |
+| [input-manager](systems/input-manager.md) | `CoreKit.input` | 键位重绑定 + 设备检测 + 输入缓冲 |
+| [audio-manager](systems/audio-manager.md) | `CoreKit.audio` | 总线音量 + BGM 交叉淡切 + SFX 池 |
+| [resource-manager](systems/resource-manager.md) | `CoreKit.res` | 异步预加载 + 缓存 |
+
+### 状态机类库
+
+| 文档 | 访问 | 一句话 |
+|---|---|---|
+| [state-machine](state-machine.md) | `class_name KitStateMachine` | Node 型有限状态机,每个实体自己一台(不挂门面) |
+
+## 约定
+
+- 所有门面子系统经 `CoreKit.<属性>` 访问,无单独全局单例名。
+- 每篇子系统文档为五段式:**职责 / 公开 API / 依赖 / 用法示例 / 注意事项**。
+- 本目录随插件分发,是"怎么用"的说明;`docs/superpowers/` 在仓库根、是开发过程产物(设计规格 + 实现计划),两者不同。

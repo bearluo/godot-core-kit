@@ -9,6 +9,10 @@
 1. 把 `addons/godot-core-kit/` 复制进目标工程;
 2. 项目设置 → 插件 → 启用 godot-core-kit(自动注册唯一 autoload `CoreKit`)。
 
+## 文档
+
+完整架构说明与每个子系统的 API 文档在 [`addons/godot-core-kit/docs/`](addons/godot-core-kit/docs/README.md)(随插件分发)。第一次接触先读 [架构总纲](addons/godot-core-kit/docs/architecture.md)。
+
 ## 子系统一览
 
 | 门面属性 | 子系统 | 一句话 |
@@ -76,14 +80,24 @@ Log/EventBus/SceneManager/ObjectPool/SaveManager 五项旧注册,只保留 CoreK
 
 ## 测试
 
+单个子系统:
+
 ```
+godot --headless --path . --import          # 首次:生成 class_name 缓存
 godot --headless --path . -s res://test/test_<subsystem>.gd
+```
+
+一键全量(import → 12 测试 → demo 冒烟,末行 `FAILS=0` 为全绿):
+
+```
+powershell -File test\run_all.ps1
 ```
 
 12 份 headless 断言测试覆盖全部子系统与门面接线;`demo/demo.tscn` 冒烟全家桶。
 
 ## 版本
 
+- **0.4.1** — 子系统按角色归入 `core/` 与 `systems/` 子目录;新增 `addons/godot-core-kit/docs/` 功能架构文档(随插件分发)。纯结构调整,对使用者 API 无破坏。
 - **0.4.0** — CoreKit 门面(唯一 autoload);新增 Settings / FrameScheduler /
   KitStateMachine / InputManager / AudioManager / ResourceManager;老五件迁入门面
   (破坏性变更,见迁移表)。
