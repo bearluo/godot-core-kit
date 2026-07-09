@@ -70,6 +70,7 @@ var save = KitContext.resolve(self, "save_cloud")   # LevelCtx miss → 兜底�
 
 - **shadow**:子容器 `provide` 同名 key 即在子树内覆盖父层/全局(含内置)。
 - **归属**:`provide` 只存引用、绝不 reparent;要随作用域释放用 `provide_child`(或自己 add_child 到该容器后再 provide)。
+- **provide_child 覆盖**:用已存在的 key 再次 `provide_child` 会重指 `_local`,但**不释放**上一个收养的子节点——它仍作为容器子节点存在,直到容器自身 free。需替换请先自行 `remove_child`/`free` 旧节点,或避免同 key 重复 `provide_child`。
 - **生命周期**:disposal 走 `NOTIFICATION_PREDELETE`(非 `_exit_tree`,后者 reparent 也触发);`provide_child` 的子节点随容器 free 连带释放。
 - **class_name 缓存**:首次引用 `KitContext` 的脚本须先 `godot --headless --path . --import`。
 - **热路径**:`resolve` 每次向上走 `get_parent()` 链;高频访问在 `_ready` 里 pull 一次存成员,别每帧解析。
