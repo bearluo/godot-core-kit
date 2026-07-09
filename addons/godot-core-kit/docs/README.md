@@ -1,6 +1,6 @@
 # godot-core-kit 文档
 
-面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 10 个子系统,外加一套 per-entity 状态机类库。
+面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 10 个子系统,外加状态机与服务容器两套 off-facade 类库。
 
 ## 从这里开始
 
@@ -28,11 +28,12 @@
 | [audio-manager](systems/audio-manager.md) | `CoreKit.audio` | 总线音量 + BGM 交叉淡切 + SFX 池 |
 | [resource-manager](systems/resource-manager.md) | `CoreKit.res` | 异步预加载 + 缓存 |
 
-### 状态机类库
+### 类库(off-facade,不挂门面)
 
 | 文档 | 访问 | 一句话 |
 |---|---|---|
-| [state-machine](state-machine.md) | `class_name KitStateMachine` | Node 型有限状态机,每个实体自己一台(不挂门面) |
+| [state-machine](state-machine.md) | `class_name KitStateMachine` | Node 型有限状态机,每个实体自己一台 |
+| [kit-context](di/kit-context.md) | `class_name KitContext` | 节点绑定的层级服务容器(DI):游戏代码注册自己的服务 |
 
 ## 约定
 

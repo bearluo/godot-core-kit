@@ -1,6 +1,6 @@
 # godot-core-kit
 
-通用 2D 游戏开发底层框架(Godot 4.7,纯 GDScript,Web 导出兼容)。单一 autoload 门面 `CoreKit` 暴露全部子系统;`KitStateMachine`/`KitState` 以 class_name 类库随插件分发。
+通用 2D 游戏开发底层框架(Godot 4.7,纯 GDScript,Web 导出兼容)。单一 autoload 门面 `CoreKit` 暴露全部子系统;`KitStateMachine`/`KitState`、`KitContext` 以 class_name 类库随插件分发。
 
 ## 安装
 
@@ -26,6 +26,7 @@
 | `CoreKit.audio` | 音量 + BGM 淡切 + SFX 池 | [audio-manager](addons/godot-core-kit/docs/systems/audio-manager.md) |
 | `CoreKit.res` | 异步预加载 + 缓存 | [resource-manager](addons/godot-core-kit/docs/systems/resource-manager.md) |
 | `KitStateMachine`(类库) | Node 型状态机 | [state-machine](addons/godot-core-kit/docs/state-machine.md) |
+| `KitContext`(类库) | 节点绑定的层级服务容器(DI) | [kit-context](addons/godot-core-kit/docs/di/kit-context.md) |
 
 ## 从 0.3.x 升级(破坏性)
 
@@ -42,6 +43,7 @@ powershell -File test\run_all.ps1       # 一键全量,末行 FAILS=0 为全绿
 
 ## 版本
 
+- **0.5.0** — 新增 `KitContext` 节点绑定层级服务容器(DI)+ `CoreKit` 全局根 `provide/service`;纯增量,API 无破坏。
 - **0.4.1** — 子系统按角色归入 `core/` 与 `systems/`;新增 `addons/godot-core-kit/docs/` 架构文档。纯结构调整,API 无破坏。
 - **0.4.0** — CoreKit 门面(唯一 autoload);新增 Settings / FrameScheduler / KitStateMachine / InputManager / AudioManager / ResourceManager;老五件迁入门面(破坏性,见上「升级」)。
 - 0.3.0 — EventBus / SceneManager / ObjectPool / SaveManager。

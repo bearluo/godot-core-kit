@@ -1,6 +1,6 @@
 # godot-core-kit 架构总纲
 
-面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 10 个子系统,外加一套 per-entity 的状态机类库。
+面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 10 个子系统,外加状态机与服务容器(KitContext)两套 off-facade 类库。
 
 ## 门面模式(CoreKit facade)
 
@@ -32,6 +32,7 @@ addons/godot-core-kit/
   core/                  根基设施(被 systems 依赖)
   systems/               面向玩法的业务子系统
   state_machine/         class_name 状态机类库
+  di/                    class_name 服务容器类库(KitContext)
   docs/                  本文档目录
 ```
 
@@ -63,6 +64,15 @@ func _ready() -> void:
 - **诊断分层**:初始化期(`_init`/`_ready`,此时 `CoreKit.log` 未必就绪)用引擎原生 `push_warning`/`push_error`;运行期用 `CoreKit.log.*`。
 - 当前经 `bind_*` 建立的依赖:`input → settings`、`audio → settings`、`res → ticker`。其余子系统零跨系统依赖。
 
+## 扩展容器(KitContext / DI)
+
+`CoreKit` 除 10 个内置子系统外,还提供一个**对外开放的服务定位器**,让游戏代码注册自己的服务:
+
+- **全局根**:`CoreKit.provide(key, svc)` / `service(key)` / `has(key)` / `service_or(key, fallback)`。10 个内置已按属性名预注册(`service("audio") == CoreKit.audio`),但内置首选仍走强类型属性。`provide` 拒绝覆盖内置保留键。
+- **作用域容器** `KitContext`(`class_name`,挂在场景树节点上):`provide` / `provide_child` / `service`。解析沿祖先链向上回退、树顶兜底全局根;子层可 shadow;生命周期随节点(`NOTIFICATION_PREDELETE` 清表,`provide_child` 的子节点连带释放)。静态 `KitContext.of(node)` / `resolve(node, key)` 供非容器节点解析。
+- 依赖方向:`KitContext → CoreKit` 单向(仅树顶兜底 duck-typed 调用),属"全局链"合法通道,不违反子系统依赖纪律。
+- 详见 [di/kit-context.md](di/kit-context.md)。
+
 ## 已知引擎坑
 
 - **命名遮蔽**:属性 `CoreKit.log` 遮蔽全局函数 `log()`(数学对数)。门面与子系统内部不需要 `log()`,无影响;若你在自己脚本里既要日志又要 `log()`,注意作用域。
@@ -72,8 +82,8 @@ func _ready() -> void:
 
 ## 测试
 
-全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 12 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
+全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 13 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
 
 ## 版本
 
-当前 `0.4.1`(`plugin.cfg` 与 `CoreKit.VERSION` 同源)。0.3.x→0.4.0 是破坏性变更(五个老全局单例名下线,统一走 `CoreKit` 门面);0.4.1 为纯目录重排,对使用者 API 无破坏。
+当前 `0.5.0`(`plugin.cfg` 与 `CoreKit.VERSION` 同源)。0.4.1→0.5.0 新增 KitContext 服务容器(纯增量,对既有 API 无破坏);0.3.x→0.4.0 是破坏性变更(五个老全局单例名下线,统一走 `CoreKit` 门面);0.4.1 为纯目录重排。

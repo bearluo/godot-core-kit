@@ -17,6 +17,7 @@ description: Use when calling or looking up the godot-core-kit API from a Godot 
 - `addons/godot-core-kit/docs/architecture.md` —— 门面、初始化顺序、引擎坑。
 - `addons/godot-core-kit/docs/core/<x>.md` 与 `docs/systems/<x>.md` —— 每个子系统:职责 / 公开 API / 依赖 / 用法示例 / 注意事项。
 - `addons/godot-core-kit/docs/state-machine.md` —— KitStateMachine 类库。
+- `addons/godot-core-kit/docs/di/kit-context.md` —— KitContext 服务容器 + CoreKit 全局 provide/service。
 
 ## 门面映射(属性 → 子系统)
 
@@ -34,6 +35,8 @@ description: Use when calling or looking up the godot-core-kit API from a Godot 
 | `CoreKit.res` | 异步批量预加载 + 缓存 |
 
 `KitStateMachine` / `KitState` 是 per-entity 的 `class_name` 类库,**不在门面上**——每个实体自己 `new()` 一台。见 `docs/state-machine.md`。
+
+`KitContext` 同为 off-facade `class_name` 类库:游戏代码注册自己服务的**层级服务容器**(挂节点、随树回退)。全局服务用 `CoreKit.provide/service`;作用域服务用 `KitContext`。见 `docs/di/kit-context.md`。
 
 ## 怎么回答"我要做 X?"
 

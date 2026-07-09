@@ -17,6 +17,7 @@ description: Use when adding a new subsystem to the godot-core-kit plugin or mod
 
 - `core/` —— 根基设施,零依赖(`log`、`event_bus`、`settings`)。`systems/` 可依赖 `core/`,反之绝不可。
 - `systems/` —— 面向玩法的业务子系统(其余全部)。新子系统几乎都放这。
+- `state_machine/` / `di/` —— off-facade `class_name` 类库(`KitStateMachine`、`KitContext`),游戏代码直接 `new`/挂节点,不挂门面、不被 core/systems 依赖。新增"游戏侧直接用的可复用类"放这。
 - `extends Node`,**不加 `class_name`**(子系统只经 `CoreKit.<prop>` 访问;仅 `state_machine/` 用 `class_name`)。用 **Tab** 缩进。开头写一段 `##` 头部 docstring,风格照 `systems/resource_manager.gd`。
 
 ## 依赖纪律(硬规则)
