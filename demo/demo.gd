@@ -72,6 +72,13 @@ func _ready() -> void:
 		KitContext.resolve(ctx, "demo_service"),
 		ctx.service("audio") == CoreKit.audio,
 		ctx.get_child_count()])
+
+	# 订阅式解析 + 工厂 scope 冒烟
+	ctx.subscribe("late_svc", func(v): CoreKit.log.info("KitContext: 订阅回调 late_svc=%s" % v))
+	ctx.provide("late_svc", "arrived")   # 触发上面订阅回调
+	ctx.provide_factory("rng", func() -> RefCounted: return RefCounted.new(), KitContext.Scope.TRANSIENT)
+	CoreKit.log.info("KitContext: transient 两次不同=%s" % (ctx.service("rng") != ctx.service("rng")))
+
 	ctx.free()  # 随树释放,收养的子节点连带回收
 
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
