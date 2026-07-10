@@ -66,6 +66,7 @@ func _initialize() -> void:
 	failures += _test_envelope_seam()
 	failures += _test_serializer_swap()
 	failures += _test_atomic_write()
+	failures += _test_resource_guard()
 	failures += _test_encode_error()
 	failures += _test_disk_roundtrip()
 
@@ -451,5 +452,51 @@ func _test_atomic_write() -> int:
 	if FileAccess.file_exists(target2 + "/inner.txt"):
 		DirAccess.remove_absolute(target2 + "/inner.txt")
 	DirAccess.remove_absolute(target2)
+	sm.free()
+	return failures
+
+
+## ============================================================
+## T4: 资源引用安全守卫 _has_unserializable + save 拒 Object/Callable/嵌套。
+## Resource.new() 为 TYPE_OBJECT;func():pass 为 TYPE_CALLABLE。
+## ============================================================
+func _test_resource_guard() -> int:
+	var failures := 0
+	var sm = SaveManagerScript.new()
+
+	# 纯函数:纯数据 false;含 Object/Callable/嵌套 true
+	if sm._has_unserializable({"a": 1, "b": ["x", 2, {"c": true}]}):
+		print("FAIL _has_unserializable 纯数据应为 false")
+		failures += 1
+	if not sm._has_unserializable({"res": Resource.new()}):
+		print("FAIL _has_unserializable 含 Resource 应为 true")
+		failures += 1
+	if not sm._has_unserializable({"bag": [Resource.new()]}):
+		print("FAIL _has_unserializable 嵌套 Array 中 Resource 应为 true")
+		failures += 1
+	if not sm._has_unserializable({"cb": func() -> void: pass}):
+		print("FAIL _has_unserializable 含 Callable 应为 true")
+		failures += 1
+
+	# save 拒:命中守卫 -> false、save_failed('unserializable')、不落盘
+	var slot := "__test_guard__"
+	var path: String = sm._slot_path(slot)
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var captured := {"reason": ""}
+	var on_fail := func(_s: String, reason: String) -> void: captured["reason"] = reason
+	sm.save_failed.connect(on_fail)
+	var ok: bool = sm.save(slot, {"res": Resource.new()})
+	sm.save_failed.disconnect(on_fail)
+	if ok:
+		print("FAIL 含 Resource 的 save 应返回 false")
+		failures += 1
+	if captured["reason"] != "unserializable":
+		print("FAIL save_failed reason 应为 'unserializable',得到 '%s'" % captured["reason"])
+		failures += 1
+	if FileAccess.file_exists(path):
+		print("FAIL 守卫命中时不应落盘")
+		failures += 1
+
 	sm.free()
 	return failures

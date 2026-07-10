@@ -47,6 +47,10 @@ func save(slot: String, data: Dictionary) -> bool:
 		save_failed.emit(slot, "invalid_slot_name")
 		return false
 
+	if _has_unserializable(data):
+		save_failed.emit(slot, "unserializable")
+		return false
+
 	var envelope := {"_version": SCHEMA_VERSION, "data": data}
 	var bytes := _serializer.encode(envelope)
 	if bytes.is_empty():
@@ -183,3 +187,23 @@ func _is_valid_envelope(env: Dictionary) -> bool:
 	if typeof(env["_version"]) not in [TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
 		return false
 	return typeof(env["data"]) == TYPE_DICTIONARY
+
+## data 中是否存在不可持久化的值(递归 Dictionary 值 + Array 元素)。挡"永不该落盘"的
+## 句柄/对象类型(Object/Resource/Node/Callable/Signal/RID);不拒 Vector2/Color 等值类型
+## (那是 JSON 格式局限而非注入面,二进制 serializer 可原生存)。
+func _has_unserializable(v: Variant) -> bool:
+	match typeof(v):
+		TYPE_OBJECT, TYPE_CALLABLE, TYPE_SIGNAL, TYPE_RID:
+			return true
+		TYPE_DICTIONARY:
+			for k in v:
+				if _has_unserializable(v[k]):
+					return true
+			return false
+		TYPE_ARRAY:
+			for e in v:
+				if _has_unserializable(e):
+					return true
+			return false
+		_:
+			return false
