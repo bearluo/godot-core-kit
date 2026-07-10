@@ -31,14 +31,15 @@
 | `has(key) -> bool` / `service_or(key, fallback)` | 沿同一条链,不报错。 |
 | `static of(node) -> KitContext` | node 自身或最近祖先容器;无 → null。 |
 | `static resolve(node, key) -> Variant` | `of(node)` 命中即取,否则兜底全局根。非容器节点解析用它。 |
-| `subscribe(key, cb) -> void` | 订阅某 key 的解析结果:订阅时可解析即立即回调一次;之后本层或任一祖先 provide 致本层解析值变化时再回调。取消需用同一 Callable。 |
+| `subscribe(key, cb) -> void` | 订阅某 key 的解析结果:订阅时可解析即立即回调一次;之后本层或任一祖先(有更近或同层 owner)provide 该 key 时再回调。取消需用同一 Callable。 |
 | `unsubscribe(key, cb) -> void` | 取消订阅;key 或 cb 未注册则空操作。 |
 | `provide_factory(key, factory, scope=Scope.SINGLETON) -> void` | 以工厂注册。SINGLETON 首次 service() 创建并缓存(懒);TRANSIENT 每次 service() 新建。同层覆盖 value/其它工厂并告警。 |
 
 ## 订阅式解析(subscribe)
 
 `ctx.subscribe(key, callable)` 订阅某 key 的解析结果:订阅时若已可解析立即回调一次,
-之后该 key 在**本容器或任一祖先容器**被 provide 时(且本容器沿链解析值因此变化)再次回调。
+之后该 key 在**本容器或任一祖先容器**被 provide 时再次回调(投递按结构剪枝——更近/同层
+owner 覆盖更远祖先;不比较新旧值,故对同 owner 幂等 provide 相同值仍会回调)。
 用于化解 Godot「后代 `_ready` 早于祖先」的时序坑——后代先订阅,祖先稍后 provide 时被回调。
 `unsubscribe(key, callable)` 取消(需用同一 Callable)。
 

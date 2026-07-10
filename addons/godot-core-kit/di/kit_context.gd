@@ -111,7 +111,9 @@ func _notify(key: String) -> void:
 
 ## 在 self 及未 shadow 该 key 的后代容器上,用 owner 本层解析值回调订阅者。
 func _deliver(key: String, owner: KitContext) -> void:
-	for cb in _subscribers.get(key, []):
+	# 两处迭代都取快照(.duplicate()):投递中订阅者可能在自己的回调里 unsubscribe
+	# (subscribe-once 模式),迭代活数组会因索引前移漏投同 key 的兄弟订阅者。
+	for cb in _subscribers.get(key, []).duplicate():
 		(cb as Callable).call(owner._owner_value(key))
 	for child in _child_ctxs.duplicate():
 		if not is_instance_valid(child):

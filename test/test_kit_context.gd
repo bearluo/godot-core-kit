@@ -295,6 +295,22 @@ func _initialize() -> void:
 		print("FAIL 14: reparent 后新父未向子容器投递")
 		failures += 1
 
+	# --- 15. 投递中订阅者自退订不漏投同 key 兄弟(_deliver 迭代快照) ---
+	var reentry_ctx = KC.new()
+	reentry_ctx.name = "ReentryCtx"
+	root.add_child(reentry_ctx)
+	await process_frame
+	var sib_fired := [false]
+	var cb_holder := []
+	var cb_once := func(_v): reentry_ctx.unsubscribe("z", cb_holder[0])
+	cb_holder.append(cb_once)
+	reentry_ctx.subscribe("z", cb_once)                       # 未可解析 → 不立即回调,入 index 0
+	reentry_ctx.subscribe("z", func(_v): sib_fired[0] = true) # 兄弟订阅者,入 index 1
+	reentry_ctx.provide("z", 1)   # 单次 _deliver 投递两者;若迭代活数组,cb_once 自退订会挤掉兄弟
+	if not sib_fired[0]:
+		print("FAIL 15: 投递中订阅者自退订导致同 key 兄弟被漏投")
+		failures += 1
+
 	if failures == 0:
 		print("test_kit_context: ALL PASS")
 		quit(0)
