@@ -187,6 +187,87 @@ func _initialize() -> void:
 		print("FAIL 9: 被覆盖的 factory 不应再被调用")
 		failures += 1
 
+	# --- 10. subscribe: 已可解析→立即回调;本层延后 provide→再回调 ---
+	var sctx = KC.new()
+	sctx.name = "SubCtx"
+	root.add_child(sctx)
+	await process_frame
+	sctx.provide("imm", 1)
+	var got_imm := [null]
+	sctx.subscribe("imm", func(v): got_imm[0] = v)
+	if got_imm[0] != 1:
+		print("FAIL 10: subscribe 已可解析应立即回调")
+		failures += 1
+	var got_def := [null]
+	sctx.subscribe("def", func(v): got_def[0] = v)
+	if got_def[0] != null:
+		print("FAIL 10: 未 provide 前不应回调")
+		failures += 1
+	sctx.provide("def", 2)
+	if got_def[0] != 2:
+		print("FAIL 10: 本层 provide 后应回调订阅者")
+		failures += 1
+
+	# --- 11. subscribe: 祖先延后 provide(核心时序)+ shadow 剪枝 ---
+	var gp = KC.new()
+	gp.name = "GP"
+	root.add_child(gp)
+	await process_frame
+	var p = KC.new()
+	p.name = "P"
+	gp.add_child(p)
+	await process_frame
+	var c = KC.new()
+	c.name = "C"
+	p.add_child(c)
+	await process_frame
+	var fires := []
+	c.subscribe("k", func(v): fires.append(v))   # 此刻不可解析,不回调
+	if fires.size() != 0:
+		print("FAIL 11: 不可解析时不应回调")
+		failures += 1
+	p.provide("k", "P")        # 更近祖先 provide → 经向下传播回调 c
+	if fires != ["P"]:
+		print("FAIL 11: 祖先 provide 未经向下传播回调后代订阅者")
+		failures += 1
+	gp.provide("k", "G")       # 更远祖先 provide → 被 P 层 shadow 剪枝,不应再回调 c
+	if fires != ["P"]:
+		print("FAIL 11: 更远祖先 provide 未被 shadow 剪枝(重复回调)")
+		failures += 1
+
+	# --- 12. unsubscribe 后不再回调 ---
+	var uctx = KC.new()
+	uctx.name = "UnsubCtx"
+	root.add_child(uctx)
+	await process_frame
+	var ucount := [0]
+	var ucb := func(_v): ucount[0] += 1
+	uctx.subscribe("u", ucb)
+	uctx.provide("u", 1)       # 回调一次 → 1
+	uctx.unsubscribe("u", ucb)
+	uctx.provide("u", 2)       # 已退订 → 不再增
+	if ucount[0] != 1:
+		print("FAIL 12: unsubscribe 后不应再回调")
+		failures += 1
+
+	# --- 13. 子容器 free 后,父层 provide 不触达已释放子容器 ---
+	var pc = KC.new()
+	pc.name = "PC"
+	root.add_child(pc)
+	await process_frame
+	var cc = KC.new()
+	cc.name = "CC"
+	pc.add_child(cc)
+	await process_frame
+	var pc_got := [null]
+	pc.subscribe("w", func(v): pc_got[0] = v)
+	cc.free()
+	await process_frame
+	pc.provide("w", 9)         # 若 _child_ctxs 仍含已释放 cc,向下传播会对空实例报错
+	if pc_got[0] != 9:
+		print("FAIL 13: 子容器释放后父层订阅投递异常")
+		failures += 1
+
 	if failures == 0:
 		print("test_kit_context: ALL PASS")
 		quit(0)
