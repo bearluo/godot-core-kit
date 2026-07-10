@@ -65,6 +65,7 @@ func _initialize() -> void:
 	failures += _test_serializer()
 	failures += _test_envelope_seam()
 	failures += _test_serializer_swap()
+	failures += _test_encode_error()
 	failures += _test_disk_roundtrip()
 
 	if failures == 0:
@@ -323,5 +324,36 @@ func _test_serializer_swap() -> int:
 		DirAccess.remove_absolute(json_path)
 	if FileAccess.file_exists(bin_path):
 		DirAccess.remove_absolute(bin_path)
+	sm.free()
+	return failures
+
+
+## ============================================================
+## T2(补,回应 task-review Important):encode 返回空字节 → save_failed('encode_error')、
+## 返回 false、不落盘。补齐新增 encode_error reason 的分支覆盖。
+## ============================================================
+func _test_encode_error() -> int:
+	var failures := 0
+	var sm = SaveManagerScript.new()
+	var empty_ser = load("res://test/empty_encode_serializer.gd").new()
+	sm.set_serializer(empty_ser)
+	var slot := "__test_encode_error__"
+	var path: String = sm._slot_path(slot)
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var captured := {"reason": ""}
+	var on_fail := func(_s: String, reason: String) -> void: captured["reason"] = reason
+	sm.save_failed.connect(on_fail)
+	var ok: bool = sm.save(slot, {"a": 1})
+	sm.save_failed.disconnect(on_fail)
+	if ok:
+		print("FAIL encode 空字节时 save 应返回 false")
+		failures += 1
+	if captured["reason"] != "encode_error":
+		print("FAIL save_failed reason 应为 'encode_error',得到 '%s'" % captured["reason"])
+		failures += 1
+	if FileAccess.file_exists(path):
+		print("FAIL encode_error 时不应落盘")
+		failures += 1
 	sm.free()
 	return failures

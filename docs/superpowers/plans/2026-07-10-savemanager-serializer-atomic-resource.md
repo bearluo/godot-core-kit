@@ -662,7 +662,7 @@ func _test_atomic_write() -> int:
 	var captured := {"reason": ""}
 	var on_fail := func(_s: String, reason: String) -> void: captured["reason"] = reason
 	sm.save_failed.connect(on_fail)
-	var ok2 := sm.save(slot2, {"n": 2})
+	var ok2: bool = sm.save(slot2, {"n": 2})
 	sm.save_failed.disconnect(on_fail)
 	if ok2:
 		print("FAIL 目标被目录占位时 save 应返回 false")
@@ -803,7 +803,7 @@ func _test_resource_guard() -> int:
 	var captured := {"reason": ""}
 	var on_fail := func(_s: String, reason: String) -> void: captured["reason"] = reason
 	sm.save_failed.connect(on_fail)
-	var ok := sm.save(slot, {"res": Resource.new()})
+	var ok: bool = sm.save(slot, {"res": Resource.new()})
 	sm.save_failed.disconnect(on_fail)
 	if ok:
 		print("FAIL 含 Resource 的 save 应返回 false")
