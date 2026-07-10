@@ -80,8 +80,8 @@ func _initialize() -> void:
 	if box["payload"] != 42:
 		print("FAIL 5: EventBus 经门面发布订阅失败")
 		failures += 1
-	if kit.saves._decode("{}") != {}:
-		print("FAIL 5: SaveManager._decode 经门面调用失败")
+	if kit.saves.has_slot("__facade_smoke_nonexistent__"):
+		print("FAIL 5: SaveManager 经门面调用失败(不存在的 slot 应 has_slot=false)")
 		failures += 1
 
 	# 6. 全局根:内置已按 key 预注册 + provide/service/has/service_or 冒烟
