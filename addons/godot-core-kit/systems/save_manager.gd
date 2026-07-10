@@ -1,7 +1,7 @@
 extends Node
 ## SaveManager —— godot-core-kit 全局存档单例。
 ##
-## 以 autoload "SaveManager" 注册。把任意 Dictionary 状态以具名"存档位"(slot)
+## 作为 CoreKit.saves 门面子节点。把任意 Dictionary 状态以具名"存档位"(slot)
 ## 形式经可插拔 SaveSerializer(默认 JsonSaveSerializer,.json)序列化、
 ## 原子写(temp+rename)落盘到 user://saves/<slot>.<ext>,{_version, data} 信封包裹。
 ## 桌面与 Web 导出行为一致(user:// 在 HTML5 由 IndexedDB 支持,FileAccess/

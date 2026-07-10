@@ -4,7 +4,7 @@
 
 ## 职责
 
-把任意 Dictionary 状态以具名"存档位"(slot)形式落盘到 `user://saves/<slot>.json`,JSON 格式、`{_version, data}` 信封包裹。桌面与 Web 导出行为一致(`user://` 在 HTML5 由 IndexedDB 支持,`FileAccess`/`DirAccess`/`JSON` 全平台同步 API,无需 await)。纯 GDScript、无第三方依赖。
+把任意 Dictionary 状态以具名"存档位"(slot)形式,经可插拔 `SaveSerializer`(默认 `JsonSaveSerializer`,`.json`)序列化、原子写(temp+rename)落盘到 `user://saves/<slot>.<ext>`,`{_version, data}` 信封包裹。桌面与 Web 导出行为一致(`user://` 在 HTML5 由 IndexedDB 支持,`FileAccess`/`DirAccess`/`JSON` 全平台同步 API,无需 await)。纯 GDScript、无第三方依赖。
 
 范围之外(YAGNI):无自动收集存档的 registry、无加密/校验和(可由自定义 serializer 承载)、无迁移引擎(仅保留版本号字段)、无自动存档调度、无存档位元数据(缩略图/时长)。
 
