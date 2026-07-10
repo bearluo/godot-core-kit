@@ -18,6 +18,8 @@ extends SceneTree
 ## 完毕,编译正常。实机验证见 docs/superpowers/plans 对应任务的执行记录。
 
 var SaveManagerScript
+var SaveSerializerScript
+var JsonSaveSerializerScript
 
 
 ## 数值容忍的深度相等:JSON 没有独立的 int 类型,GDScript 的
@@ -55,9 +57,12 @@ func _values_equal(a, b) -> bool:
 
 func _initialize() -> void:
 	SaveManagerScript = load("res://addons/godot-core-kit/systems/save_manager.gd")
+	SaveSerializerScript = load("res://addons/godot-core-kit/systems/save_serializer.gd")
+	JsonSaveSerializerScript = load("res://addons/godot-core-kit/systems/json_save_serializer.gd")
 
 	var failures := 0
 	failures += _test_pure_seams()
+	failures += _test_serializer()
 	failures += _test_disk_roundtrip()
 
 	if failures == 0:
@@ -223,4 +228,69 @@ func _test_disk_roundtrip() -> int:
 	# 清理
 	DirAccess.remove_absolute(path)
 	sm.free()
+	return failures
+
+
+## ============================================================
+## T1: SaveSerializer 基类 + JsonSaveSerializer 直测(承接旧 _encode/_decode 段)。
+## 序列化器信封无关:encode/decode 直接吞吐任意 Dictionary,不再包 {_version,data}。
+## ============================================================
+func _test_serializer() -> int:
+	var failures := 0
+	var json = JsonSaveSerializerScript.new()
+
+	# 1. 任意纯数据 dict 往返一致(_values_equal 容忍 JSON int->float)
+	var sample := {
+		"level": 3,
+		"hp": 87.5,
+		"name": "hero",
+		"alive": true,
+		"inventory": ["sword", "shield", 42],
+		"stats": {"str": 10, "dex": 7},
+	}
+	if not _values_equal(json.decode(json.encode(sample)), sample):
+		print("FAIL JsonSaveSerializer 往返不一致,得到 %s" % [json.decode(json.encode(sample))])
+		failures += 1
+
+	# 2. 空 dict:encode 非空字节、decode 回空 dict(不再包信封)
+	if json.encode({}).is_empty():
+		print("FAIL JsonSaveSerializer.encode({}) 不应为空字节")
+		failures += 1
+	if json.decode(json.encode({})) != {}:
+		print("FAIL JsonSaveSerializer.decode(encode({})) 应为 {}")
+		failures += 1
+
+	# 3. 非法字节 -> {}
+	if json.decode("not valid json {{{".to_utf8_buffer()) != {}:
+		print("FAIL JsonSaveSerializer.decode(非法字节) 应为 {}")
+		failures += 1
+
+	# 4. 合法 JSON 但根非字典 -> {}
+	if json.decode("42".to_utf8_buffer()) != {}:
+		print("FAIL JsonSaveSerializer.decode('42') 应为 {}")
+		failures += 1
+
+	# 5. extension
+	if json.extension() != "json":
+		print("FAIL JsonSaveSerializer.extension() 应为 'json',得到 '%s'" % json.extension())
+		failures += 1
+
+	# 6. 字节兼容:encode(信封) 逐字节 == 旧 store_string 路径的 UTF-8 字节(锁 back-compat)
+	var env := {"_version": 1, "data": {"a": 1}}
+	if json.encode(env) != JSON.stringify(env, "\t").to_utf8_buffer():
+		print("FAIL JsonSaveSerializer.encode 应等价 JSON.stringify(env, tab).to_utf8_buffer()")
+		failures += 1
+
+	# 7. 抽象基类:未覆写返回空/默认(不崩溃)
+	var base = SaveSerializerScript.new()
+	if not base.encode({}).is_empty():
+		print("FAIL SaveSerializer.encode 抽象基类应返回空字节")
+		failures += 1
+	if base.decode(PackedByteArray()) != {}:
+		print("FAIL SaveSerializer.decode 抽象基类应返回 {}")
+		failures += 1
+	if base.extension() != "":
+		print("FAIL SaveSerializer.extension 抽象基类应返回 ''")
+		failures += 1
+
 	return failures
