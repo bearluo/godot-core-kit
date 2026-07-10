@@ -2,7 +2,8 @@ extends Node
 ## SaveManager —— godot-core-kit 全局存档单例。
 ##
 ## 以 autoload "SaveManager" 注册。把任意 Dictionary 状态以具名"存档位"(slot)
-## 形式落盘到 user://saves/<slot>.json,JSON 格式、{_version, data} 信封包裹。
+## 形式经可插拔 SaveSerializer(默认 JsonSaveSerializer,.json)序列化、
+## 原子写(temp+rename)落盘到 user://saves/<slot>.<ext>,{_version, data} 信封包裹。
 ## 桌面与 Web 导出行为一致(user:// 在 HTML5 由 IndexedDB 支持,FileAccess/
 ## DirAccess/JSON 全平台同步 API,无需 await)。纯 GDScript、无第三方依赖;
 ## 除 CoreKit.log(仅用于版本不匹配警告)外不依赖其它子系统。
@@ -11,8 +12,10 @@ extends Node
 ##       var data := CoreKit.saves.load("hero1")
 ##
 ## v1 范围之外(YAGNI):无自动收集存档的 registry、无加密、无迁移引擎
-## (仅保留版本号字段)、无自动存档调度、无存档位元数据(缩略图/时长)、
-## 无原子写(temp+rename)。
+## (仅保留版本号字段)、无自动存档调度、无存档位元数据(缩略图/时长)。
+##
+## 资源引用安全约定:落盘数据只存 resource_path 引用而非整个 Resource,
+## 避开 load 时 ResourceLoader 重建任意资源带来的代码注入面。
 ##
 ## 命名坑:load() 在本脚本体内会遮蔽 GDScript 内置全局函数 load(path)
 ## (与 Log 遮蔽全局 log() 同理);本脚本内部从不需要调用全局 load(),

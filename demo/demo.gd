@@ -26,6 +26,10 @@ func _ready() -> void:
 	CoreKit.log.info("SaveManager save=%s load=%s" % [ok, data])
 	CoreKit.saves.delete_slot("__demo_smoke__")
 
+	# SaveManager 资源守卫冒烟:含 Object 的 save 被拒(返回 false,不落盘)
+	var guard_ok := CoreKit.saves.save("__demo_guard__", {"bad": Resource.new()})
+	CoreKit.log.info("SaveManager 资源守卫拒 Object save=%s (应为 false)" % guard_ok)
+
 	# Settings 冒烟:写 → 读 → 清(user://settings.json 写透)
 	CoreKit.settings.set_value("demo", "flag", true)
 	CoreKit.log.info("Settings demo.flag = %s" % CoreKit.settings.get_value("demo", "flag"))
