@@ -912,6 +912,8 @@ const VERSION := "0.7.0"
 
 `addons/godot-core-kit/plugin.cfg`:`version="0.6.0"` 改为 `version="0.7.0"`;`description` 末尾(闭引号前)追加:`;0.7.0 SaveManager 增可插拔序列化 SaveSerializer + 原子写(temp+rename)+ 资源引用守卫`。
 
+`addons/godot-core-kit/systems/save_manager.gd` **头部类级文档注释同步**(T3 review Minor):(1) 把"落盘到 user://saves/<slot>.json,JSON 格式、{_version, data} 信封包裹"更新为反映现状——经**可插拔 `SaveSerializer`(默认 `JsonSaveSerializer`,`.json`)**序列化、**原子写(temp+rename)**落盘、`{_version, data}` 信封;(2) 删掉 YAGNI 块里的"无原子写(temp+rename)"这一项(已实现);(3) 可补一句资源守卫约定(存 `resource_path` 引用而非整个 Resource)。仅改注释,不动任何代码。
+
 - [ ] **Step 2: 更新 save-manager.md**
 
 2a. 第 9 行(YAGNI 那句)整行替换——去掉"无原子写":
