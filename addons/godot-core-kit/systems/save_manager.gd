@@ -54,14 +54,20 @@ func save(slot: String, data: Dictionary) -> bool:
 		return false
 
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
+	var target := _slot_path(safe_slot)
+	var tmp := target + ".tmp"
 
-	var file := FileAccess.open(_slot_path(safe_slot), FileAccess.WRITE)
+	var file := FileAccess.open(tmp, FileAccess.WRITE)
 	if file == null:
 		save_failed.emit(slot, "open_error:%d" % FileAccess.get_open_error())
 		return false
-
 	file.store_buffer(bytes)
 	file.close()
+
+	if not _atomic_replace(tmp, target):
+		DirAccess.remove_absolute(tmp)
+		save_failed.emit(slot, "rename_error")
+		return false
 
 	saved.emit(safe_slot)
 	return true
@@ -144,6 +150,16 @@ func list_slots() -> Array[String]:
 
 
 ## --- 可测接缝(纯函数,不碰磁盘/autoload) ---
+
+## 原子替换:优先 rename(桌面平台原子覆盖已存在目标);个别平台 rename 不覆盖时,
+## 回退"先删目标再 rename"。整个过程 tmp 始终是完整文件,消除目标被写一半的窗口。
+func _atomic_replace(tmp: String, target: String) -> bool:
+	if DirAccess.rename_absolute(tmp, target) == OK:
+		return true
+	if FileAccess.file_exists(target):
+		DirAccess.remove_absolute(target)
+		return DirAccess.rename_absolute(tmp, target) == OK
+	return false
 
 ## 白名单方式清洗存档位名称:删除所有不在 [A-Za-z0-9_-] 内的字符;
 ## 若清洗后为空(原始输入为空/纯空白/全部字符都不合法),返回 ""(拒绝,

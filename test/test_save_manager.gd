@@ -65,6 +65,7 @@ func _initialize() -> void:
 	failures += _test_serializer()
 	failures += _test_envelope_seam()
 	failures += _test_serializer_swap()
+	failures += _test_atomic_write()
 	failures += _test_encode_error()
 	failures += _test_disk_roundtrip()
 
@@ -355,5 +356,100 @@ func _test_encode_error() -> int:
 	if FileAccess.file_exists(path):
 		print("FAIL encode_error 时不应落盘")
 		failures += 1
+	sm.free()
+	return failures
+
+
+## ============================================================
+## T3: 原子写——成功不留 tmp;_atomic_replace 成功/覆盖两路径;rename 失败清理 + rename_error。
+## rename 失败用"目标名被非空目录占位"确定性构造(已实测:rename 到目录失败,
+## FileAccess.file_exists(目录)=false -> 回退分支不触发 -> _atomic_replace 返回 false)。
+## ============================================================
+func _test_atomic_write() -> int:
+	var failures := 0
+	var sm = SaveManagerScript.new()
+	var slot := "__test_atomic__"
+	var target: String = sm._slot_path(slot)
+	var tmp := target + ".tmp"
+
+	# 起点干净
+	if FileAccess.file_exists(target):
+		DirAccess.remove_absolute(target)
+	if FileAccess.file_exists(tmp):
+		DirAccess.remove_absolute(tmp)
+
+	# 成功路径:save 后 tmp 不残留、目标存在且可完整 load、list_slots 含本槽
+	if not sm.save(slot, {"n": 1}):
+		print("FAIL 原子写 save 应为 true")
+		failures += 1
+	if FileAccess.file_exists(tmp):
+		print("FAIL save 成功后不应残留 tmp 文件")
+		failures += 1
+	if not FileAccess.file_exists(target):
+		print("FAIL save 成功后目标文件应存在")
+		failures += 1
+	if not _values_equal(sm.load(slot), {"n": 1}):
+		print("FAIL 原子写后 load 应完整")
+		failures += 1
+	if not sm.list_slots().has(slot):
+		print("FAIL 原子写后 list_slots 应含 '%s'" % slot)
+		failures += 1
+	DirAccess.remove_absolute(target)
+
+	# _atomic_replace 直测——目标不存在 -> true、tmp 消失、目标为源内容
+	var a_src: String = SaveManagerScript.SAVE_DIR + "/__ar_src__.tmp"
+	var a_dst: String = SaveManagerScript.SAVE_DIR + "/__ar_dst__.dat"
+	DirAccess.make_dir_recursive_absolute(SaveManagerScript.SAVE_DIR)
+	var wf := FileAccess.open(a_src, FileAccess.WRITE)
+	wf.store_string("NEW")
+	wf.close()
+	if not sm._atomic_replace(a_src, a_dst):
+		print("FAIL _atomic_replace 目标不存在应为 true")
+		failures += 1
+	if FileAccess.file_exists(a_src) or not FileAccess.file_exists(a_dst):
+		print("FAIL _atomic_replace 后 tmp 应消失、目标应存在")
+		failures += 1
+
+	# _atomic_replace 覆盖——目标已存在(旧)-> true 且内容为新
+	var wf2 := FileAccess.open(a_src, FileAccess.WRITE)
+	wf2.store_string("NEWER")
+	wf2.close()
+	if not sm._atomic_replace(a_src, a_dst):
+		print("FAIL _atomic_replace 覆盖应为 true")
+		failures += 1
+	var rf := FileAccess.open(a_dst, FileAccess.READ)
+	var got := rf.get_as_text()
+	rf.close()
+	if got != "NEWER":
+		print("FAIL _atomic_replace 覆盖后内容应为 'NEWER',得到 '%s'" % got)
+		failures += 1
+	DirAccess.remove_absolute(a_dst)
+
+	# rename 失败:目标名被非空目录占位 -> save_failed('rename_error')、false、tmp 清理
+	var slot2 := "__test_rename_fail__"
+	var target2: String = sm._slot_path(slot2)   # user://saves/<slot2>.json
+	var tmp2 := target2 + ".tmp"
+	DirAccess.make_dir_recursive_absolute(target2)          # 用目标名建目录
+	var inner := FileAccess.open(target2 + "/inner.txt", FileAccess.WRITE)
+	inner.store_string("x")                                  # 让目录非空
+	inner.close()
+	var captured := {"reason": ""}
+	var on_fail := func(_s: String, reason: String) -> void: captured["reason"] = reason
+	sm.save_failed.connect(on_fail)
+	var ok2: bool = sm.save(slot2, {"n": 2})
+	sm.save_failed.disconnect(on_fail)
+	if ok2:
+		print("FAIL 目标被目录占位时 save 应返回 false")
+		failures += 1
+	if captured["reason"] != "rename_error":
+		print("FAIL save_failed reason 应为 'rename_error',得到 '%s'" % captured["reason"])
+		failures += 1
+	if FileAccess.file_exists(tmp2):
+		print("FAIL rename 失败后应清理 tmp")
+		failures += 1
+	# 清理占位目录
+	if FileAccess.file_exists(target2 + "/inner.txt"):
+		DirAccess.remove_absolute(target2 + "/inner.txt")
+	DirAccess.remove_absolute(target2)
 	sm.free()
 	return failures
