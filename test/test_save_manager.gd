@@ -63,6 +63,8 @@ func _initialize() -> void:
 	var failures := 0
 	failures += _test_pure_seams()
 	failures += _test_serializer()
+	failures += _test_envelope_seam()
+	failures += _test_serializer_swap()
 	failures += _test_disk_roundtrip()
 
 	if failures == 0:
@@ -74,7 +76,8 @@ func _initialize() -> void:
 
 
 ## ============================================================
-## 第一部分:纯函数测试(disk-free,不依赖 autoload)
+## 第一部分:纯函数测试(disk-free,不依赖 autoload)——sanitize / slot_path。
+## encode/decode 的直测已迁至 _test_serializer;信封校验迁至 _test_envelope_seam。
 ## ============================================================
 func _test_pure_seams() -> int:
 	var failures := 0
@@ -101,67 +104,9 @@ func _test_pure_seams() -> int:
 		print("FAIL _sanitize_slot_name('   ') 应为 ''")
 		failures += 1
 
-	# 4. _slot_path 是纯字符串拼接,不清洗
+	# 4. _slot_path 默认(json serializer)为纯字符串拼接,不清洗
 	if sm._slot_path("hero1") != "user://saves/hero1.json":
 		print("FAIL _slot_path('hero1') 得到 '%s'" % sm._slot_path("hero1"))
-		failures += 1
-
-	# 5. 往返:嵌套 dict/array/int/float/string/bool
-	var sample := {
-		"level": 3,
-		"hp": 87.5,
-		"name": "hero",
-		"alive": true,
-		"inventory": ["sword", "shield", 42],
-		"stats": {"str": 10, "dex": 7},
-	}
-	var round_tripped: Dictionary = sm._decode(sm._encode(sample))
-	if not _values_equal(round_tripped.get("data"), sample):
-		print("FAIL 往返不一致,得到 %s" % [round_tripped.get("data")])
-		failures += 1
-
-	# 6. 编码空 dict 后解码,信封非空({} 语义与损坏 sentinel 不冲突)
-	var empty_envelope: Dictionary = sm._decode(sm._encode({}))
-	if empty_envelope.is_empty():
-		print("FAIL _decode(_encode({})) 不应为空信封")
-		failures += 1
-	if not empty_envelope.has("_version") or not empty_envelope.has("data"):
-		print("FAIL _decode(_encode({})) 信封应含 _version 与 data 键")
-		failures += 1
-	if empty_envelope.get("data") != {}:
-		print("FAIL _decode(_encode({})).data 应为 {}")
-		failures += 1
-
-	# 7. 非法 JSON 不崩溃,返回 {}
-	if sm._decode("not valid json {{{") != {}:
-		print("FAIL _decode 对非法 JSON 应返回 {}")
-		failures += 1
-
-	# 8. 合法 JSON 但根不是 Dictionary
-	if sm._decode("42") != {}:
-		print("FAIL _decode('42') 应返回 {}")
-		failures += 1
-
-	# 9. 合法 JSON object 但缺少信封键
-	if sm._decode("{}") != {}:
-		print("FAIL _decode('{}') 应返回 {}(缺少 _version/data)")
-		failures += 1
-
-	# 10. data 字段类型不对
-	if sm._decode('{"_version":1,"data":"not a dict"}') != {}:
-		print("FAIL _decode 对非 Dictionary 的 data 字段应返回 {}")
-		failures += 1
-
-	# 10b. _version 字段非标量(如 {}/[]):否则 load() 里的 int(...) 会抛错,破坏契约
-	if sm._decode('{"_version":{},"data":{}}') != {}:
-		print("FAIL _decode 对非标量 _version 应返回 {}")
-		failures += 1
-
-	# 11. _encode 输出本身是合法 JSON
-	var encoded: String = sm._encode({"a": 1})
-	var parsed = JSON.parse_string(encoded)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		print("FAIL _encode 输出不是合法 JSON: '%s'" % encoded)
 		failures += 1
 
 	sm.free()
@@ -293,4 +238,90 @@ func _test_serializer() -> int:
 		print("FAIL SaveSerializer.extension 抽象基类应返回 ''")
 		failures += 1
 
+	return failures
+
+
+## ============================================================
+## T2: 信封校验接缝 _is_valid_envelope(承接旧 _decode 的 has/类型检查那段)。
+## ============================================================
+func _test_envelope_seam() -> int:
+	var failures := 0
+	var sm = SaveManagerScript.new()
+
+	if not sm._is_valid_envelope({"_version": 1, "data": {}}):
+		print("FAIL _is_valid_envelope 合法信封应为 true")
+		failures += 1
+	if sm._is_valid_envelope({}):
+		print("FAIL _is_valid_envelope 缺键应为 false")
+		failures += 1
+	if sm._is_valid_envelope({"_version": 1}):
+		print("FAIL _is_valid_envelope 缺 data 应为 false")
+		failures += 1
+	if sm._is_valid_envelope({"_version": {}, "data": {}}):
+		print("FAIL _is_valid_envelope 非标量 _version 应为 false")
+		failures += 1
+	if sm._is_valid_envelope({"_version": 1, "data": "not a dict"}):
+		print("FAIL _is_valid_envelope 非字典 data 应为 false")
+		failures += 1
+
+	sm.free()
+	return failures
+
+
+## ============================================================
+## T2: 注入非默认 serializer(.bin)后 save/load 往返 + list_slots 只见当前扩展名。
+## ============================================================
+func _test_serializer_swap() -> int:
+	var failures := 0
+	var sm = SaveManagerScript.new()
+	var slot := "__test_swap__"
+
+	# 先用默认(json)存一个同名槽,稍后证明换到 .bin 后 list_slots 不再列它
+	var json_path: String = sm._slot_path(slot)   # user://saves/<slot>.json
+	if FileAccess.file_exists(json_path):
+		DirAccess.remove_absolute(json_path)
+	sm.save(slot, {"fmt": "json"})
+
+	# 换到 .bin serializer
+	var bin = load("res://test/bin_test_serializer.gd").new()
+	sm.set_serializer(bin)
+
+	# 换后 _slot_path 扩展名随之变化
+	var bin_path: String = sm._slot_path(slot)
+	if not bin_path.ends_with(".bin"):
+		print("FAIL 换 serializer 后 _slot_path 应以 .bin 结尾,得到 '%s'" % bin_path)
+		failures += 1
+
+	# save->load 往返数据一致
+	var payload := {"score": 7, "tag": "bin"}
+	if not sm.save(slot, payload):
+		print("FAIL 换 serializer 后 save 应为 true")
+		failures += 1
+	if not _values_equal(sm.load(slot), payload):
+		print("FAIL 换 serializer 后 load 往返不一致,得到 %s" % [sm.load(slot)])
+		failures += 1
+
+	# list_slots 现按 .bin 过滤:含本槽(各 serializer 管自己扩展名)
+	if not sm.list_slots().has(slot):
+		print("FAIL 换 serializer 后 list_slots 应含 '%s'(.bin)" % slot)
+		failures += 1
+
+	# 换回默认 json:list_slots 又能看见 .json 槽(证明按扩展名隔离,而非删了文件)
+	sm.set_serializer(JsonSaveSerializerScript.new())
+	if not sm.list_slots().has(slot):
+		print("FAIL 换回 json 后 list_slots 应重新含 '%s'(.json)" % slot)
+		failures += 1
+
+	# set_serializer(null) 被拒:_slot_path 仍是 .json
+	sm.set_serializer(null)
+	if not sm._slot_path(slot).ends_with(".json"):
+		print("FAIL set_serializer(null) 应被拒,_slot_path 仍应 .json")
+		failures += 1
+
+	# 清理两个格式的文件
+	if FileAccess.file_exists(json_path):
+		DirAccess.remove_absolute(json_path)
+	if FileAccess.file_exists(bin_path):
+		DirAccess.remove_absolute(bin_path)
+	sm.free()
 	return failures

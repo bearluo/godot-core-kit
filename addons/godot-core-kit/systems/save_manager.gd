@@ -27,6 +27,17 @@ signal slot_deleted(slot: String)
 const SAVE_DIR := "user://saves"
 const SCHEMA_VERSION := 1
 
+## 当前序列化策略(默认 JSON,逐字节兼容旧 .json 存档)。经 set_serializer 替换。
+var _serializer: SaveSerializer = JsonSaveSerializer.new()
+
+
+## 替换序列化策略。null 忽略并 push_error;换后影响后续 save/load(不改动已落盘文件)。
+func set_serializer(s: SaveSerializer) -> void:
+	if s == null:
+		push_error("SaveManager.set_serializer: 拒绝 null")
+		return
+	_serializer = s
+
 
 ## 把 data 写入 slot,若该存档位已存在则覆盖。
 ## 成功返回 true;失败返回 false 并 emit save_failed(slot, reason)。
@@ -36,6 +47,12 @@ func save(slot: String, data: Dictionary) -> bool:
 		save_failed.emit(slot, "invalid_slot_name")
 		return false
 
+	var envelope := {"_version": SCHEMA_VERSION, "data": data}
+	var bytes := _serializer.encode(envelope)
+	if bytes.is_empty():
+		save_failed.emit(slot, "encode_error")
+		return false
+
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 
 	var file := FileAccess.open(_slot_path(safe_slot), FileAccess.WRITE)
@@ -43,16 +60,15 @@ func save(slot: String, data: Dictionary) -> bool:
 		save_failed.emit(slot, "open_error:%d" % FileAccess.get_open_error())
 		return false
 
-	file.store_string(_encode(data))
+	file.store_buffer(bytes)
 	file.close()
 
 	saved.emit(safe_slot)
 	return true
 
 
-## 把 slot 读回一个 Dictionary。任何错误(文件不存在、JSON 损坏/非法)都
-## 返回 {} 并 emit load_failed;存档位本身合法地存了 {} 时同样返回 {},
-## 但 emit 的是 loaded —— 见 _decode 的信封,可用于区分"空"与"损坏"。
+## 把 slot 读回一个 Dictionary。任何错误(文件不存在、字节损坏/信封非法)都返回 {}
+## 并 emit load_failed;存档位本身合法地存了 {} 时同样返回 {},但 emit 的是 loaded。
 func load(slot: String) -> Dictionary:
 	var safe_slot := _sanitize_slot_name(slot)
 	if safe_slot.is_empty():
@@ -68,11 +84,11 @@ func load(slot: String) -> Dictionary:
 	if file == null:
 		load_failed.emit(safe_slot, "open_error:%d" % FileAccess.get_open_error())
 		return {}
-	var text := file.get_as_text()
+	var bytes := file.get_buffer(file.get_length())
 	file.close()
 
-	var envelope := _decode(text)
-	if envelope.is_empty():
+	var envelope := _serializer.decode(bytes)
+	if envelope.is_empty() or not _is_valid_envelope(envelope):
 		load_failed.emit(safe_slot, "corrupt")
 		return {}
 
@@ -119,7 +135,7 @@ func list_slots() -> Array[String]:
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
-		if not dir.current_is_dir() and file_name.get_extension() == "json":
+		if not dir.current_is_dir() and file_name.get_extension() == _serializer.extension():
 			result.append(file_name.get_basename())
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -138,31 +154,16 @@ func _sanitize_slot_name(slot: String) -> String:
 	return re.sub(slot, "", true)
 
 
-## 纯路径拼接;不做清洗——调用方需先自行清洗。
+## 纯路径拼接;不做清洗——调用方需先自行清洗。扩展名由当前序列化器决定。
 func _slot_path(slot: String) -> String:
-	return "%s/%s.json" % [SAVE_DIR, slot]
+	return "%s/%s.%s" % [SAVE_DIR, slot, _serializer.extension()]
 
 
-## Dictionary -> JSON 字符串,包裹为 {_version, data} 信封,缩进美化输出。
-func _encode(data: Dictionary) -> String:
-	var envelope := {"_version": SCHEMA_VERSION, "data": data}
-	return JSON.stringify(envelope, "\t")
-
-
-## JSON 字符串 -> 信封 Dictionary({_version:int, data:Dictionary});
-## 任何失败(JSON 非法、根不是 Dictionary、信封键缺失、data 类型不对)
-## 都返回 {}。
-func _decode(text: String) -> Dictionary:
-	var parsed = JSON.parse_string(text)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		return {}
-	var envelope: Dictionary = parsed
-	if not envelope.has("_version") or not envelope.has("data"):
-		return {}
-	# _version 必须是标量:非标量(如 {}/[])会让 load() 里的 int(...) 抛错,
-	# 破坏 "任何错误都返回 {}" 的契约,故在此当作损坏处理。
-	if typeof(envelope["_version"]) not in [TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
-		return {}
-	if typeof(envelope["data"]) != TYPE_DICTIONARY:
-		return {}
-	return envelope
+## 信封结构校验(承接旧 _decode 的 has/类型检查):有 _version/data 键、_version 为标量、
+## data 是 Dictionary。非标量 _version 会让 load() 里的 int(...) 抛错,故当作损坏。
+func _is_valid_envelope(env: Dictionary) -> bool:
+	if not env.has("_version") or not env.has("data"):
+		return false
+	if typeof(env["_version"]) not in [TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
+		return false
+	return typeof(env["data"]) == TYPE_DICTIONARY
