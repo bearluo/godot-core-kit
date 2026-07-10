@@ -268,6 +268,33 @@ func _initialize() -> void:
 		print("FAIL 13: 子容器释放后父层订阅投递异常")
 		failures += 1
 
+	# --- 14. reparent 子容器后,旧父不再向其投递(stale delivery 防护) ---
+	var oldp = KC.new()
+	oldp.name = "OldP"
+	root.add_child(oldp)
+	await process_frame
+	var newp = KC.new()
+	newp.name = "NewP"
+	root.add_child(newp)
+	await process_frame
+	var mover = KC.new()
+	mover.name = "Mover"
+	oldp.add_child(mover)
+	await process_frame
+	var mv_fires := []
+	mover.subscribe("rp", func(v): mv_fires.append(v))
+	oldp.remove_child(mover)
+	newp.add_child(mover)      # reparent 到 newp
+	await process_frame
+	oldp.provide("rp", "OLD")  # 旧父 provide → 不应触达已移走的 mover
+	if mv_fires.size() != 0:
+		print("FAIL 14: reparent 后旧父仍向已移走子容器投递(stale delivery)")
+		failures += 1
+	newp.provide("rp", "NEW")  # 新父 provide → 应触达 mover
+	if mv_fires != ["NEW"]:
+		print("FAIL 14: reparent 后新父未向子容器投递")
+		failures += 1
+
 	if failures == 0:
 		print("test_kit_context: ALL PASS")
 		quit(0)

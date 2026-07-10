@@ -113,7 +113,7 @@ func _notify(key: String) -> void:
 func _deliver(key: String, owner: KitContext) -> void:
 	for cb in _subscribers.get(key, []):
 		(cb as Callable).call(owner._owner_value(key))
-	for child in _child_ctxs:
+	for child in _child_ctxs.duplicate():
 		if not is_instance_valid(child):
 			continue
 		if child._owns(key):   # 后代自己 shadow → 整个子树跳过
@@ -152,6 +152,14 @@ func _enter_tree() -> void:
 	_parent_ctx = _find_parent_ctx()
 	if _parent_ctx != null and not _parent_ctx._child_ctxs.has(self):
 		_parent_ctx._child_ctxs.append(self)
+
+
+func _exit_tree() -> void:
+	# 仅注销树成员关系(_child_ctxs):节点离开旧父(reparent 或移除)时从旧父的子容器表
+	# 移除,避免旧父继续向已移走的子树投递(stale delivery)。此刻 _parent_ctx 仍是旧父
+	# (下次 _enter_tree 才重算)。不清服务表——disposal 仍只走 PREDELETE。
+	if _parent_ctx != null and is_instance_valid(_parent_ctx):
+		_parent_ctx._child_ctxs.erase(self)
 
 
 func _find_parent_ctx() -> KitContext:
