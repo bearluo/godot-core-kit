@@ -120,6 +120,73 @@ func _initialize() -> void:
 	if is_instance_valid(refonly):
 		refonly.free()
 
+	# --- 8. provide_factory: SINGLETON 懒创建+缓存,TRANSIENT 每次新建 ---
+	var fctx = KC.new()
+	fctx.name = "FactoryCtx"
+	root.add_child(fctx)
+	await process_frame
+	var s_calls := [0]
+	var s_factory := func() -> RefCounted:
+		s_calls[0] += 1
+		return RefCounted.new()
+	fctx.provide_factory("singleton", s_factory)  # 默认 SINGLETON
+	if s_calls[0] != 0:
+		print("FAIL 8: SINGLETON 工厂不应在 provide 时被调用(应懒)")
+		failures += 1
+	var s1 = fctx.service("singleton")
+	var s2 = fctx.service("singleton")
+	if s1 != s2:
+		print("FAIL 8: SINGLETON 两次 service 应同一实例")
+		failures += 1
+	if s_calls[0] != 1:
+		print("FAIL 8: SINGLETON 工厂应只被调用一次")
+		failures += 1
+	var t_calls := [0]
+	var t_factory := func() -> RefCounted:
+		t_calls[0] += 1
+		return RefCounted.new()
+	fctx.provide_factory("transient", t_factory, KC.Scope.TRANSIENT)
+	var u1 = fctx.service("transient")
+	var u2 = fctx.service("transient")
+	if u1 == u2:
+		print("FAIL 8: TRANSIENT 两次 service 应不同实例")
+		failures += 1
+	if t_calls[0] != 2:
+		print("FAIL 8: TRANSIENT 工厂应每次 service 都调用")
+		failures += 1
+
+	# --- 9. 工厂沿链解析 + 子层 shadow + 三注册互斥 ---
+	var fp = KC.new()
+	fp.name = "FP"
+	root.add_child(fp)
+	await process_frame
+	var fc = KC.new()
+	fc.name = "FC"
+	fp.add_child(fc)
+	await process_frame
+	var pfac := func() -> String:
+		return "from_parent_factory"
+	fp.provide_factory("f_shared", pfac)
+	if fc.service("f_shared") != "from_parent_factory":
+		print("FAIL 9: 子层未向上解析到父层工厂")
+		failures += 1
+	fc.provide("f_shared", "child_override")   # 子层 value 覆盖 → shadow 父层工厂
+	if fc.service("f_shared") != "child_override":
+		print("FAIL 9: 子层 value 未 shadow 父层工厂")
+		failures += 1
+	var mx_calls := [0]
+	var mfac := func() -> int:
+		mx_calls[0] += 1
+		return 999
+	fp.provide_factory("mx", mfac)
+	fp.provide("mx", 111)          # value 覆盖同层 factory
+	if fp.service("mx") != 111:
+		print("FAIL 9: provide value 未覆盖同层 factory")
+		failures += 1
+	if mx_calls[0] != 0:
+		print("FAIL 9: 被覆盖的 factory 不应再被调用")
+		failures += 1
+
 	if failures == 0:
 		print("test_kit_context: ALL PASS")
 		quit(0)
