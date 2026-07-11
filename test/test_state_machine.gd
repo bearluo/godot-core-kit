@@ -306,7 +306,7 @@ func _initialize() -> void:
 	root.add_child(m11)
 	await process_frame
 	for i in range(m11.MAX_STACK + 2):
-		m11.push_state("Menu")   # 反复压(超上限的两次被 push_error 拒)
+		m11.push_state("Menu")   # 反复自压(仅为快速压满栈摸边界,非真实用法);超上限两次被 push_error 拒
 	if m11.stack_depth() != m11.MAX_STACK:
 		print("FAIL P11: 栈深应被 MAX_STACK(%d) 截断,实际 %d" % [m11.MAX_STACK, m11.stack_depth()])
 		failures += 1

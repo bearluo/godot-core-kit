@@ -9,6 +9,11 @@ extends Node
 ## 后按序处理(支持"决策态"在 enter 里立即转走);同一次外部触发内最多连转
 ## MAX_CHAIN 次,超过按死循环处理(push_error + 丢弃剩余队列)。
 ## transition_to(当前态) 照常走 exit→enter(可用作"重进重置")。
+##
+## 叠加能力(与 transition_to 并存):① 事件 dispatch 解耦——add_transition 登记
+## "from|event → to"(from 可为 ANYSTATE 通配)、dispatch(event) 派发,命中则复用本
+## 转换核心;② pushdown 栈——push_state/pop_state 暂停语义(压当前态调 pause()、弹回
+## 调 resume(),现场保留、不重置),栈深守卫 MAX_STACK,不占 MAX_CHAIN 连锁计数。
 
 ## 每次完成一次转换后广播(初始进入也广播,from_name 为 "")。
 signal state_changed(from_name: String, to_name: String)

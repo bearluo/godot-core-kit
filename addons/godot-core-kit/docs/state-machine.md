@@ -112,6 +112,7 @@ machine.dispatch("stop")   # 命中当前态转移,返回 true;无匹配静默�
 ```
 
 - **转移表**:key 为 `"<from>|<event>"`,`from` 为已注册态名或 `ANYSTATE`("*")。`add_transition` 目标态未注册 → `push_warning` 忽略;同 `(from, event)` 重复登记 → 覆盖并 `push_warning`。
+- **调用时机**:`add_transition` 校验目标态依赖 `_states`,而 `_states` 在 `_ready`(节点入树)时才注册,故 **`add_transition` 须在状态机入树之后调用**;入树前调用会因目标态尚未注册而被 `push_warning` 丢弃。
 - **匹配优先级**:`dispatch(event)` 先查当前态的具体转移 `(current, event)`,未命中再查通配 `(ANYSTATE, event)`;**具体 from 优先于通配**。两者都无匹配 → 静默返回 `false`(事件派发常态:多数事件在多数态无转移)。
 - **复用转换核心**:命中后走与 `transition_to` 完全相同的路径——非转换中直接 `exit→enter→state_changed`(连锁 / `MAX_CHAIN` 语义不变),转换进行中则把目标入 `_pending` 队列。
 - 与 `transition_to` **并存**:两种触发方式可混用,互不影响。
@@ -133,6 +134,7 @@ machine.stack_depth()             # 当前栈深
 - **转发**:`update`/`physics_update`/`handle_input` 始终只转发 `current_state`,栈下挂起态不收。
 - **守卫**:未知态 → `push_warning` no-op;栈满(≥ `MAX_STACK` = 32)→ `push_error` 拒绝;转换进行中(`_transitioning`)调 `push_state`/`pop_state` → `push_warning` 拒绝;栈空 `pop_state` → `push_warning` no-op。pushdown 不参与 `MAX_CHAIN` 连锁计数。
 - **栈非空仍可转移**:`transition_to`/`dispatch` 照常替换 `current_state`(栈不动),`pop_state` 仍弹回栈下挂起态。
+- **勿在被压/恢复态的钩子里触发转移**:`push_state`/`pop_state` 不设 `_transitioning` 守卫(不占 `MAX_CHAIN`)。若被 push 的新态在其 `enter`(或恢复态在 `resume`)里立即 `transition_to`/`dispatch`/`push_state`,该重入会同步执行,使 push/pop 尾部的 `state_changed` 在 `current_state` 已被改写后才发出(末条信号指向非当前态)。状态机自身(`_stack`/`current_state`)始终自洽,仅误导监听 `to_name` 的观察者;pushdown 的意图用途(菜单/暂停,进入后不即时转走)不触发此情形。
 
 ## 注意事项
 
