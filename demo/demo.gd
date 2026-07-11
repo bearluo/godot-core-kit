@@ -93,6 +93,14 @@ func _ready() -> void:
 
 	ctx.free()  # 随树释放,收养的子节点连带回收
 
+	# DevConsole 冒烟:注册作弊命令 + 绑定上下文 + watch + 程序化 execute(经门面)
+	var cheat := func(args: PackedStringArray) -> Variant: return "god mode"
+	CoreKit.console.register_command("god", cheat, "toggle god mode")
+	CoreKit.console.bind_context("demo_ctx", self)
+	CoreKit.console.watch("1 + 1")
+	CoreKit.log.info("DevConsole: execute(1+2)=%s" % CoreKit.console.execute("1 + 2"))
+	CoreKit.log.info("DevConsole: god cheat -> %s" % CoreKit.console.execute("god"))
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 

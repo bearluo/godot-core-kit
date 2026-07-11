@@ -22,8 +22,8 @@ func _initialize() -> void:
 	await process_frame  # 补一帧,让 CoreKit._ready() 的 bind_* 接线跑完
 
 	# 1. 版本
-	if kit.VERSION != "0.8.0":
-		print("FAIL 1: VERSION 应为 0.8.0,实际 %s" % kit.VERSION)
+	if kit.VERSION != "0.9.0":
+		print("FAIL 1: VERSION 应为 0.9.0,实际 %s" % kit.VERSION)
 		failures += 1
 
 	# 2. 十个门面属性非 null 且脚本路径正确
@@ -38,6 +38,7 @@ func _initialize() -> void:
 		["input", "res://addons/godot-core-kit/systems/input_manager.gd"],
 		["audio", "res://addons/godot-core-kit/systems/audio_manager.gd"],
 		["res", "res://addons/godot-core-kit/systems/resource_manager.gd"],
+		["console", "res://addons/godot-core-kit/console/dev_console.gd"],
 	]
 	for pair in expected:
 		var sub = kit.get(pair[0])
@@ -52,7 +53,7 @@ func _initialize() -> void:
 
 	# 3. 子节点顺序 = 构造顺序(_ready 触发序可复现)
 	var order := ["Log", "Settings", "EventBus", "SceneManager", "ObjectPool",
-		"SaveManager", "FrameScheduler", "InputManager", "AudioManager", "ResourceManager"]
+		"SaveManager", "FrameScheduler", "InputManager", "AudioManager", "ResourceManager", "DevConsole"]
 	if kit.get_child_count() != order.size():
 		print("FAIL 3: 子节点数应为 %d,实际 %d" % [order.size(), kit.get_child_count()])
 		failures += 1
@@ -86,7 +87,7 @@ func _initialize() -> void:
 
 	# 6. 全局根:内置已按 key 预注册 + provide/service/has/service_or 冒烟
 	var builtin_keys := ["log", "settings", "bus", "scenes", "pool", "saves",
-		"ticker", "input", "audio", "res"]
+		"ticker", "input", "audio", "res", "console"]
 	for k in builtin_keys:
 		if kit.service(k) != kit.get(k):
 			print("FAIL 6: CoreKit.service('%s') 未指向内置子系统" % k)
