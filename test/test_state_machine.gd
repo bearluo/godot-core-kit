@@ -144,6 +144,108 @@ func _initialize() -> void:
 		failures += 1
 	empty_machine.free()
 
+	# ===== 事件 dispatch 解耦(spec §7 事件派发 1-7) =====
+
+	# E1. add_transition + dispatch 命中具体 from → 转移到目标态
+	var be1: Array = _build([["Idle", ProbeState], ["Run", ProbeState]])
+	var m1 = be1[0]
+	root.add_child(m1)
+	await process_frame
+	m1.add_transition("Idle", "Run", "go")
+	var e1_hit: bool = m1.dispatch("go")
+	if not e1_hit or m1.current_state.name != &"Run":
+		print("FAIL E1: dispatch 命中具体 from 应转移到 Run,hit=%s cur=%s" % [e1_hit, m1.current_state.name])
+		failures += 1
+	m1.free()
+
+	# E2. ANYSTATE 通配:任意态 dispatch 该事件都转移
+	var be2: Array = _build([["Idle", ProbeState], ["Run", ProbeState], ["Dead", ProbeState]])
+	var m2 = be2[0]
+	root.add_child(m2)
+	await process_frame
+	m2.add_transition(m2.ANYSTATE, "Dead", "die")
+	m2.transition_to("Run")
+	var e2_hit: bool = m2.dispatch("die")   # 从 Run 通配到 Dead
+	if not e2_hit or m2.current_state.name != &"Dead":
+		print("FAIL E2: ANYSTATE 通配应从任意态转移到 Dead,hit=%s cur=%s" % [e2_hit, m2.current_state.name])
+		failures += 1
+	m2.free()
+
+	# E3. 具体 from 优先 ANYSTATE:同 event 既有具体又有通配,当前态命中具体的
+	var be3: Array = _build([["Idle", ProbeState], ["Run", ProbeState], ["Dead", ProbeState]])
+	var m3 = be3[0]
+	root.add_child(m3)
+	await process_frame
+	m3.add_transition(m3.ANYSTATE, "Dead", "ev")
+	m3.add_transition("Idle", "Run", "ev")   # 当前态 Idle 有具体转移
+	var e3_hit: bool = m3.dispatch("ev")
+	if not e3_hit or m3.current_state.name != &"Run":
+		print("FAIL E3: 具体 from 应优先通配,期望 Run,实际 %s" % [m3.current_state.name])
+		failures += 1
+	m3.free()
+
+	# E4. 无匹配:dispatch 返回 false、current_state 不变、无 exit/enter
+	var be4: Array = _build([["Idle", ProbeState], ["Run", ProbeState]])
+	var m4 = be4[0]
+	var j4: Array = be4[1]
+	root.add_child(m4)
+	await process_frame
+	j4.clear()
+	var e4_hit: bool = m4.dispatch("nope")
+	if e4_hit or m4.current_state.name != &"Idle" or not j4.is_empty():
+		print("FAIL E4: 无匹配应返回 false、不转移、无生命周期,hit=%s cur=%s journal=%s" % [e4_hit, m4.current_state.name, j4])
+		failures += 1
+	m4.free()
+
+	# E5. 重复 add_transition 覆盖:后者生效
+	var be5: Array = _build([["Idle", ProbeState], ["Run", ProbeState], ["Dead", ProbeState]])
+	var m5 = be5[0]
+	root.add_child(m5)
+	await process_frame
+	m5.add_transition("Idle", "Run", "go")
+	m5.add_transition("Idle", "Dead", "go")   # 覆盖上一条
+	m5.dispatch("go")
+	if m5.current_state.name != &"Dead":
+		print("FAIL E5: 重复登记应后者生效(Dead),实际 %s" % [m5.current_state.name])
+		failures += 1
+	m5.free()
+
+	# E6. dispatch 复用转换核心:journal 序列为 exit→enter、发 state_changed
+	var be6: Array = _build([["Idle", ProbeState], ["Run", ProbeState]])
+	var m6 = be6[0]
+	var j6: Array = be6[1]
+	var sig6 := []
+	m6.state_changed.connect(func(from: String, to: String) -> void: sig6.append([from, to]))
+	root.add_child(m6)
+	await process_frame
+	m6.add_transition("Idle", "Run", "go")
+	j6.clear()
+	sig6.clear()
+	m6.dispatch("go")
+	if j6 != [["Idle", "exit", "Run"], ["Run", "enter", "Idle"]]:
+		print("FAIL E6: dispatch 应复用转换核心(exit→enter),实际 %s" % [j6])
+		failures += 1
+	if sig6 != [["Idle", "Run"]]:
+		print("FAIL E6: dispatch 应发 state_changed,实际 %s" % [sig6])
+		failures += 1
+	m6.free()
+
+	# E7. 转换中 dispatch 入队:决策态 enter 里 dispatch,最终落队列目标态
+	var be7: Array = _build([["Start", ProbeState], ["A", ProbeDecisionState], ["B", ProbeState]])
+	var m7 = be7[0]
+	m7.get_child(1).dispatch_on_enter = "go"
+	var sig7 := []
+	m7.state_changed.connect(func(from: String, to: String) -> void: sig7.append([from, to]))
+	root.add_child(m7)
+	await process_frame
+	m7.add_transition("A", "B", "go")
+	sig7.clear()
+	m7.transition_to("A")   # A.enter 里 dispatch("go") → 入队 B
+	if sig7 != [["Start", "A"], ["A", "B"]] or m7.current_state.name != &"B":
+		print("FAIL E7: 转换中 dispatch 应入队,最终落 B,signals=%s cur=%s" % [sig7, m7.current_state.name])
+		failures += 1
+	m7.free()
+
 	if failures == 0:
 		print("test_state_machine: ALL PASS")
 		quit(0)

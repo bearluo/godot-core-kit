@@ -15,6 +15,9 @@ signal state_changed(from_name: String, to_name: String)
 
 const MAX_CHAIN := 8
 
+## 事件转移表的通配 from 状态名(保留名;子节点不得取此名)。
+const ANYSTATE := "*"
+
 ## 初始状态;为 null 时取第一个 KitState 子节点。
 @export var initial_state: KitState
 
@@ -24,12 +27,16 @@ var current_state: KitState
 var _states: Dictionary = {}      # 状态名(String) -> KitState
 var _transitioning: bool = false
 var _pending: Array[String] = []  # 转换执行中收到的后续转换请求
+var _transitions: Dictionary = {} # "from|event" -> to_name(事件派发转移表)
 
 
 func _ready() -> void:
 	for child in get_children():
 		if child is KitState:
-			_states[String(child.name)] = child
+			var sname := String(child.name)
+			if sname == ANYSTATE:
+				push_error("KitStateMachine(%s): 状态名 '%s' 与通配保留名冲突,dispatch 无法精确命中该态" % [get_path(), ANYSTATE])
+			_states[sname] = child
 			child.machine = self
 	if _states.is_empty():
 		push_warning("KitStateMachine(%s): 没有任何 KitState 子节点,状态机空转" % get_path())
@@ -60,6 +67,35 @@ func transition_to(state_name: String) -> void:
 ## 按名取状态节点;未知名字返回 null。
 func get_state(state_name: String) -> KitState:
 	return _states.get(state_name)
+
+
+## 登记一条事件转移。from_name 可为已注册态名或 ANYSTATE;event 为命名事件。
+## to_name 未注册 → push_warning + 忽略;同 (from,event) 重复登记 → 覆盖 + push_warning。
+func add_transition(from_name: String, to_name: String, event: String) -> void:
+	if not _states.has(to_name):
+		push_warning("KitStateMachine(%s): add_transition 目标态 '%s' 未注册,忽略" % [get_path(), to_name])
+		return
+	var key := "%s|%s" % [from_name, event]
+	if _transitions.has(key):
+		push_warning("KitStateMachine(%s): 转移 (%s, %s) 重复登记,覆盖旧目标" % [get_path(), from_name, event])
+	_transitions[key] = to_name
+
+
+## 按当前态派发事件:先查 (current, event) 再查 (ANYSTATE, event),命中则转移
+## (非转换中走 _run_transition;转换中入 _pending)返回 true;无匹配静默返回 false。
+func dispatch(event: String) -> bool:
+	if current_state == null:
+		return false
+	var to_name: String = _transitions.get("%s|%s" % [String(current_state.name), event], "")
+	if to_name == "":
+		to_name = _transitions.get("%s|%s" % [ANYSTATE, event], "")
+	if to_name == "":
+		return false
+	if _transitioning:
+		_pending.append(to_name)
+		return true
+	_run_transition(String(current_state.name), _states[to_name])
+	return true
 
 
 ## 执行一次转换,并按序消化期间入队的连锁转换(上限 MAX_CHAIN 防死循环)。
