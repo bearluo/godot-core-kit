@@ -119,6 +119,22 @@ func _ready() -> void:
 		CoreKit.i18n.get_locale(), CoreKit.i18n.t("DEMO_HELLO"), CoreKit.i18n.available_locales()])
 	CoreKit.settings.erase_section("locale")  # 清 demo 落盘的 locale,保多次运行确定性
 
+	# 设置/重绑定 UI 冒烟:临时动作 + KitRebindButton 程序化 capture(正常 + 冲突拦截)
+	InputMap.add_action("demo_rebind_a")
+	InputMap.action_add_event("demo_rebind_a", _demo_key(KEY_SPACE))
+	InputMap.add_action("demo_rebind_b")
+	InputMap.action_add_event("demo_rebind_b", _demo_key(KEY_G))
+	CoreKit.input._snapshot_defaults()  # 让 InputManager 认识新动作(快照默认)
+	var rebind_btn := KitRebindButton.new()
+	rebind_btn.setup("demo_rebind_a", PackedStringArray(["demo_rebind_a", "demo_rebind_b"]))
+	var rb_ok := rebind_btn.capture_event(_demo_key(KEY_F, true))       # 正常重绑 a -> F
+	var rb_conflict := rebind_btn.capture_event(_demo_key(KEY_G, true)) # 撞 b(G),拦截
+	CoreKit.log.info("RebindUI: rebind ok=%s conflict_blocked=%s" % [rb_ok, not rb_conflict])
+	rebind_btn.free()
+	InputMap.erase_action("demo_rebind_a")
+	InputMap.erase_action("demo_rebind_b")
+	CoreKit.settings.erase_value("input", "demo_rebind_a")  # 清 demo 重绑落盘,保确定性
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 
@@ -132,3 +148,10 @@ func _make_dummy_scene() -> PackedScene:
 	scene.pack(root)
 	root.free()
 	return scene
+
+
+func _demo_key(keycode: int, pressed: bool = false) -> InputEventKey:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = keycode
+	ev.pressed = pressed
+	return ev
