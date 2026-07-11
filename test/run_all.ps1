@@ -69,7 +69,7 @@ Write-Output "`n=== demo smoke (--quit-after 60) ==="
 $d = Run-Godot @('--headless','--path','.','res://demo/demo.tscn','--quit-after','60') 90000 'demo'
 Write-Output "demo exit=$($d.code)"
 $demoText = Get-Content $d.out -Raw
-foreach ($e in @('all subsystems smoke-tested','FrameScheduler:','ResourceManager:','KitContext:','-> [Idle]','-> [Run]')) {
+foreach ($e in @('all subsystems smoke-tested','FrameScheduler:','ResourceManager:','KitContext:','-> [Idle]','-> [Run]','-> [Menu]','dispatch(stop) hit=true','stack_depth=0')) {
   $hit = $demoText -match [regex]::Escape($e)
   Write-Output ("demo marker '{0}' : {1}" -f $e, $(if($hit){'present'}else{'*** MISSING ***'}))
   if (-not $hit) { $fails++ }

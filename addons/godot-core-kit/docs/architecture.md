@@ -86,4 +86,4 @@ func _ready() -> void:
 
 ## 版本
 
-当前 `0.7.0`(`plugin.cfg` 与 `CoreKit.VERSION` 同源)。0.6.0→0.7.0 给 SaveManager 叠加可插拔序列化(`SaveSerializer` 基类 + 默认 `JsonSaveSerializer`,逐字节兼容旧 `.json`)、原子写(temp+rename)、资源引用安全守卫(拒 Object/Callable/Signal/RID),纯增量、向后兼容;0.5.0→0.6.0 给 KitContext 叠加订阅式解析(`subscribe`)与工厂式 scope(`provide_factory`,SINGLETON/TRANSIENT),纯增量、向后兼容;0.4.1→0.5.0 新增 KitContext 服务容器(纯增量,对既有 API 无破坏);0.3.x→0.4.0 是破坏性变更(五个老全局单例名下线,统一走 `CoreKit` 门面);0.4.1 为纯目录重排。
+当前 `0.8.0`(`plugin.cfg` 与 `CoreKit.VERSION` 同源)。0.7.0→0.8.0 给 KitStateMachine 叠加事件 dispatch 解耦(`add_transition`/`dispatch` + `ANYSTATE` 通配,与 `transition_to` 并存)与 pushdown 栈(`push_state`/`pop_state`,暂停语义 + `KitState.pause`/`resume` 钩子),纯增量、向后兼容;0.6.0→0.7.0 给 SaveManager 叠加可插拔序列化(`SaveSerializer` 基类 + 默认 `JsonSaveSerializer`,逐字节兼容旧 `.json`)、原子写(temp+rename)、资源引用安全守卫(拒 Object/Callable/Signal/RID),纯增量、向后兼容;0.5.0→0.6.0 给 KitContext 叠加订阅式解析(`subscribe`)与工厂式 scope(`provide_factory`,SINGLETON/TRANSIENT),纯增量、向后兼容;0.4.1→0.5.0 新增 KitContext 服务容器(纯增量,对既有 API 无破坏);0.3.x→0.4.0 是破坏性变更(五个老全局单例名下线,统一走 `CoreKit` 门面);0.4.1 为纯目录重排。

@@ -51,7 +51,7 @@ func _ready() -> void:
 	CoreKit.res.batch_completed.connect(func() -> void: CoreKit.log.info("ResourceManager: 预热批完成"))
 	CoreKit.res.preload_batch(["res://addons/godot-core-kit/core/log.gd"])
 
-	# KitStateMachine 冒烟:代码组一台两态状态机(类库,不经门面)
+	# KitStateMachine 冒烟:代码组一台三态状态机(类库,不经门面)——transition_to + dispatch + pushdown
 	var machine := KitStateMachine.new()
 	var idle := KitState.new()
 	idle.name = "Idle"
@@ -59,10 +59,18 @@ func _ready() -> void:
 	var run := KitState.new()
 	run.name = "Run"
 	machine.add_child(run)
+	var menu := KitState.new()
+	menu.name = "Menu"
+	machine.add_child(menu)
 	machine.state_changed.connect(func(from: String, to: String) -> void:
 		CoreKit.log.info("KitStateMachine: [%s] -> [%s]" % [from, to]))
 	add_child(machine)          # 触发 _ready:进 Idle
 	machine.transition_to("Run")
+	machine.add_transition(machine.ANYSTATE, "Idle", "stop")   # 通配事件:任意态收到 stop → Idle
+	CoreKit.log.info("KitStateMachine: dispatch(stop) hit=%s" % machine.dispatch("stop"))  # Run --stop--> Idle
+	machine.push_state("Menu")  # 暂停 Idle,压栈,进 Menu(暂停语义)
+	machine.pop_state()         # 弹回 Idle(resume),现场保留
+	CoreKit.log.info("KitStateMachine: stack_depth=%d" % machine.stack_depth())
 
 	# KitContext 冒烟:全局 provide/service + 作用域容器 + 收养随树释放(DI 容器,类库)
 	CoreKit.provide("demo_service", {"id": 7})
