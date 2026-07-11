@@ -7,6 +7,7 @@ const RegistryScript := preload("res://addons/godot-core-kit/console/console_com
 const EvaluatorScript := preload("res://addons/godot-core-kit/console/console_evaluator.gd")
 const WatchScript := preload("res://addons/godot-core-kit/console/console_watch_list.gd")
 const ProbeScript := preload("res://test/fixtures/console_probe.gd")
+const ConsoleScript := preload("res://addons/godot-core-kit/console/dev_console.gd")
 
 
 func _initialize() -> void:
@@ -14,6 +15,7 @@ func _initialize() -> void:
 	failures += _test_registry()
 	failures += _test_evaluator()
 	failures += _test_watch()
+	failures += await _test_console()
 
 	if failures == 0:
 		print("test_dev_console: ALL PASS")
@@ -100,4 +102,57 @@ func _test_watch() -> int:
 	wl.remove("1 + 1")
 	if wl.entries().has("1 + 1"):
 		print("FAIL watch: remove 后不应含"); f += 1
+	return f
+
+
+func _test_console() -> int:
+	var f := 0
+	var c = ConsoleScript.new()
+	root.add_child(c)
+	await process_frame   # 让 _ready 跑(headless=debug build → _enabled=true → 建 UI)
+
+	if not c.is_enabled():
+		print("FAIL console: headless 应为 debug build → enabled"); f += 1
+
+	if c.execute("1 + 2") != "3":
+		print("FAIL console: execute('1 + 2') 应为 '3',实际 '%s'" % c.execute("1 + 2")); f += 1
+
+	c.register_command("god", func(args: PackedStringArray) -> Variant: return "godmode on")
+	if c.execute("god") != "godmode on":
+		print("FAIL console: execute('god') 应为 'godmode on'"); f += 1
+
+	c.register_command("add", func(args: PackedStringArray) -> Variant: return int(args[0]) + int(args[1]))
+	if c.execute("add 2 5") != "7":
+		print("FAIL console: execute('add 2 5') 应为 '7'"); f += 1
+
+	if not c.execute("1 +").begins_with("ERROR:"):
+		print("FAIL console: 错误表达式应 ERROR: 前缀"); f += 1
+
+	if c.execute("2 + 2") != "4":
+		print("FAIL console: 未命中命令应落表达式求值(不误判 '2' 为命令)"); f += 1
+
+	# UI 冒烟:open/close 翻转 is_open
+	c.open()
+	if not c.is_open():
+		print("FAIL console: open 后 is_open 应真"); f += 1
+	c.close()
+	if c.is_open():
+		print("FAIL console: close 后 is_open 应假"); f += 1
+
+	# 门控:disabled 下 UI/toggle 死,但 execute 逻辑层仍工作
+	c.set_enabled(false)
+	if c.is_enabled():
+		print("FAIL console: set_enabled(false) 后应 disabled"); f += 1
+	c.toggle()
+	if c.is_open():
+		print("FAIL console: disabled 下 toggle 不应打开"); f += 1
+	if c.execute("3 + 4") != "7":
+		print("FAIL console: disabled 下 execute 逻辑层仍应工作"); f += 1
+
+	# watch 委托冒烟(不崩即可)
+	c.set_enabled(true)
+	c.watch("1 + 1")
+	c.unwatch("1 + 1")
+
+	c.queue_free()
 	return f
