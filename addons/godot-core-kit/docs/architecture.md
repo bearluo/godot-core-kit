@@ -89,7 +89,7 @@ func _ready() -> void:
 
 ## 测试
 
-全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 17 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
+全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 16 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
 
 ## 版本
 
