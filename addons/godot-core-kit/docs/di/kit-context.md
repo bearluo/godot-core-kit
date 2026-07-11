@@ -14,12 +14,12 @@
 
 | 成员 | 说明 |
 |---|---|
-| `CoreKit.provide(key, svc) -> void` | 注册全局服务。保留键(11 个内置)拒绝;重复键覆盖告警。 |
+| `CoreKit.provide(key, svc) -> void` | 注册全局服务。保留键(12 个内置)拒绝;重复键覆盖告警。 |
 | `CoreKit.service(key) -> Variant` | 取;未注册 → push_error + null。 |
 | `CoreKit.has(key) -> bool` | 存在性,不报错。 |
 | `CoreKit.service_or(key, fallback) -> Variant` | 未注册返回 fallback。 |
 
-11 个内置子系统已按属性名预注册(`service("audio") == CoreKit.audio`),但内置首选仍走强类型属性(有补全 + 类型)。
+12 个内置子系统已按属性名预注册(`service("audio") == CoreKit.audio`),但内置首选仍走强类型属性(有补全 + 类型)。
 
 ### 作用域容器(KitContext,挂节点)
 

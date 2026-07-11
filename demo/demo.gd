@@ -101,6 +101,24 @@ func _ready() -> void:
 	CoreKit.log.info("DevConsole: execute(1+2)=%s" % CoreKit.console.execute("1 + 2"))
 	CoreKit.log.info("DevConsole: god cheat -> %s" % CoreKit.console.execute("god"))
 
+	# i18n 冒烟:内存注册两语翻译 + 切语言 + 托管 t() + 字体绑定(经门面第 12 子系统)
+	var en_tr := Translation.new()
+	en_tr.locale = "en"
+	en_tr.add_message("DEMO_HELLO", "Hello")
+	var zh_tr := Translation.new()
+	zh_tr.locale = "zh"
+	zh_tr.add_message("DEMO_HELLO", "你好")
+	CoreKit.i18n.add_translation(en_tr)
+	CoreKit.i18n.add_translation(zh_tr)
+	CoreKit.i18n.register_locale_font("zh", FontFile.new())
+	CoreKit.i18n.bind_theme(Theme.new())
+	CoreKit.i18n.set_locale("en")
+	CoreKit.log.info("i18n: locale=%s t(DEMO_HELLO)=%s" % [CoreKit.i18n.get_locale(), CoreKit.i18n.t("DEMO_HELLO")])
+	CoreKit.i18n.set_locale("zh")
+	CoreKit.log.info("i18n: locale=%s t(DEMO_HELLO)=%s available=%s" % [
+		CoreKit.i18n.get_locale(), CoreKit.i18n.t("DEMO_HELLO"), CoreKit.i18n.available_locales()])
+	CoreKit.settings.erase_section("locale")  # 清 demo 落盘的 locale,保多次运行确定性
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 
