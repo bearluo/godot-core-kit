@@ -9,6 +9,9 @@ extends Node
 ##
 ## 用法:CoreKit.log.info("msg")、CoreKit.log.warn("x=%d" % x)、CoreKit.log.set_level(CoreKit.log.Level.WARN)
 
+## 每条经阈值放行(即实际打印)的行都广播,供调试控制台等消费方订阅。
+signal line_logged(level: int, text: String)
+
 enum Level { DEBUG, INFO, WARN, ERROR }
 
 const _LEVEL_NAMES := ["DEBUG", "INFO", "WARN", "ERROR"]
@@ -16,6 +19,10 @@ const _LEVEL_NAMES := ["DEBUG", "INFO", "WARN", "ERROR"]
 const _LEVEL_COLORS := ["gray", "", "yellow", "red"]
 
 var _level: Level = Level.DEBUG
+
+## 供调试控制台 overlay 拉取的行历史上限(有界环形,防无界增长)。
+const HISTORY_MAX := 256
+var _history: Array[String] = []
 
 
 func set_level(level: Level) -> void:
@@ -58,6 +65,10 @@ func _log(level: Level, message) -> void:
 	if not _should_log(level):
 		return
 	var line := format_line(level, message)
+	if _history.size() >= HISTORY_MAX:
+		_history.pop_front()
+	_history.append(line)
+	line_logged.emit(level, line)
 	var color: String = _LEVEL_COLORS[level]
 	if color.is_empty():
 		print_rich(line)
@@ -67,3 +78,13 @@ func _log(level: Level, message) -> void:
 		push_warning(line)
 	elif level == Level.ERROR:
 		push_error(line)
+
+
+## 只读历史副本(供控制台开启时灌入积压行)。
+func history() -> Array[String]:
+	return _history.duplicate()
+
+
+## 清空历史缓冲。
+func clear_history() -> void:
+	_history.clear()
