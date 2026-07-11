@@ -32,7 +32,7 @@
 
 ## 依赖
 
-- 消费 `CoreKit.input`(`InputManager`)的 `action_for_event`/`rebind_action`/`reset_action`/`get_action_event`。**零门面耦合**:告警走 `push_warning`,对 `CoreKit.input` 的默认解析可注入 standalone InputManager 绕开(headless 单测)。off-facade:不挂门面,`.new()`+`add_child` 即用。
+- 消费 `CoreKit.input`(`InputManager`)的 `action_for_event`/`rebind_action`/`reset_action`/`get_action_event`。**零门面耦合**:失败经 `rebind_failed` 信号上报(不引 `CoreKit.log`),对 `CoreKit.input` 的默认解析可注入 standalone InputManager 绕开(headless 单测)。off-facade:不挂门面,`.new()`+`add_child` 即用。
 
 ## 用法示例
 

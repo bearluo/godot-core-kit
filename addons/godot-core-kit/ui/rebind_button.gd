@@ -5,7 +5,7 @@ extends Button
 ## (替换 InputMap + 持久化 Settings)。只管 UI + 捕获 + 冲突判定;重绑/复位/持久化
 ## 复用注入的 InputManager(默认 CoreKit.input,可注入 standalone 做 headless 单测)。
 ##
-## 零门面耦合:不引 CoreKit.log(告警走 push_warning);对 CoreKit.input 的默认解析是
+## 零门面耦合:不引 CoreKit.log(失败经 rebind_failed 信号上报);对 CoreKit.input 的默认解析是
 ## 消费侧便利,测试注入 standalone InputManager 绕开。捕获 Key/MouseButton/JoypadButton
 ## (对齐 InputManager 编码支持,忽略 joypad motion);Esc 取消。
 
