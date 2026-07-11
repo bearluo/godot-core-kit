@@ -574,7 +574,7 @@ var _history_index: int = 0
 # UI 节点(建后持有)
 var _root: Control
 var _output: RichTextLabel
-var _input: LineEdit
+var _input_field: LineEdit
 var _watch_label: RichTextLabel
 
 
@@ -732,7 +732,7 @@ func open() -> void:
 	if not _enabled or not _ui_built:
 		return
 	_root.visible = true
-	_input.grab_focus()
+	_input_field.grab_focus()
 	if _pause_on_open:
 		_was_paused = get_tree().paused
 		get_tree().paused = true
@@ -788,17 +788,17 @@ func _on_submit(text: String) -> void:
 		if _input_history.size() > INPUT_HISTORY_MAX:
 			_input_history.pop_front()
 	_history_index = _input_history.size()
-	_input.clear()
+	_input_field.clear()
 
 
 func _on_input_gui(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_UP:
 			_recall_history(-1)
-			_input.accept_event()
+			_input_field.accept_event()
 		elif event.keycode == KEY_DOWN:
 			_recall_history(1)
-			_input.accept_event()
+			_input_field.accept_event()
 
 
 func _recall_history(dir: int) -> void:
@@ -806,10 +806,10 @@ func _recall_history(dir: int) -> void:
 		return
 	_history_index = clampi(_history_index + dir, 0, _input_history.size())
 	if _history_index >= _input_history.size():
-		_input.text = ""
+		_input_field.text = ""
 	else:
-		_input.text = _input_history[_history_index]
-	_input.caret_column = _input.text.length()
+		_input_field.text = _input_history[_history_index]
+	_input_field.caret_column = _input_field.text.length()
 
 
 # --- 输出 -----------------------------------------------------------------
@@ -859,11 +859,11 @@ func _build_ui() -> void:
 	_output.custom_minimum_size = Vector2(0, 260)
 	vbox.add_child(_output)
 
-	_input = LineEdit.new()
-	_input.placeholder_text = "命令或 GDScript 表达式,回车执行"
-	_input.text_submitted.connect(_on_submit)
-	_input.gui_input.connect(_on_input_gui)
-	vbox.add_child(_input)
+	_input_field = LineEdit.new()
+	_input_field.placeholder_text = "命令或 GDScript 表达式,回车执行"
+	_input_field.text_submitted.connect(_on_submit)
+	_input_field.gui_input.connect(_on_input_gui)
+	vbox.add_child(_input_field)
 
 	_watch_label = RichTextLabel.new()
 	_watch_label.bbcode_enabled = true

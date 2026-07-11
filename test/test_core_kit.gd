@@ -26,7 +26,7 @@ func _initialize() -> void:
 		print("FAIL 1: VERSION 应为 0.9.0,实际 %s" % kit.VERSION)
 		failures += 1
 
-	# 2. 十个门面属性非 null 且脚本路径正确
+	# 2. 十一个门面属性非 null 且脚本路径正确
 	var expected := [
 		["log", "res://addons/godot-core-kit/core/log.gd"],
 		["settings", "res://addons/godot-core-kit/core/settings.gd"],

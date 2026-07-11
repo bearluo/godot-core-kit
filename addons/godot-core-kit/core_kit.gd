@@ -12,7 +12,7 @@ extends Node
 
 const VERSION := "0.9.0"
 
-## 全局根的保留键 = 10 个内置子系统的属性名。CoreKit.provide 拒绝覆盖这些键;
+## 全局根的保留键 = 11 个内置子系统的属性名。CoreKit.provide 拒绝覆盖这些键;
 ## 子作用域(KitContext)不受此限,可 shadow。
 const RESERVED_KEYS := ["log", "settings", "bus", "scenes", "pool", "saves",
 	"ticker", "input", "audio", "res", "console"]

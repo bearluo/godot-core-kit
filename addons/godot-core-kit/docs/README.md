@@ -1,6 +1,6 @@
 # godot-core-kit 文档
 
-面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 10 个子系统,外加状态机与服务容器两套 off-facade 类库。
+面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 11 个子系统,外加状态机与服务容器两套 off-facade 类库。
 
 ## 从这里开始
 
@@ -27,6 +27,12 @@
 | [input-manager](systems/input-manager.md) | `CoreKit.input` | 键位重绑定 + 设备检测 + 输入缓冲 |
 | [audio-manager](systems/audio-manager.md) | `CoreKit.audio` | 总线音量 + BGM 交叉淡切 + SFX 池 |
 | [resource-manager](systems/resource-manager.md) | `CoreKit.res` | 异步预加载 + 缓存 |
+
+### console/ —— 运行时调试
+
+| 文档 | 访问 | 一句话 |
+|---|---|---|
+| [console](console.md) | `CoreKit.console` | 运行时调试控制台(dev 门控):日志 overlay + 命令/作弊注册 + 表达式执行 + 变量 watch |
 
 ### 类库(off-facade,不挂门面)
 
