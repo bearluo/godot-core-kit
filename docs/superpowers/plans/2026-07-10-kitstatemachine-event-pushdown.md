@@ -172,11 +172,11 @@ func enter(prev_state_name: String) -> void:
 	var be7: Array = _build([["Start", ProbeState], ["A", ProbeDecisionState], ["B", ProbeState]])
 	var m7 = be7[0]
 	m7.get_child(1).dispatch_on_enter = "go"
-	m7.add_transition("A", "B", "go")
 	var sig7 := []
 	m7.state_changed.connect(func(from: String, to: String) -> void: sig7.append([from, to]))
 	root.add_child(m7)
 	await process_frame
+	m7.add_transition("A", "B", "go")   # 须在 add_child+await 之后:_states 于 _ready 才注册
 	sig7.clear()
 	m7.transition_to("A")   # A.enter 里 dispatch("go") → 入队 B
 	if sig7 != [["Start", "A"], ["A", "B"]] or m7.current_state.name != &"B":
