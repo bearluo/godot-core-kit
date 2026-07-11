@@ -9,7 +9,8 @@ extends SceneTree
 ## LocaleManager 本身零 CoreKit 引用,一并 load() 保持一致。
 ##
 ## 隔离:TranslationServer 是全局单例;开头存原 locale,结尾恢复(各 test 虽独立
-## 进程,仍稳妥)。
+## 进程,仍稳妥)。测试期间 add_translation 的若干 Translation 不逐一 remove——依赖
+## "每个 test 文件独立 godot 进程,退出即释放"这一前提(run_all 亦逐个起进程)。
 
 var LocaleManagerScript
 var SettingsScript
@@ -113,6 +114,13 @@ func _initialize() -> void:
 	if lm.font_for_locale("de") != null:
 		print("FAIL 5: null 字体不应注册")
 		failures += 1
+	# bind_theme(null) 清除:解绑后切到有字体的 locale 不应再改该 theme 的 default_font
+	lm.bind_theme(null)                        # 当前 en;解绑托管 theme
+	var prev_font := theme.default_font        # 解绑时 default_font(= zh_font)
+	lm.set_locale("zh")                        # en -> zh(zh 有字体),但已解绑 -> theme 不应变
+	if theme.default_font != prev_font:
+		print("FAIL 5: bind_theme(null) 解绑后不应再改该 theme 的 default_font")
+		failures += 1
 
 	# 6. 运行时加载:save 一个 fr 翻译到 user://,load_translation 注册后可用
 	var fr_tr := Translation.new()
@@ -147,12 +155,17 @@ func _initialize() -> void:
 	settings.settings_path = SETTINGS_PATH
 	settings.set_value("locale", "current", "zh")   # 预置
 	var lm2 = LocaleManagerScript.new()
+	var lm2_events := []
+	lm2.locale_changed.connect(func(loc): lm2_events.append(loc))
 	TranslationServer.set_locale("en")              # 基线,保证 bind 的 zh 是真迁移
-	lm2.bind_settings(settings)                     # 读回 zh 并 set_locale('zh')
+	lm2.bind_settings(settings)                     # 静默恢复 zh:应用但不重放 locale_changed
 	if lm2.get_locale() != "zh":
 		print("FAIL 7: bind_settings 应恢复持久化 locale 到 zh,实际 %s" % lm2.get_locale())
 		failures += 1
-	lm2.set_locale("en")                            # 真迁移,应写透 settings
+	if not lm2_events.is_empty():
+		print("FAIL 7: bind_settings 静默恢复不应重放 locale_changed,实际 %s" % [lm2_events])
+		failures += 1
+	lm2.set_locale("en")                            # 真迁移(公开 setter),应发信号 + 写透 settings
 	if settings.get_value("locale", "current") != "en":
 		print("FAIL 7: set_locale 应写透 settings.locale.current,实际 %s" % [settings.get_value("locale", "current")])
 		failures += 1

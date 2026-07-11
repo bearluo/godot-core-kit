@@ -26,28 +26,29 @@ var _locale_fonts: Dictionary = {}
 var _warned: Dictionary = {}
 
 
-## 注入 Settings:持有引用并恢复上次持久化的 locale(无则保持引擎默认)。
+## 注入 Settings:持有引用并恢复上次持久化的 locale(无则保持引擎默认)。**静默恢复**
+## ——走内部 _apply_locale,不重放 locale_changed、不回写已持久化值,与 audio/input 的
+## bind_settings 范式一致(注入期不应向订阅方广播一次意外的启动事件)。
 func bind_settings(settings) -> void:
 	_settings = settings
 	if _settings == null:
 		return
 	var stored = _settings.get_value(SETTINGS_SECTION, "current")
 	if stored is String and not stored.is_empty():
-		set_locale(stored)
+		_apply_locale(stored)
 
 
 ## 切换 locale。空串 → 警告 no-op;与当前相同 → no-op(不重复落盘/发信号);否则切
-## TranslationServer + 持久化 + 应用字体 + 发 locale_changed。
+## TranslationServer + 应用字体 + 持久化 + 发 locale_changed。
 func set_locale(locale: String) -> void:
 	if locale.is_empty():
 		push_warning("LocaleManager.set_locale: 空 locale,忽略")
 		return
 	if TranslationServer.get_locale() == locale:
 		return
-	TranslationServer.set_locale(locale)
+	_apply_locale(locale)
 	if _settings != null:
 		_settings.set_value(SETTINGS_SECTION, "current", locale)
-	_apply_font(locale)
 	locale_changed.emit(locale)
 
 
@@ -138,6 +139,13 @@ func load_translations(dir: String) -> int:
 		entry = da.get_next()
 	da.list_dir_end()
 	return count
+
+
+## 应用 locale(切 TranslationServer + 换字体),不持久化、不发信号。set_locale 与
+## bind_settings 的静默恢复共用——后者据此静默恢复,不重放 locale_changed。
+func _apply_locale(locale: String) -> void:
+	TranslationServer.set_locale(locale)
+	_apply_font(locale)
 
 
 ## 换绑定 Theme 的 default_font 为该 locale 注册的字体(未绑定 Theme 或该 locale
