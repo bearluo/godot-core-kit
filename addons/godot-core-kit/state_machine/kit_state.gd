@@ -34,6 +34,16 @@ func handle_input(_event: InputEvent) -> void:
 	pass
 
 
+## 本态被 push_state 压栈、让位给新态时调用(暂停语义,现场保留)。默认空。
+func pause() -> void:
+	pass
+
+
+## 本态经 pop_state 从栈顶弹回、重新成为活动态时调用。默认空。
+func resume() -> void:
+	pass
+
+
 ## 语法糖:machine.transition_to(state_name)。
 func transition_to(state_name: String) -> void:
 	if machine != null:

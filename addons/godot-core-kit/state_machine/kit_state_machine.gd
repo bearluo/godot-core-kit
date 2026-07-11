@@ -18,6 +18,9 @@ const MAX_CHAIN := 8
 ## 事件转移表的通配 from 状态名(保留名;子节点不得取此名)。
 const ANYSTATE := "*"
 
+## pushdown 栈深守卫(防无限 push)。
+const MAX_STACK := 32
+
 ## 初始状态;为 null 时取第一个 KitState 子节点。
 @export var initial_state: KitState
 
@@ -28,6 +31,7 @@ var _states: Dictionary = {}      # 状态名(String) -> KitState
 var _transitioning: bool = false
 var _pending: Array[String] = []  # 转换执行中收到的后续转换请求
 var _transitions: Dictionary = {} # "from|event" -> to_name(事件派发转移表)
+var _stack: Array[String] = []    # pushdown 被压挂起态名(栈底->栈顶)
 
 
 func _ready() -> void:
@@ -96,6 +100,48 @@ func dispatch(event: String) -> bool:
 		return true
 	_run_transition(String(current_state.name), _states[to_name])
 	return true
+
+
+## 压栈进入 state_name(暂停语义):current.pause() → 当前态入栈 → 进新态(enter)。
+## 未知态 → push_warning + no-op;转换进行中 → push_warning + 拒绝;栈满 → push_error + 拒绝。
+func push_state(state_name: String) -> void:
+	if not _states.has(state_name):
+		push_warning("KitStateMachine(%s): push_state 未知态 '%s',忽略" % [get_path(), state_name])
+		return
+	if _transitioning:
+		push_warning("KitStateMachine(%s): 转换进行中拒绝 push_state('%s')" % [get_path(), state_name])
+		return
+	if _stack.size() >= MAX_STACK:
+		push_error("KitStateMachine(%s): 栈深达上限 %d,拒绝 push_state('%s')" % [get_path(), MAX_STACK, state_name])
+		return
+	var paused_name := String(current_state.name)
+	current_state.pause()
+	_stack.append(paused_name)
+	current_state = _states[state_name]
+	current_state.enter(paused_name)
+	state_changed.emit(paused_name, state_name)
+
+
+## 弹栈恢复(暂停语义):current.exit(栈顶名) → 弹栈顶 → 切回该态 → 该态.resume()。
+## 栈空 → push_warning + no-op;转换进行中 → push_warning + 拒绝。
+func pop_state() -> void:
+	if _stack.is_empty():
+		push_warning("KitStateMachine(%s): 栈空,pop_state 忽略" % get_path())
+		return
+	if _transitioning:
+		push_warning("KitStateMachine(%s): 转换进行中拒绝 pop_state" % get_path())
+		return
+	var active_name := String(current_state.name)
+	var restored_name: String = _stack.pop_back()
+	current_state.exit(restored_name)
+	current_state = _states[restored_name]
+	current_state.resume()
+	state_changed.emit(active_name, restored_name)
+
+
+## 只读当前 pushdown 栈深(调试/测试)。
+func stack_depth() -> int:
+	return _stack.size()
 
 
 ## 执行一次转换,并按序消化期间入队的连锁转换(上限 MAX_CHAIN 防死循环)。

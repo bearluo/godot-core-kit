@@ -246,6 +246,97 @@ func _initialize() -> void:
 		failures += 1
 	m7.free()
 
+	# ===== pushdown 栈(spec §7 pushdown 8-13) =====
+
+	# P8. push_state:旧态 pause() 被调、栈深+1、新态 enter(旧名)、state_changed
+	var bp8: Array = _build([["Game", ProbeState], ["Menu", ProbeState]])
+	var m8 = bp8[0]
+	var j8: Array = bp8[1]
+	var sig8 := []
+	m8.state_changed.connect(func(from: String, to: String) -> void: sig8.append([from, to]))
+	root.add_child(m8)
+	await process_frame        # 进 Game(初始)
+	j8.clear()
+	sig8.clear()
+	m8.push_state("Menu")
+	if j8 != [["Game", "pause"], ["Menu", "enter", "Game"]]:
+		print("FAIL P8: push 应 pause 旧态并 enter 新态,实际 %s" % [j8])
+		failures += 1
+	if m8.stack_depth() != 1 or m8.current_state.name != &"Menu" or sig8 != [["Game", "Menu"]]:
+		print("FAIL P8: push 后栈深/当前态/信号不正确,depth=%d cur=%s sig=%s" % [m8.stack_depth(), m8.current_state.name, sig8])
+		failures += 1
+	m8.free()
+
+	# P9. pop_state:活动态 exit(栈顶名)、栈深-1、恢复态 resume() 被调且未重新 enter、state_changed
+	var bp9: Array = _build([["Game", ProbeState], ["Menu", ProbeState]])
+	var m9 = bp9[0]
+	var j9: Array = bp9[1]
+	var sig9 := []
+	m9.state_changed.connect(func(from: String, to: String) -> void: sig9.append([from, to]))
+	root.add_child(m9)
+	await process_frame
+	m9.push_state("Menu")      # Game 暂停,进 Menu
+	j9.clear()
+	sig9.clear()
+	m9.pop_state()             # 弹回 Game
+	if j9 != [["Menu", "exit", "Game"], ["Game", "resume"]]:
+		print("FAIL P9: pop 应 exit 活动态并 resume 恢复态(不重 enter),实际 %s" % [j9])
+		failures += 1
+	if m9.stack_depth() != 0 or m9.current_state.name != &"Game" or sig9 != [["Menu", "Game"]]:
+		print("FAIL P9: pop 后栈深/当前态/信号不正确,depth=%d cur=%s sig=%s" % [m9.stack_depth(), m9.current_state.name, sig9])
+		failures += 1
+	m9.free()
+
+	# P10. 栈空 pop_state:no-op、current 不变
+	var bp10: Array = _build([["Game", ProbeState], ["Menu", ProbeState]])
+	var m10 = bp10[0]
+	var j10: Array = bp10[1]
+	root.add_child(m10)
+	await process_frame
+	j10.clear()
+	m10.pop_state()            # 栈空
+	if not j10.is_empty() or m10.current_state.name != &"Game" or m10.stack_depth() != 0:
+		print("FAIL P10: 栈空 pop 应 no-op,journal=%s cur=%s depth=%d" % [j10, m10.current_state.name, m10.stack_depth()])
+		failures += 1
+	m10.free()
+
+	# P11. MAX_STACK 守卫:连续 push 超上限被拒、栈深不超 MAX_STACK
+	var bp11: Array = _build([["Game", ProbeState], ["Menu", ProbeState]])
+	var m11 = bp11[0]
+	root.add_child(m11)
+	await process_frame
+	for i in range(m11.MAX_STACK + 2):
+		m11.push_state("Menu")   # 反复压(超上限的两次被 push_error 拒)
+	if m11.stack_depth() != m11.MAX_STACK:
+		print("FAIL P11: 栈深应被 MAX_STACK(%d) 截断,实际 %d" % [m11.MAX_STACK, m11.stack_depth()])
+		failures += 1
+	m11.free()
+
+	# P12. push 后 update 只转发栈顶活动态(栈下挂起态不收 update)
+	var bp12: Array = _build([["Game", ProbeState], ["Menu", ProbeState]])
+	var m12 = bp12[0]
+	var j12: Array = bp12[1]
+	root.add_child(m12)
+	await process_frame
+	m12.push_state("Menu")     # current=Menu, Game 挂起
+	j12.clear()
+	m12._process(0.25)
+	if j12 != [["Menu", "update", 0.25]]:
+		print("FAIL P12: push 后 update 应只转发活动态 Menu,实际 %s" % [j12])
+		failures += 1
+	m12.free()
+
+	# P13. push 转换中拒绝:决策态 enter(转换中)里试 push_state → 被拒,栈空、停在该态
+	var bp13: Array = _build([["Start", ProbeDecisionState], ["Menu", ProbeState]])
+	var m13 = bp13[0]
+	m13.get_child(0).push_on_enter = "Menu"   # Start.enter(初始,_transitioning=true)里试 push
+	root.add_child(m13)
+	await process_frame        # 进 Start,其 enter 试 push_state("Menu")
+	if m13.stack_depth() != 0 or m13.current_state.name != &"Start":
+		print("FAIL P13: 转换中 push 应被拒,栈应空且停在 Start,depth=%d cur=%s" % [m13.stack_depth(), m13.current_state.name])
+		failures += 1
+	m13.free()
+
 	if failures == 0:
 		print("test_state_machine: ALL PASS")
 		quit(0)

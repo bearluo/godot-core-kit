@@ -15,3 +15,11 @@ func exit(next_state_name: String) -> void:
 
 func update(delta: float) -> void:
 	journal.append([String(name), "update", delta])
+
+
+func pause() -> void:
+	journal.append([String(name), "pause"])
+
+
+func resume() -> void:
+	journal.append([String(name), "resume"])

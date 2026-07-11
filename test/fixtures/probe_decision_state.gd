@@ -4,6 +4,7 @@ extends "res://test/fixtures/probe_state.gd"
 
 var next_on_enter: String = ""       # enter 里 transition_to(该名)
 var dispatch_on_enter: String = ""   # enter 里 machine.dispatch(该事件)
+var push_on_enter: String = ""       # enter 里 machine.push_state(该名)
 
 
 func enter(prev_state_name: String) -> void:
@@ -12,3 +13,5 @@ func enter(prev_state_name: String) -> void:
 		transition_to(next_on_enter)
 	elif dispatch_on_enter != "":
 		machine.dispatch(dispatch_on_enter)
+	elif push_on_enter != "":
+		machine.push_state(push_on_enter)
