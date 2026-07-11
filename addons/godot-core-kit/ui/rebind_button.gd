@@ -58,28 +58,27 @@ func cancel_capture() -> void:
 ## 且不改绑定;否则 rebind_action → rebound。返回是否成功重绑。
 func capture_event(event: InputEvent) -> bool:
 	if event is InputEventKey and event.physical_keycode == KEY_ESCAPE:
-		_finish_capture()
-		refresh()
-		rebind_failed.emit(_action, "cancelled")
-		return false
+		return _fail("cancelled")
 	if not _is_capturable(event):
-		_finish_capture()
-		rebind_failed.emit(_action, "unsupported")
-		return false
+		return _fail("unsupported")
 	var mgr = _resolve_input()
 	var other := String(mgr.action_for_event(event, _conflict_scope))
 	if other != "" and other != _action:
-		_finish_capture()
-		rebind_failed.emit(_action, "conflict:%s" % other)
-		return false
+		return _fail("conflict:%s" % other)
 	if not mgr.rebind_action(_action, event):
-		_finish_capture()
-		rebind_failed.emit(_action, "unsupported")
-		return false
+		return _fail("unsupported")
 	_finish_capture()
 	refresh()
 	rebound.emit(_action, event)
 	return true
+
+
+## 失败收尾:退捕获态、刷新回当前绑定显示(不卡在「按任意键…」提示)、发 rebind_failed。
+func _fail(reason: String) -> bool:
+	_finish_capture()
+	refresh()
+	rebind_failed.emit(_action, reason)
+	return false
 
 
 ## 刷新文字为当前绑定的可读名;无绑定显「未绑定」。

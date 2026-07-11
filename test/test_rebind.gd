@@ -54,7 +54,8 @@ func _initialize() -> void:
 		print("FAIL 1: 应发一次 rebound(jump),实际 %s" % [rebounds])
 		failures += 1
 
-	# 2. 冲突拦截:jump 重绑到 G(fire 占用)-> 拒绝、不改
+	# 2. 冲突拦截:jump 重绑到 G(fire 占用)-> 拒绝、不改;失败后文字回退不卡提示
+	btn.text = btn.CAPTURE_PROMPT  # 模拟捕获态
 	var ok2: bool = btn.capture_event(_key(KEY_G))
 	if ok2:
 		print("FAIL 2: 冲突应返回 false")
@@ -64,6 +65,9 @@ func _initialize() -> void:
 		failures += 1
 	if InputMap.action_get_events(A_JUMP)[0].physical_keycode != KEY_F:
 		print("FAIL 2: 冲突后 jump 绑定应保持 F 不变")
+		failures += 1
+	if btn.text == btn.CAPTURE_PROMPT:
+		print("FAIL 2: 冲突失败后按钮文字应回退到绑定显示,不卡在捕获提示")
 		failures += 1
 
 	# 3. 不支持类型
