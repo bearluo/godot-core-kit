@@ -204,6 +204,18 @@ func _initialize() -> void:
 		print("FAIL 7: 未按过的 action 应为 false")
 		failures += 1
 
+	# 8. action_for_event:among 作用域内命中/不命中/不支持事件
+	_restore_action_default()  # ACTION 回 SPACE
+	if im.action_for_event(_make_key_event(KEY_SPACE), PackedStringArray([ACTION])) != ACTION:
+		print("FAIL 8: action_for_event(SPACE, [ACTION]) 应命中 ACTION")
+		failures += 1
+	if im.action_for_event(_make_key_event(KEY_Z), PackedStringArray([ACTION])) != "":
+		print("FAIL 8: 未占用的键应返回空")
+		failures += 1
+	if im.action_for_event(InputEventScreenTouch.new(), PackedStringArray([ACTION])) != "":
+		print("FAIL 8: 不支持事件应返回空")
+		failures += 1
+
 	# 清理
 	im.free()
 	settings.free()

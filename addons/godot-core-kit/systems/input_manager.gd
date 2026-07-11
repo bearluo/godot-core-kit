@@ -112,6 +112,22 @@ func get_action_event(action: String) -> InputEvent:
 	return events[0]
 
 
+## 返回当前占用该事件的动作名;among 空=扫全部动作,否则只扫子集;无占用返回 ""。
+## 复用 _event_to_dict 做结构相等比较(键盘按 physical_keycode 等)。供重绑 UI 判冲突。
+func action_for_event(event: InputEvent, among := PackedStringArray()) -> String:
+	var target := _event_to_dict(event)
+	if target.is_empty():
+		return ""
+	var scan: Array = Array(among) if among.size() > 0 else InputMap.get_actions()
+	for action in scan:
+		if not InputMap.has_action(action):
+			continue
+		for ev in InputMap.action_get_events(action):
+			if _event_to_dict(ev) == target:
+				return String(action)
+	return ""
+
+
 ## action 在最近 window_sec 秒内是否被按下过(前缓冲)。
 func is_action_buffered(action: String, window_sec: float) -> bool:
 	if not _last_pressed_msec.has(action):
