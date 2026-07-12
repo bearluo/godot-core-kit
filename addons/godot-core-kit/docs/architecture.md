@@ -37,6 +37,7 @@ addons/godot-core-kit/
   di/                    class_name 服务容器类库(KitContext)
   console/               DevConsole 调试控制台(CanvasLayer 子系统)
   ui/                    class_name 可复用 UI 组件(重绑定,off-facade)
+  transitions/           class_name 可复用转场资源(KitTransition,off-facade)
   docs/                  本文档目录
 ```
 
@@ -70,6 +71,7 @@ func _ready() -> void:
 - **诊断分层**:初始化期(`_init`/`_ready`,此时 `CoreKit.log` 未必就绪)用引擎原生 `push_warning`/`push_error`;运行期用 `CoreKit.log.*`。
 - 当前经 `bind_*` 建立的依赖:`input → settings`、`audio → settings`、`res → ticker`、`console → core`(门面自身,注入求值 base + 日志源)、`i18n → settings`(持久化 locale)。其余子系统零跨系统依赖。
 - `ui/`(`KitRebindButton`/`KitRebindList`)是 off-facade 可复用 UI 组件(如 `state_machine/`、`di/`),消费 `CoreKit.input`(默认,可注入),不接门面、不计入 12 子系统。
+- `transitions/`(`KitTransition`)是 off-facade 可复用转场资源(`extends Resource`,零依赖),由 `SceneManager` 消费驱动遮罩;不接门面、不计入 12 子系统。
 
 ## 扩展容器(KitContext / DI)
 
@@ -89,8 +91,8 @@ func _ready() -> void:
 
 ## 测试
 
-全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 16 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
+全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 17 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
 
 ## 版本
 
-当前 `0.11.0`(`plugin.cfg` 与 `CoreKit.VERSION` 同源)。0.10.0→0.11.0 新增 off-facade 重绑定 UI 组件(`KitRebindButton`/`KitRebindList`,`ui/`):点击捕获 + 检测拦截冲突 + 复位;`InputManager` 增 `action_for_event` 冲突查询;不接门面、纯增量、向后兼容。0.9.0→0.10.0 新增 LocaleManager 本地化托管层(`CoreKit.i18n` 第 12 子系统):运行时切语言 + 持久化(Settings section `locale`)+ 按 locale 换绑定 Theme 字体 + 缺翻译 `push_warning` 告警 + 运行时翻译加载,零门面耦合、纯增量、向后兼容;0.8.0→0.9.0 新增 DevConsole 调试控制台(`CoreKit.console` 第 11 子系统,CanvasLayer,debug 门控:日志 overlay + 命令/作弊注册 + GDScript 表达式执行 + 变量 watch),纯增量、向后兼容;0.7.0→0.8.0 给 KitStateMachine 叠加事件 dispatch 解耦(`add_transition`/`dispatch` + `ANYSTATE` 通配,与 `transition_to` 并存)与 pushdown 栈(`push_state`/`pop_state`,暂停语义 + `KitState.pause`/`resume` 钩子),纯增量、向后兼容;0.6.0→0.7.0 给 SaveManager 叠加可插拔序列化(`SaveSerializer` 基类 + 默认 `JsonSaveSerializer`,逐字节兼容旧 `.json`)、原子写(temp+rename)、资源引用安全守卫(拒 Object/Callable/Signal/RID),纯增量、向后兼容;0.5.0→0.6.0 给 KitContext 叠加订阅式解析(`subscribe`)与工厂式 scope(`provide_factory`,SINGLETON/TRANSIENT),纯增量、向后兼容;0.4.1→0.5.0 新增 KitContext 服务容器(纯增量,对既有 API 无破坏);0.3.x→0.4.0 是破坏性变更(五个老全局单例名下线,统一走 `CoreKit` 门面);0.4.1 为纯目录重排。
+当前 `0.12.0`(`plugin.cfg` 与 `CoreKit.VERSION` 同源)。0.11.0→0.12.0 新增 off-facade 可复用转场资源 `KitTransition`(`transitions/`,`extends Resource`):数据驱动的 FADE/SLIDE 转场,`SceneManager.change_scene` 兼容接收 `KitTransition` 或 legacy 字典,`_merge_options`/`enum Transition` 保留,纯增量、向后兼容。0.10.0→0.11.0 新增 off-facade 重绑定 UI 组件(`KitRebindButton`/`KitRebindList`,`ui/`):点击捕获 + 检测拦截冲突 + 复位;`InputManager` 增 `action_for_event` 冲突查询;不接门面、纯增量、向后兼容。0.9.0→0.10.0 新增 LocaleManager 本地化托管层(`CoreKit.i18n` 第 12 子系统):运行时切语言 + 持久化(Settings section `locale`)+ 按 locale 换绑定 Theme 字体 + 缺翻译 `push_warning` 告警 + 运行时翻译加载,零门面耦合、纯增量、向后兼容;0.8.0→0.9.0 新增 DevConsole 调试控制台(`CoreKit.console` 第 11 子系统,CanvasLayer,debug 门控:日志 overlay + 命令/作弊注册 + GDScript 表达式执行 + 变量 watch),纯增量、向后兼容;0.7.0→0.8.0 给 KitStateMachine 叠加事件 dispatch 解耦(`add_transition`/`dispatch` + `ANYSTATE` 通配,与 `transition_to` 并存)与 pushdown 栈(`push_state`/`pop_state`,暂停语义 + `KitState.pause`/`resume` 钩子),纯增量、向后兼容;0.6.0→0.7.0 给 SaveManager 叠加可插拔序列化(`SaveSerializer` 基类 + 默认 `JsonSaveSerializer`,逐字节兼容旧 `.json`)、原子写(temp+rename)、资源引用安全守卫(拒 Object/Callable/Signal/RID),纯增量、向后兼容;0.5.0→0.6.0 给 KitContext 叠加订阅式解析(`subscribe`)与工厂式 scope(`provide_factory`,SINGLETON/TRANSIENT),纯增量、向后兼容;0.4.1→0.5.0 新增 KitContext 服务容器(纯增量,对既有 API 无破坏);0.3.x→0.4.0 是破坏性变更(五个老全局单例名下线,统一走 `CoreKit` 门面);0.4.1 为纯目录重排。

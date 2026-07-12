@@ -10,7 +10,7 @@ extends Node
 ## 命名坑:属性 log 会遮蔽全局函数 log()(与旧 Log autoload 同款遮蔽);本脚本
 ## 内部不需要数学 log(),不受影响。
 
-const VERSION := "0.11.0"
+const VERSION := "0.12.0"
 
 ## 全局根的保留键 = 12 个内置子系统的属性名。CoreKit.provide 拒绝覆盖这些键;
 ## 子作用域(KitContext)不受此限,可 shadow。

@@ -42,6 +42,7 @@
 | [state-machine](state-machine.md) | `class_name KitStateMachine` | Node 型有限状态机,每个实体自己一台 |
 | [kit-context](di/kit-context.md) | `class_name KitContext` | 节点绑定的层级服务容器(DI):游戏代码注册自己的服务 |
 | [rebind](ui/rebind.md) | `class_name KitRebindButton` / `KitRebindList` | 键位重绑定 UI 组件(点击捕获 + 冲突拦截 + 复位) |
+| [kit-transition](transitions/kit-transition.md) | `class_name KitTransition` | 可复用场景转场资源(FADE/SLIDE,由 `CoreKit.scenes` 消费) |
 
 ## 约定
 

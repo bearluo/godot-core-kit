@@ -30,6 +30,7 @@
 | `KitStateMachine`(类库) | Node 型状态机 | [state-machine](addons/godot-core-kit/docs/state-machine.md) |
 | `KitContext`(类库) | 节点绑定的层级服务容器(DI) | [kit-context](addons/godot-core-kit/docs/di/kit-context.md) |
 | `KitRebindButton`/`KitRebindList`(类库) | 键位重绑定 UI 组件 | [rebind](addons/godot-core-kit/docs/ui/rebind.md) |
+| `KitTransition`(类库) | 可复用场景转场资源 | [kit-transition](addons/godot-core-kit/docs/transitions/kit-transition.md) |
 
 ## 从 0.3.x 升级(破坏性)
 
@@ -46,6 +47,7 @@ powershell -File test\run_all.ps1       # 一键全量,末行 FAILS=0 为全绿
 
 ## 版本
 
+- **0.12.0** — 新增 off-facade 可复用转场资源 `KitTransition`(`transitions/`,`extends Resource`):数据驱动的 FADE + SLIDE 场景转场(方向 + 缓动曲线,可存 `.tres`);`SceneManager.change_scene` 第 2 参兼容接收 `KitTransition` 或 legacy 字典,`_merge_options`/`enum Transition` 保留。纯增量,API 无破坏。
 - **0.11.0** — 新增 off-facade 重绑定 UI 组件 `KitRebindButton` / `KitRebindList`(`ui/`):点击捕获 + 检测拦截冲突(`InputManager` 增 `action_for_event`)+ 复位;代码建 UI、`.new()`+`add_child` 即用;audio/locale 接线为一行调用(见 demo)。纯增量,API 无破坏。
 - **0.10.0** — 新增 `LocaleManager` 本地化托管层(`CoreKit.i18n` 第 12 子系统):运行时切语言 + 持久化(Settings section `locale`)+ 按 locale 换绑定 Theme 字体 + 缺翻译 `push_warning` 告警 + 运行时翻译加载(`load_translation`/`load_translations`);零门面耦合(`push_warning` 而非 `CoreKit.log`),纯增量,API 无破坏。
 - **0.9.0** — 新增 `DevConsole` 调试控制台(`CoreKit.console` 第 11 子系统,CanvasLayer,`OS.is_debug_build()` 门控):日志 overlay + 命令/作弊注册 + GDScript 表达式执行(`Expression`)+ 变量 watch;`core/log.gd` 增补 `line_logged` 信号 + 有界历史缓冲(向后兼容);纯增量,API 无破坏。

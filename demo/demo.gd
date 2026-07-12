@@ -135,6 +135,14 @@ func _ready() -> void:
 	InputMap.erase_action("demo_rebind_b")
 	CoreKit.settings.erase_value("input", "demo_rebind_a")  # 清 demo 重绑落盘,保确定性
 
+	# 转场缓动 冒烟:构造 SLIDE KitTransition + 纯几何 marker(不真切场景,headless 确定性)
+	var tr := KitTransition.new()
+	tr.type = KitTransition.Type.SLIDE
+	tr.direction = KitTransition.Dir.LEFT
+	tr.duration = 0.4
+	CoreKit.log.info("Transition: type=SLIDE none=%s slide_cover_from=%s" % [
+		tr.is_none(), tr.slide_cover_from(Vector2(800, 600))])
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 
