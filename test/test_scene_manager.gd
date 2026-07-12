@@ -102,6 +102,37 @@ func _initialize() -> void:
 		print("FAIL 新实例 is_changing() 应为 false")
 		failures += 1
 
+	# 14. _resolve_transition({}) → KitTransition NONE(back-compat 默认无过渡)
+	var KitTransitionScript = load("res://addons/godot-core-kit/transitions/kit_transition.gd")
+	var rt0 = sm._resolve_transition({})
+	if rt0.type != KitTransitionScript.Type.NONE:
+		print("FAIL 14: _resolve_transition({}) 应为 NONE,得到 %s" % rt0.type)
+		failures += 1
+
+	# 15. _resolve_transition(legacy Dictionary FADE) → KitTransition FADE + duration 保留
+	var rt1 = sm._resolve_transition({
+		"transition": SceneManagerScript.Transition.FADE,
+		"duration": 1.5,
+	})
+	if rt1.type != KitTransitionScript.Type.FADE:
+		print("FAIL 15: legacy FADE 应映射 KitTransition.Type.FADE,得到 %s" % rt1.type)
+		failures += 1
+	if rt1.duration != 1.5:
+		print("FAIL 15: legacy duration 1.5 应保留,得到 %s" % rt1.duration)
+		failures += 1
+
+	# 16. _resolve_transition(KitTransition SLIDE, duration=-2) → passthrough + normalized 夹取
+	var kt = KitTransitionScript.new()
+	kt.type = KitTransitionScript.Type.SLIDE
+	kt.duration = -2.0
+	var rt2 = sm._resolve_transition(kt)
+	if rt2.type != KitTransitionScript.Type.SLIDE:
+		print("FAIL 16: KitTransition SLIDE 应透传,得到 %s" % rt2.type)
+		failures += 1
+	if rt2.duration != 0.0:
+		print("FAIL 16: 负 duration 应经 normalized 夹到 0.0,得到 %s" % rt2.duration)
+		failures += 1
+
 	sm.free()
 
 	if failures == 0:

@@ -5,8 +5,9 @@ extends Node
 ## 经 CoreKit.scenes 访问（唯一 autoload 是 CoreKit 本身）。统一入口
 ## change_scene(target, options) 把"替换当前活动场景"这件事从零散的
 ## get_tree().change_scene_to_*() 调用收敛为一个可选带淡入淡出过渡、带切换生命周期信号
-## 的协程。同步 load()（不用线程，Web 导出安全）；默认过渡 NONE，可选 FADE
-## （CanvasLayer + ColorRect + Tween，常驻本节点下、不受场景替换影响）。拒绝重入
+## 的协程。同步 load()（不用线程，Web 导出安全）；第 2 参接受 KitTransition（FADE/SLIDE）
+## 或 legacy options 字典，默认无过渡（CanvasLayer + ColorRect + Tween 遮罩常驻本节点下、不受
+## 场景替换影响）。拒绝重入
 ## （_is_changing 守卫），不做排队。
 ##
 ## 用法：
@@ -18,7 +19,8 @@ signal scene_changing(target_path: String)
 signal scene_changed(scene_path: String, scene: Node)
 signal scene_change_failed(target_path: String, error: int)  # error 为 Error 枚举取值
 
-enum Transition { NONE, FADE }
+enum Transition { NONE, FADE }  # legacy Dictionary API 用;KitTransition.Type 为新规范
+enum _Phase { COVER, REVEAL }
 
 const DEFAULT_TRANSITION := Transition.NONE
 const DEFAULT_FADE_DURATION := 0.3
@@ -37,9 +39,10 @@ func _ready() -> void:
 # --- 公开运行时 API ---
 
 ## 把当前活动场景替换为 target。target 为 res:// 路径（String）或 PackedScene。
-## options 支持 transition/duration/color，未识别或类型不对的键静默回退默认值。
-## 协程：可 fire-and-forget（靠信号感知结果），也可 await 原地等待切换完成。
-func change_scene(target, options: Dictionary = {}) -> void:
+## transition 接受 KitTransition，或 legacy options 字典（{transition/duration/color}，未识别键
+## 静默回退默认），默认 {} = 无过渡。协程：可 fire-and-forget（靠信号感知结果），也可 await
+## 原地等待切换完成。
+func change_scene(target, transition = {}) -> void:
 	var target_path := _resolve_target_path(target)
 
 	if _is_changing:
@@ -53,22 +56,22 @@ func change_scene(target, options: Dictionary = {}) -> void:
 		scene_change_failed.emit(target_path, ERR_INVALID_PARAMETER)
 		return
 
-	var opts := _merge_options(options)
-	var use_fade: bool = opts["transition"] == Transition.FADE
+	var t := _resolve_transition(transition)
+	var animated: bool = t.type != KitTransition.Type.NONE
 
 	_is_changing = true
 	scene_changing.emit(target_path)
 
-	if use_fade:
+	if animated:
 		_ensure_fade_overlay()
 		_fade_rect.mouse_filter = Control.MOUSE_FILTER_STOP
-		await _fade_to(1.0, opts["duration"], opts["color"])
+		await _play_transition(t, _Phase.COVER)
 
 	var packed_scene := _load_packed_scene(target)
 	if packed_scene == null:
 		CoreKit.log.error("SceneManager.change_scene: 加载失败 '%s'" % target_path)
-		if use_fade:
-			await _fade_to(0.0, opts["duration"], opts["color"])
+		if animated:
+			await _play_transition(t, _Phase.REVEAL)
 			_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_is_changing = false
 		scene_change_failed.emit(target_path, ERR_CANT_OPEN)
@@ -86,8 +89,8 @@ func change_scene(target, options: Dictionary = {}) -> void:
 	if is_instance_valid(old_scene):
 		old_scene.queue_free()
 
-	if use_fade:
-		await _fade_to(0.0, opts["duration"], opts["color"])
+	if animated:
+		await _play_transition(t, _Phase.REVEAL)
 		_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	_is_changing = false
@@ -158,6 +161,31 @@ func _merge_options(options: Dictionary) -> Dictionary:
 	return {"transition": transition, "duration": duration, "color": color}
 
 
+## 把 change_scene 第 2 参归一为 KitTransition（纯逻辑，不碰场景树）。KitTransition→normalized()；
+## Dictionary→复用 _merge_options 走 legacy 路径映射；其余类型（含非法）→NONE。
+func _resolve_transition(arg) -> KitTransition:
+	if arg is KitTransition:
+		return arg.normalized()
+	var t := KitTransition.new()
+	if arg is Dictionary:
+		var opts := _merge_options(arg)
+		t.type = _legacy_transition_to_type(opts["transition"])
+		t.duration = opts["duration"]
+		t.color = opts["color"]
+	else:
+		t.type = KitTransition.Type.NONE
+	return t.normalized()
+
+
+## legacy Transition 枚举 → KitTransition.Type（FADE→FADE，其余→NONE；SLIDE 仅 KitTransition 可达）。
+func _legacy_transition_to_type(legacy: int) -> int:
+	match legacy:
+		Transition.FADE:
+			return KitTransition.Type.FADE
+		_:
+			return KitTransition.Type.NONE
+
+
 # --- 内部：加载 + 淡入淡出遮罩（碰场景树/资源系统，不做 headless 断言）---
 
 ## target 是 PackedScene 直接返回；是 String 先 ResourceLoader.exists 预检再同步 load()。
@@ -192,11 +220,40 @@ func _ensure_fade_overlay() -> void:
 	_fade_layer.add_child(_fade_rect)
 
 
-## 把遮罩的可见度 Tween 到 target_alpha。color 的 RGB 写入 ColorRect.color（alpha 归一化为
-## 1.0），可见度完全由 modulate:a 驱动，避免 color.a 与 modulate.a 两个 alpha 通道相乘导致
-## 淡入淡出不到位。
-func _fade_to(target_alpha: float, duration: float, color: Color) -> void:
-	_fade_rect.color = Color(color.r, color.g, color.b, 1.0)
-	var tween := create_tween()
-	tween.tween_property(_fade_rect, "modulate:a", target_alpha, duration)
-	await tween.finished
+## 按 t.type 驱动常驻遮罩色板演一段（COVER 覆盖 / REVEAL 揭开）。碰视口/场景树，运行时驱动，
+## 不做 headless 断言。每次 COVER 都完整重置遮罩起始态，故上次转场遗留态不影响本次。
+## FADE 走 modulate:a（色板全屏、alpha 0↔1）；SLIDE 走 position（全屏不透明色板按 direction 掠过）。
+func _play_transition(t: KitTransition, phase: int) -> void:
+	match t.type:
+		KitTransition.Type.FADE:
+			_fade_rect.color = Color(t.color.r, t.color.g, t.color.b, 1.0)
+			if phase == _Phase.COVER:
+				_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+				_fade_rect.position = Vector2.ZERO
+				_fade_rect.modulate.a = 0.0
+			var target_a: float = 1.0 if phase == _Phase.COVER else 0.0
+			var tween := create_tween().set_ease(t.ease_type).set_trans(t.trans_type)
+			tween.tween_property(_fade_rect, "modulate:a", target_a, t.duration)
+			await tween.finished
+		KitTransition.Type.SLIDE:
+			var size := _overlay_size()
+			_fade_rect.color = Color(t.color.r, t.color.g, t.color.b, 1.0)
+			_fade_rect.modulate.a = 1.0
+			_fade_rect.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			_fade_rect.size = size
+			var from_pos: Vector2 = t.slide_cover_from(size) if phase == _Phase.COVER else Vector2.ZERO
+			var to_pos: Vector2 = Vector2.ZERO if phase == _Phase.COVER else t.slide_reveal_to(size)
+			_fade_rect.position = from_pos
+			var tween := create_tween().set_ease(t.ease_type).set_trans(t.trans_type)
+			tween.tween_property(_fade_rect, "position", to_pos, t.duration)
+			await tween.finished
+		_:
+			pass
+
+
+## 遮罩尺寸 = 当前视口可见矩形；无视口时回退 1080p（仅运行时用）。
+func _overlay_size() -> Vector2:
+	var vp := get_viewport()
+	if vp != null:
+		return vp.get_visible_rect().size
+	return Vector2(1920, 1080)
