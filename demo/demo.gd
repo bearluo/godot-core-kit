@@ -143,6 +143,18 @@ func _ready() -> void:
 	CoreKit.log.info("Transition: type=SLIDE none=%s slide_cover_from=%s" % [
 		tr.is_none(), tr.slide_cover_from(Vector2(800, 600))])
 
+	# UI 栈导航 冒烟:代码建栈 push 3 屏(含 1 模态)+ 读 marker(类库,不经门面)
+	var ui_stack := KitUiStack.new()
+	add_child(ui_stack)
+	var sa := Control.new(); sa.name = "ScreenA"; ui_stack.push(sa)
+	var sb := Control.new(); sb.name = "ScreenB"; ui_stack.push(sb)
+	var sc := Control.new(); sc.name = "ScreenC"
+	ui_stack.push(sc, {"hide_below": false, "dim": Color(0, 0, 0, 0.4)})
+	CoreKit.log.info("UiStack: depth=%d top=%s modal_backdrop=%s" % [
+		ui_stack.depth(), ui_stack.top().name, ui_stack._stack[-1]["backdrop"] != null])
+	ui_stack.clear()
+	ui_stack.free()
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 

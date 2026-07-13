@@ -43,6 +43,7 @@
 | [kit-context](di/kit-context.md) | `class_name KitContext` | 节点绑定的层级服务容器(DI):游戏代码注册自己的服务 |
 | [rebind](ui/rebind.md) | `class_name KitRebindButton` / `KitRebindList` | 键位重绑定 UI 组件(点击捕获 + 冲突拦截 + 复位) |
 | [kit-transition](transitions/kit-transition.md) | `class_name KitTransition` | 可复用场景转场资源(FADE/SLIDE,由 `CoreKit.scenes` 消费) |
+| [ui-stack](ui/ui-stack.md) | `class_name KitUiStack` / `KitUiScreen` | UI 屏栈导航(push/pop/replace + 被盖屏停用 + 模态挡层 + 返回键兜底) |
 
 ## 约定
 

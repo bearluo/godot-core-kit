@@ -31,6 +31,7 @@
 | `KitContext`(类库) | 节点绑定的层级服务容器(DI) | [kit-context](addons/godot-core-kit/docs/di/kit-context.md) |
 | `KitRebindButton`/`KitRebindList`(类库) | 键位重绑定 UI 组件 | [rebind](addons/godot-core-kit/docs/ui/rebind.md) |
 | `KitTransition`(类库) | 可复用场景转场资源 | [kit-transition](addons/godot-core-kit/docs/transitions/kit-transition.md) |
+| `KitUiStack`/`KitUiScreen`(类库) | UI 屏栈导航 | [ui-stack](addons/godot-core-kit/docs/ui/ui-stack.md) |
 
 ## 从 0.3.x 升级(破坏性)
 
@@ -47,6 +48,7 @@ powershell -File test\run_all.ps1       # 一键全量,末行 FAILS=0 为全绿
 
 ## 版本
 
+- **0.13.0** — 新增 off-facade UI 栈导航 `KitUiStack` + `KitUiScreen`(`ui/`):`push`/`pop`/`replace`/`clear` 管一叠 UI 屏(LIFO,push 进来的屏为宿主子节点=只管加进来的);被盖屏 `process_mode=DISABLED` 一刀切停用(键鼠/动作/tick 全惰性),`hide_below=false` 模态自动插 `ColorRect` 挡层,返回键经 `_unhandled_input` 兜底弹顶;`KitUiScreen` 组件挂子节点承载生命周期信号(entered/exited/covered/revealed)+ 转发方法 + 静态 `of()`;组合非继承、零门面耦合。纯增量,API 无破坏。
 - **0.12.0** — 新增 off-facade 可复用转场资源 `KitTransition`(`transitions/`,`extends Resource`):数据驱动的 FADE + SLIDE 场景转场(方向 + 缓动曲线,可存 `.tres`);`SceneManager.change_scene` 第 2 参兼容接收 `KitTransition` 或 legacy 字典,`_merge_options`/`enum Transition` 保留。纯增量,API 无破坏。
 - **0.11.0** — 新增 off-facade 重绑定 UI 组件 `KitRebindButton` / `KitRebindList`(`ui/`):点击捕获 + 检测拦截冲突(`InputManager` 增 `action_for_event`)+ 复位;代码建 UI、`.new()`+`add_child` 即用;audio/locale 接线为一行调用(见 demo)。纯增量,API 无破坏。
 - **0.10.0** — 新增 `LocaleManager` 本地化托管层(`CoreKit.i18n` 第 12 子系统):运行时切语言 + 持久化(Settings section `locale`)+ 按 locale 换绑定 Theme 字体 + 缺翻译 `push_warning` 告警 + 运行时翻译加载(`load_translation`/`load_translations`);零门面耦合(`push_warning` 而非 `CoreKit.log`),纯增量,API 无破坏。
