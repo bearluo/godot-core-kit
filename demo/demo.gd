@@ -155,6 +155,14 @@ func _ready() -> void:
 	ui_stack.clear()
 	ui_stack.free()
 
+	# UI 层级管理器 冒烟:mount 一个 Control 到 hud 层 + 读 z marker(经门面第 13 子系统)
+	var hud_probe := Control.new()
+	CoreKit.layers.mount(hud_probe, "hud")
+	CoreKit.log.info("Layers: hud_z=%d modal_z=%d mounted=%s" % [
+		CoreKit.layers.layer("hud").layer, CoreKit.layers.MODAL,
+		hud_probe.get_parent() == CoreKit.layers.layer("hud")])
+	CoreKit.layers.clear("hud")
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 

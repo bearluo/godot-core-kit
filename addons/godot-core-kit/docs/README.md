@@ -28,6 +28,7 @@
 | [audio-manager](systems/audio-manager.md) | `CoreKit.audio` | 总线音量 + BGM 交叉淡切 + SFX 池 |
 | [resource-manager](systems/resource-manager.md) | `CoreKit.res` | 异步预加载 + 缓存 |
 | [i18n](systems/i18n.md) | `CoreKit.i18n` | 本地化:运行时切语言 + 字体回退 + 缺翻译告警 |
+| [layer-manager](systems/layer-manager.md) | `CoreKit.layers` | 跨场景常驻具名 CanvasLayer(z 序表 + 保留带) |
 
 ### console/ —— 运行时调试
 
