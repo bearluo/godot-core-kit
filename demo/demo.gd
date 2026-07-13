@@ -171,6 +171,14 @@ func _ready() -> void:
 		CoreKit.clock.year(), CoreKit.clock.season_name(), CoreKit.clock.day(),
 		CoreKit.clock.hour(), CoreKit.clock.minute(), day_evt["hit"]])
 
+	# 物品背包 冒烟:溢出到多格 + move 交换(经 off-facade KitInventory)
+	var bag := KitInventory.new(4, 99)
+	bag.add(&"wood", 120)          # slot0=99 slot1=21
+	bag.set_slot(3, &"stone", 5)
+	bag.move(3, 1)                 # 异物交换:slot1=stone slot3=wood
+	CoreKit.log.info("Inventory: wood=%d used=%d moved=%s" % [
+		bag.count(&"wood"), bag.used_slots(), bag.slot(1).get("id") == &"stone"])
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 

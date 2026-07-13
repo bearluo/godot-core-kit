@@ -34,6 +34,7 @@
 | `KitRebindButton`/`KitRebindList`(类库) | 键位重绑定 UI 组件 | [rebind](addons/godot-core-kit/docs/ui/rebind.md) |
 | `KitTransition`(类库) | 可复用场景转场资源 | [kit-transition](addons/godot-core-kit/docs/transitions/kit-transition.md) |
 | `KitUiStack`/`KitUiScreen`(类库) | UI 屏栈导航 | [ui-stack](addons/godot-core-kit/docs/ui/ui-stack.md) |
+| `KitInventory`(类库) | 槽位制物品容器 | [kit-inventory](addons/godot-core-kit/docs/inventory/kit-inventory.md) |
 
 ## 从 0.3.x 升级(破坏性)
 
@@ -50,6 +51,7 @@ powershell -File test\run_all.ps1       # 一键全量,末行 FAILS=0 为全绿
 
 ## 版本
 
+- **0.16.0** — 新增 off-facade 槽位制物品容器 `KitInventory`(`inventory/`,`extends RefCounted`):固定 capacity 格,`add` 自动堆叠+填空+溢出返余量("背包满"),`move` 空移/合并/交换,per-slot `data` 分品质,`changed` 信号,`to_dict`/`from_dict`。游戏每个容器(背包/箱子/商店)各 `new` 一个,零依赖、不接门面。纯增量,API 无破坏。
 - **0.15.0** — 新增门面第 14 子系统 `CoreKit.clock`(`systems/game_clock.gd`,`extends Node`):年/季/日/时/分 世界时钟,混合推进(`time_scale` 自动走时 + `advance_minutes`/`advance_day`/`sleep_to_next_day` 显式跳时)+ 原生 signal + `CoreKit.bus` 广播 `clock:*`(`bind_bus` 注入,未绑定降级)+ `to_dict`/`from_dict` 持久化。顺带确立全 kit 事件命名约定 `namespace:event`(冒号)。打破 13→14 子系统(门面接线 + `test_core_kit` 同步)。纯增量,API 无破坏。
 - **0.14.0** — 新增门面第 13 子系统 `CoreKit.layers`(`systems/layer_manager.gd`,`extends Node`):跨场景常驻的具名 `CanvasLayer`,z 序权威表(`BACKGROUND=-10`/`HUD=10`/`WINDOW=20`/`POPUP=30`/`MODAL=40`/`NOTIFY=50`/`SYSTEM=60`)+ 保留带常量(`CONSOLE=128`/`TRANSITION=4096`,收编 DevConsole/SceneManager 现值,**只登记不重构**、各加一行交叉引用注释);`layer`/`mount`/`clear`/`register_layer`/`has_layer`,零跨系统依赖。因宿主是 CoreKit autoload 子节点,具名层跨 `change_scene` 存活。打破 12→13 子系统(门面接线 + `test_core_kit` 同步)。纯增量,API 无破坏。
 - **0.13.0** — 新增 off-facade UI 栈导航 `KitUiStack` + `KitUiScreen`(`ui/`):`push`/`pop`/`replace`/`clear` 管一叠 UI 屏(LIFO,push 进来的屏为宿主子节点=只管加进来的);被盖屏 `process_mode=DISABLED` 一刀切停用(键鼠/动作/tick 全惰性),`hide_below=false` 模态自动插 `ColorRect` 挡层,返回键经 `_unhandled_input` 兜底弹顶;`KitUiScreen` 组件挂子节点承载生命周期信号(entered/exited/covered/revealed)+ 转发方法 + 静态 `of()`;组合非继承、零门面耦合。纯增量,API 无破坏。
