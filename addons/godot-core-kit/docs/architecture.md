@@ -1,10 +1,10 @@
 # godot-core-kit 架构总纲
 
-面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 13 个子系统,外加状态机与服务容器(KitContext)两套 off-facade 类库。
+面向 2D 游戏的 Godot 4 GDScript 底层框架。一个 autoload 门面 `CoreKit` 统管 14 个子系统,外加状态机与服务容器(KitContext)两套 off-facade 类库。
 
 ## 门面模式(CoreKit facade)
 
-`core_kit.gd`(`extends Node`)是**唯一注册的 autoload**,名为 `CoreKit`。它在 `_init` 里按依赖序 `new()` + `add_child()` 构造全部 13 个子系统,并以短属性名暴露:
+`core_kit.gd`(`extends Node`)是**唯一注册的 autoload**,名为 `CoreKit`。它在 `_init` 里按依赖序 `new()` + `add_child()` 构造全部 14 个子系统,并以短属性名暴露:
 
 | 属性 | 子系统 | 目录 |
 |---|---|---|
@@ -21,6 +21,7 @@
 | `CoreKit.console` | DevConsole 调试控制台(UI,dev 门控) | `console/dev_console.gd` |
 | `CoreKit.i18n` | LocaleManager 本地化 | `systems/locale_manager.gd` |
 | `CoreKit.layers` | LayerManager 层级(跨场景常驻具名 CanvasLayer) | `systems/layer_manager.gd` |
+| `CoreKit.clock` | GameClock 游戏时钟/日历 | `systems/game_clock.gd` |
 
 各子系统仍是各自独立的脚本与 `Node`(保留自己的 `_process` 与信号),门面只负责构造、编排顺序、暴露引用。消费方永远经 `CoreKit.<x>` 访问,没有单独的全局单例名。
 
@@ -76,12 +77,13 @@ func _ready() -> void:
 - `ui/` 另有 `KitUiStack`/`KitUiScreen`(UI 栈导航,零依赖);`KitUiScreen.stack` 不标注 `KitUiStack` 类型(单向类型引用,破 `class_name` 循环引用),被盖屏 `process_mode=DISABLED` 停用;不接门面、不计入 13 子系统。
 
 - `CoreKit.layers`(`LayerManager`,第 13 子系统)零跨系统依赖;它把 `console`(128)/`transition`(4096)层号定义为权威保留带常量,但 **document-only**——DevConsole/SceneManager 保留字面量、仅注释交叉引用,不反向依赖本管理器。
+- `CoreKit.clock`(`GameClock`,第 14 子系统)仅依赖 EventBus,经 `bind_bus` 注入(在 `_ready` 接线);未绑定 bus 时只发原生 signal、`clock:*` 广播静默跳过(降级)。事件遵全 kit 的 `namespace:event` 命名约定(见 core/event-bus.md)。
 
 ## 扩展容器(KitContext / DI)
 
-`CoreKit` 除 13 个内置子系统外,还提供一个**对外开放的服务定位器**,让游戏代码注册自己的服务:
+`CoreKit` 除 14 个内置子系统外,还提供一个**对外开放的服务定位器**,让游戏代码注册自己的服务:
 
-- **全局根**:`CoreKit.provide(key, svc)` / `service(key)` / `has(key)` / `service_or(key, fallback)`。13 个内置已按属性名预注册(`service("audio") == CoreKit.audio`),但内置首选仍走强类型属性。`provide` 拒绝覆盖内置保留键。
+- **全局根**:`CoreKit.provide(key, svc)` / `service(key)` / `has(key)` / `service_or(key, fallback)`。14 个内置已按属性名预注册(`service("audio") == CoreKit.audio`),但内置首选仍走强类型属性。`provide` 拒绝覆盖内置保留键。
 - **作用域容器** `KitContext`(`class_name`,挂在场景树节点上):`provide` / `provide_child` / `service`。解析沿祖先链向上回退、树顶兜底全局根;子层可 shadow;生命周期随节点(`NOTIFICATION_PREDELETE` 清表,`provide_child` 的子节点连带释放)。静态 `KitContext.of(node)` / `resolve(node, key)` 供非容器节点解析。
 - 依赖方向:`KitContext → CoreKit` 单向(仅树顶兜底 duck-typed 调用),属"全局链"合法通道,不违反子系统依赖纪律。
 - 详见 [di/kit-context.md](di/kit-context.md)。
@@ -95,7 +97,7 @@ func _ready() -> void:
 
 ## 测试
 
-全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 19 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
+全部子系统有 headless 断言测试(`test/test_*.gd`,`extends SceneTree`,打印 `ALL PASS` + `quit(0/1)`)。一键全量:`powershell -File test\run_all.ps1`(import → 20 测试 → demo 冒烟,末行 `FAILS=0` 为全绿)。
 
 ## 版本
 

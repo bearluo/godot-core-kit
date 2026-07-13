@@ -28,6 +28,7 @@
 | `CoreKit.console` | 运行时调试控制台(dev) | [console](addons/godot-core-kit/docs/console.md) |
 | `CoreKit.i18n` | 本地化(i18n) | [i18n](addons/godot-core-kit/docs/systems/i18n.md) |
 | `CoreKit.layers` | 跨场景常驻具名层 | [layer-manager](addons/godot-core-kit/docs/systems/layer-manager.md) |
+| `CoreKit.clock` | 游戏时钟/日历(混合推进 + bus 广播) | [game-clock](addons/godot-core-kit/docs/systems/game-clock.md) |
 | `KitStateMachine`(类库) | Node 型状态机 | [state-machine](addons/godot-core-kit/docs/state-machine.md) |
 | `KitContext`(类库) | 节点绑定的层级服务容器(DI) | [kit-context](addons/godot-core-kit/docs/di/kit-context.md) |
 | `KitRebindButton`/`KitRebindList`(类库) | 键位重绑定 UI 组件 | [rebind](addons/godot-core-kit/docs/ui/rebind.md) |
@@ -49,6 +50,7 @@ powershell -File test\run_all.ps1       # 一键全量,末行 FAILS=0 为全绿
 
 ## 版本
 
+- **0.15.0** — 新增门面第 14 子系统 `CoreKit.clock`(`systems/game_clock.gd`,`extends Node`):年/季/日/时/分 世界时钟,混合推进(`time_scale` 自动走时 + `advance_minutes`/`advance_day`/`sleep_to_next_day` 显式跳时)+ 原生 signal + `CoreKit.bus` 广播 `clock:*`(`bind_bus` 注入,未绑定降级)+ `to_dict`/`from_dict` 持久化。顺带确立全 kit 事件命名约定 `namespace:event`(冒号)。打破 13→14 子系统(门面接线 + `test_core_kit` 同步)。纯增量,API 无破坏。
 - **0.14.0** — 新增门面第 13 子系统 `CoreKit.layers`(`systems/layer_manager.gd`,`extends Node`):跨场景常驻的具名 `CanvasLayer`,z 序权威表(`BACKGROUND=-10`/`HUD=10`/`WINDOW=20`/`POPUP=30`/`MODAL=40`/`NOTIFY=50`/`SYSTEM=60`)+ 保留带常量(`CONSOLE=128`/`TRANSITION=4096`,收编 DevConsole/SceneManager 现值,**只登记不重构**、各加一行交叉引用注释);`layer`/`mount`/`clear`/`register_layer`/`has_layer`,零跨系统依赖。因宿主是 CoreKit autoload 子节点,具名层跨 `change_scene` 存活。打破 12→13 子系统(门面接线 + `test_core_kit` 同步)。纯增量,API 无破坏。
 - **0.13.0** — 新增 off-facade UI 栈导航 `KitUiStack` + `KitUiScreen`(`ui/`):`push`/`pop`/`replace`/`clear` 管一叠 UI 屏(LIFO,push 进来的屏为宿主子节点=只管加进来的);被盖屏 `process_mode=DISABLED` 一刀切停用(键鼠/动作/tick 全惰性),`hide_below=false` 模态自动插 `ColorRect` 挡层,返回键经 `_unhandled_input` 兜底弹顶;`KitUiScreen` 组件挂子节点承载生命周期信号(entered/exited/covered/revealed)+ 转发方法 + 静态 `of()`;组合非继承、零门面耦合。纯增量,API 无破坏。
 - **0.12.0** — 新增 off-facade 可复用转场资源 `KitTransition`(`transitions/`,`extends Resource`):数据驱动的 FADE + SLIDE 场景转场(方向 + 缓动曲线,可存 `.tres`);`SceneManager.change_scene` 第 2 参兼容接收 `KitTransition` 或 legacy 字典,`_merge_options`/`enum Transition` 保留。纯增量,API 无破坏。

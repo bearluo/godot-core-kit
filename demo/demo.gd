@@ -163,6 +163,14 @@ func _ready() -> void:
 		hud_probe.get_parent() == CoreKit.layers.layer("hud")])
 	CoreKit.layers.clear("hud")
 
+	# 游戏时钟 冒烟:订阅 clock:day_changed + advance_day(经门面第 14 子系统)
+	var day_evt := {"hit": false}
+	CoreKit.bus.subscribe(CoreKit.clock.EV_DAY_CHANGED, func(_p): day_evt["hit"] = true)
+	CoreKit.clock.advance_day()
+	CoreKit.log.info("Clock: y%d %s d%d %02d:%02d day_evt=%s" % [
+		CoreKit.clock.year(), CoreKit.clock.season_name(), CoreKit.clock.day(),
+		CoreKit.clock.hour(), CoreKit.clock.minute(), day_evt["hit"]])
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 

@@ -42,6 +42,22 @@ func _on_player_died(payload) -> void:
 CoreKit.bus.publish("player_died", {"score": 1200})
 ```
 
+## 事件命名约定(kit 级)
+
+事件名统一 `namespace:event`(单个**冒号**分隔):
+
+- **namespace** = 子系统门面短名(`clock`/`save`/`scene`/`input`/`audio`/`i18n`…);kit 保留这些命名空间。游戏自己的事件用自己的命名空间(如 `farm:crop_harvested`),**不得**借 kit 命名空间发。
+- **event** = 过去时 snake_case(`day_changed`/`loaded`/`changed`)。
+- **payload** = 单个 `Dictionary`(或 null)。
+- 每个发事件的子系统把事件名导出成 `const`(如 `CoreKit.clock.EV_DAY_CHANGED`),订阅引用常量而非裸串,防拼错、可自动补全。
+- 约定是文档纪律 + `EV_*` 常量,EventBus **不**做运行时校验(不破坏既有裸名事件)。
+
+### 已保留命名空间登记表
+
+| namespace | 子系统 | 事件常量 |
+|---|---|---|
+| `clock` | GameClock(`CoreKit.clock`) | `EV_TIME_CHANGED` `EV_HOUR_CHANGED` `EV_DAY_CHANGED` `EV_SEASON_CHANGED` `EV_YEAR_CHANGED` |
+
 ## 注意事项
 
 - **RefCounted 监听者不会自动剔除**:Callable 绑定到 `RefCounted`(普通 class、Resource 等)时,Callable 持其一份强引用,对象不会自然归零。纯 RefCounted 监听者必须显式 `unsubscribe()`/`unsubscribe_all()`;自动剔除只覆盖 Node/Object(非引用计数)监听者。
