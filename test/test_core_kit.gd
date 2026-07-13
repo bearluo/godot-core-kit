@@ -22,8 +22,8 @@ func _initialize() -> void:
 	await process_frame  # 补一帧,让 CoreKit._ready() 的 bind_* 接线跑完
 
 	# 1. 版本
-	if kit.VERSION != "0.13.0":
-		print("FAIL 1: VERSION 应为 0.13.0,实际 %s" % kit.VERSION)
+	if kit.VERSION != "0.14.0":
+		print("FAIL 1: VERSION 应为 0.14.0,实际 %s" % kit.VERSION)
 		failures += 1
 
 	# 2. 十二个门面属性非 null 且脚本路径正确
@@ -40,6 +40,7 @@ func _initialize() -> void:
 		["res", "res://addons/godot-core-kit/systems/resource_manager.gd"],
 		["console", "res://addons/godot-core-kit/console/dev_console.gd"],
 		["i18n", "res://addons/godot-core-kit/systems/locale_manager.gd"],
+		["layers", "res://addons/godot-core-kit/systems/layer_manager.gd"],
 	]
 	for pair in expected:
 		var sub = kit.get(pair[0])
@@ -54,7 +55,7 @@ func _initialize() -> void:
 
 	# 3. 子节点顺序 = 构造顺序(_ready 触发序可复现)
 	var order := ["Log", "Settings", "EventBus", "SceneManager", "ObjectPool",
-		"SaveManager", "FrameScheduler", "InputManager", "AudioManager", "ResourceManager", "DevConsole", "LocaleManager"]
+		"SaveManager", "FrameScheduler", "InputManager", "AudioManager", "ResourceManager", "DevConsole", "LocaleManager", "LayerManager"]
 	if kit.get_child_count() != order.size():
 		print("FAIL 3: 子节点数应为 %d,实际 %d" % [order.size(), kit.get_child_count()])
 		failures += 1
@@ -88,7 +89,7 @@ func _initialize() -> void:
 
 	# 6. 全局根:内置已按 key 预注册 + provide/service/has/service_or 冒烟
 	var builtin_keys := ["log", "settings", "bus", "scenes", "pool", "saves",
-		"ticker", "input", "audio", "res", "console", "i18n"]
+		"ticker", "input", "audio", "res", "console", "i18n", "layers"]
 	for k in builtin_keys:
 		if kit.service(k) != kit.get(k):
 			print("FAIL 6: CoreKit.service('%s') 未指向内置子系统" % k)
@@ -99,6 +100,10 @@ func _initialize() -> void:
 	kit.provide("audio", 999)  # 保留键:应被拒,audio 仍指向内置
 	if kit.service("audio") != kit.audio:
 		print("FAIL 6: 保留键 audio 不应被 provide 覆盖")
+		failures += 1
+	kit.provide("layers", 1)  # 保留键:应被拒
+	if kit.service("layers") != kit.layers:
+		print("FAIL 6: 保留键 layers 不应被 provide 覆盖")
 		failures += 1
 	kit.provide("__facade_custom__", 55)
 	if kit.service("__facade_custom__") != 55:

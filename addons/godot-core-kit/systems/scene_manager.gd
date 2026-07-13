@@ -25,7 +25,7 @@ enum _Phase { COVER, REVEAL }
 const DEFAULT_TRANSITION := Transition.NONE
 const DEFAULT_FADE_DURATION := 0.3
 const DEFAULT_FADE_COLOR := Color.BLACK
-const _FADE_LAYER := 4096
+const _FADE_LAYER := 4096  # = CoreKit.layers.TRANSITION(权威保留带常量,见 systems/layer_manager.gd)
 
 var _is_changing := false
 var _fade_layer: CanvasLayer

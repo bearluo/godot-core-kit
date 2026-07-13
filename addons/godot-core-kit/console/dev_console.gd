@@ -45,7 +45,7 @@ func _init() -> void:
 	_registry = RegistryScript.new()
 	_evaluator = EvaluatorScript.new()
 	_watch = WatchScript.new()
-	layer = 128
+	layer = 128  # = CoreKit.layers.CONSOLE(权威保留带常量,见 systems/layer_manager.gd)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 

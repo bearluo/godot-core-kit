@@ -1,7 +1,7 @@
 extends Node
 ## CoreKit —— godot-core-kit 门面根节点,唯一 autoload。
 ## 各子系统经短属性名访问:CoreKit.log / .bus / .scenes / .pool / .saves /
-## .settings / .ticker / .input / .audio / .res / .console / .i18n。
+## .settings / .ticker / .input / .audio / .res / .console / .i18n / .layers。
 ## 子系统仍是各自独立的脚本与 Node(保留各自 _process 与信号),由本节点在
 ## _init 按依赖序构造并 add_child;子节点树顺序 = _ready 触发顺序(子先于父),
 ## 因此各子系统的自身初始化按构造序完成,消费方没有弄乱顺序的入口。
@@ -10,12 +10,12 @@ extends Node
 ## 命名坑:属性 log 会遮蔽全局函数 log()(与旧 Log autoload 同款遮蔽);本脚本
 ## 内部不需要数学 log(),不受影响。
 
-const VERSION := "0.13.0"
+const VERSION := "0.14.0"
 
-## 全局根的保留键 = 12 个内置子系统的属性名。CoreKit.provide 拒绝覆盖这些键;
+## 全局根的保留键 = 13 个内置子系统的属性名。CoreKit.provide 拒绝覆盖这些键;
 ## 子作用域(KitContext)不受此限,可 shadow。
 const RESERVED_KEYS := ["log", "settings", "bus", "scenes", "pool", "saves",
-	"ticker", "input", "audio", "res", "console", "i18n"]
+	"ticker", "input", "audio", "res", "console", "i18n", "layers"]
 
 const LogScript := preload("res://addons/godot-core-kit/core/log.gd")
 const SettingsScript := preload("res://addons/godot-core-kit/core/settings.gd")
@@ -29,6 +29,7 @@ const AudioManagerScript := preload("res://addons/godot-core-kit/systems/audio_m
 const ResourceManagerScript := preload("res://addons/godot-core-kit/systems/resource_manager.gd")
 const ConsoleScript := preload("res://addons/godot-core-kit/console/dev_console.gd")
 const LocaleManagerScript := preload("res://addons/godot-core-kit/systems/locale_manager.gd")
+const LayerManagerScript := preload("res://addons/godot-core-kit/systems/layer_manager.gd")
 
 var log: LogScript
 var settings: SettingsScript
@@ -42,6 +43,7 @@ var audio: AudioManagerScript
 var res: ResourceManagerScript
 var console: ConsoleScript
 var i18n: LocaleManagerScript
+var layers: LayerManagerScript
 
 ## 全局根服务注册表:key:String -> service:Variant。内置在 _ready 预注册,
 ## 游戏代码经 provide/service 增删查;KitContext 作用域向上回退最终兜底到这里。
@@ -97,6 +99,10 @@ func _init() -> void:
 	i18n.name = "LocaleManager"
 	add_child(i18n)
 
+	layers = LayerManagerScript.new()
+	layers.name = "LayerManager"
+	add_child(layers)
+
 
 func _ready() -> void:
 	# 唯一的跨子系统接线点:此时全部子系统已各自 _ready 完毕。
@@ -120,6 +126,7 @@ func _ready() -> void:
 	_services["res"] = res
 	_services["console"] = console
 	_services["i18n"] = i18n
+	_services["layers"] = layers
 
 	log.info("CoreKit v%s ready" % VERSION)
 
