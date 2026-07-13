@@ -179,6 +179,13 @@ func _ready() -> void:
 	CoreKit.log.info("Inventory: wood=%d used=%d moved=%s" % [
 		bag.count(&"wood"), bag.used_slots(), bag.slot(1).get("id") == &"stone"])
 
+	# 数据表 冒烟:register 两条 + count/get_def(经 off-facade KitDataRegistry)
+	var reg := KitDataRegistry.new()
+	reg.register(&"crop", &"turnip", {"growth_days": 4})
+	reg.register(&"crop", &"potato", {"growth_days": 6})
+	CoreKit.log.info("DataRegistry: crops=%d turnip_ok=%s" % [
+		reg.count(&"crop"), reg.get_def(&"crop", &"turnip") != null])
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 

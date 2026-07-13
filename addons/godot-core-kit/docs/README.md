@@ -47,6 +47,7 @@
 | [kit-transition](transitions/kit-transition.md) | `class_name KitTransition` | 可复用场景转场资源(FADE/SLIDE,由 `CoreKit.scenes` 消费) |
 | [ui-stack](ui/ui-stack.md) | `class_name KitUiStack` / `KitUiScreen` | UI 屏栈导航(push/pop/replace + 被盖屏停用 + 模态挡层 + 返回键兜底) |
 | [kit-inventory](inventory/kit-inventory.md) | `class_name KitInventory` | 槽位制物品容器(自动堆叠/溢出/拖拽合并,游戏多实例) |
+| [kit-data-registry](data/kit-data-registry.md) | `class_name KitDataRegistry` | 定义数据表:type→{id→def} 存 Resource,register + load_dir |
 
 ## 约定
 
