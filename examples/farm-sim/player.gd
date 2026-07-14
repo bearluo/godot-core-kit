@@ -5,6 +5,7 @@ extends CharacterBody2D
 const SPEED := 140.0
 
 var facing := Vector2i(0, 1)   ## 4 向朝向(默认朝下)
+var input_locked := false       ## 开菜单时锁走动
 var _grid                       ## FarmGrid(取 world_to_cell 换算)
 
 
@@ -18,6 +19,9 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if input_locked:
+		velocity = Vector2.ZERO
+		return
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	velocity = dir * SPEED
 	move_and_slide()

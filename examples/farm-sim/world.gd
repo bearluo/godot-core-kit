@@ -11,6 +11,9 @@ const PlayerScript = preload("res://examples/farm-sim/player.gd")
 const TargetHighlight = preload("res://examples/farm-sim/target_highlight.gd")
 const HudScript = preload("res://examples/farm-sim/hud.gd")
 const ShopScript = preload("res://examples/farm-sim/shop.gd")
+const InventoryPanel = preload("res://examples/farm-sim/inventory_panel.gd")
+const ShopPanel = preload("res://examples/farm-sim/shop_panel.gd")
+const PauseMenu = preload("res://examples/farm-sim/pause_menu.gd")
 
 const GRID_W := 10
 const GRID_H := 8
@@ -26,6 +29,8 @@ var _shop
 var _selected_crop: StringName = &"turnip"   ## 当前选中种子(cycle_seed 切换)
 var _crop_ids: Array = []                      ## 可选作物 id(字母序)
 var _energy := ENERGY_MAX                      ## 当前体力(工具动作扣,睡觉回满)
+var _ui_stack                                  ## KitUiStack(背包/商店/菜单)
+var _active_ui := ""                            ## 当前打开的面板名(""=无)
 
 
 func energy() -> int:
@@ -75,6 +80,12 @@ func _ready() -> void:
 	hud.bind(CoreKit.clock, _shop, self)   # self 作体力源(energy()/energy_max())
 	CoreKit.layers.mount(hud, "hud")
 
+	# UI 栈(背包/商店/菜单)挂 window 层;关掉栈自带返回键,开关统一由 world 管
+	CoreKit.layers.clear("window")
+	_ui_stack = KitUiStack.new()
+	_ui_stack.cancel_action = &""
+	CoreKit.layers.mount(_ui_stack, "window")
+
 	# 逐日推进:接时钟广播,作物生长 + 重绘
 	CoreKit.bus.subscribe(CoreKit.clock.EV_DAY_CHANGED, _on_day)
 	CoreKit.log.info("[World] 就绪:WASD 走动,J 用工具(耕/种/浇/收),N 进下一天")
@@ -110,8 +121,23 @@ func _run_smoke() -> void:
 	ok = ok and _energy == ENERGY_MAX - 4 * ACTION_COST   # 耕/种/浇/收 4 次各扣体力
 	_sleep()
 	ok = ok and _energy == ENERGY_MAX                      # 睡觉回满
-	CoreKit.log.info("[World][SMOKE] %s(背包 %s=%d,体力回满=%s)" % [
-		"PASS" if ok else "FAIL", def.harvest_item, _bag.count(def.harvest_item), _energy == ENERGY_MAX])
+	# 存读档往返:存 → 改(金币/体力/地块)→ 读 → 全量复原
+	var gold_at_save = _shop.gold   # _shop 无类型,不用 :=
+	save_game()
+	_grid.till(Vector2i(7, 7)); _shop.gold = 123; _energy = 10
+	var loaded := load_game()
+	ok = ok and loaded and _shop.gold == gold_at_save and _energy == ENERGY_MAX
+	ok = ok and _grid.tile_state(Vector2i(7, 7)) == FarmGrid.State.EMPTY   # 读档回滚了 till
+	CoreKit.saves.delete_slot("farm")                       # 清存档槽,保证可重复跑
+	# UI 面板冒烟:三个面板各开各关一次,验证 build/push/pop 不报错(手感/布局仍需 F5)
+	for uiname in ["inventory", "shop", "menu"]:
+		_open_ui(uiname)
+		ok = ok and _active_ui == uiname and _ui_stack.depth() == 1
+		_close_ui()
+		ok = ok and _active_ui == "" and _ui_stack.is_empty()
+	CoreKit.log.info("[World][SMOKE] %s(背包 %s=%d,体力回满=%s,存读档=%s)" % [
+		"PASS" if ok else "FAIL", def.harvest_item, _bag.count(def.harvest_item),
+		_energy == ENERGY_MAX, loaded])
 	get_tree().quit(0 if ok else 1)
 
 
@@ -120,12 +146,94 @@ func _exit_tree() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# 菜单开关(任何时候可用)
+	if event.is_action_pressed("toggle_inventory"):
+		_toggle_ui("inventory"); return
+	if event.is_action_pressed("toggle_shop"):
+		_toggle_ui("shop"); return
+	if event.is_action_pressed("toggle_menu"):
+		_toggle_ui("menu"); return
+	# 菜单开着:把 导航/确认 路由给活动面板,其余吞掉(不误触农场操作)
+	if _active_ui != "":
+		for a in ["move_up", "move_down", "farm_use"]:
+			if event.is_action_pressed(a):
+				var top = _ui_stack.top()
+				if top != null and top.has_method("handle_action"):
+					top.handle_action(a)
+				return
+		return
+	# 无菜单:正常农场操作
 	if event.is_action_pressed("farm_use"):
 		_use_tool()
 	elif event.is_action_pressed("farm_next_day"):
 		_sleep()
 	elif event.is_action_pressed("cycle_seed"):
 		_cycle_seed()
+
+
+## 切换面板:同名再按=关;开着别的=先关再开。
+func _toggle_ui(name: String) -> void:
+	if _active_ui == name:
+		_close_ui()
+	else:
+		_close_ui()
+		_open_ui(name)
+
+
+func _open_ui(name: String) -> void:
+	var panel
+	match name:
+		"inventory":
+			panel = InventoryPanel.new()
+			panel.bind(_bag, _registry)
+		"shop":
+			panel = ShopPanel.new()
+			panel.bind(_shop, _registry, _bag)
+		"menu":
+			panel = PauseMenu.new()
+			panel.bind(self)
+		_:
+			return
+	_ui_stack.push(panel, {"hide_below": false, "dim": Color(0, 0, 0, 0.45)})  # 模态浮层:压暗背景、挡输入
+	_active_ui = name
+	_player.input_locked = true
+
+
+func _close_ui() -> void:
+	if _active_ui == "":
+		return
+	_ui_stack.pop()
+	_active_ui = ""
+	_player.input_locked = false
+
+
+## 供菜单"继续"调用。
+func close_menu() -> void:
+	_close_ui()
+
+
+## 存档:地块 + 背包 + 金币 + 时钟 + 体力 全量存进 CoreKit.saves。
+func save_game() -> void:
+	CoreKit.saves.save("farm", {
+		"grid": _grid.to_dict(), "bag": _bag.to_dict(),
+		"gold": _shop.gold, "clock": CoreKit.clock.to_dict(), "energy": _energy})
+	CoreKit.log.info("[World] 已存档")
+
+
+## 读档:全量还原(无存档返回 false)。
+func load_game() -> bool:
+	var d = CoreKit.saves.load("farm")
+	if d == null or (d is Dictionary and d.is_empty()):
+		CoreKit.log.info("[World] 无存档")
+		return false
+	_grid.from_dict(d["grid"])
+	_bag.from_dict(d["bag"])
+	_shop.gold = int(d["gold"])
+	CoreKit.clock.from_dict(d["clock"])
+	_energy = int(d["energy"])
+	_view.queue_redraw()
+	CoreKit.log.info("[World] 已读档")
+	return true
 
 
 ## 对玩家面前那一格用工具:按状态派发 耕→种→浇→收。成功一次扣体力,精疲则自动睡。
