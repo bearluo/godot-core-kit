@@ -8,3 +8,5 @@ id = &"turnip"
 display_name = "白萝卜"
 max_stack = 99
 category = &"produce"
+buy_price = 0
+sell_price = 35

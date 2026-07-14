@@ -1,19 +1,22 @@
 extends Node
-## 农场经营 MVP 骨架的驱动 —— 用一条确定性剧情把子系统串起来做"框架消费者视角"的 dogfood。
+## 农场经营 MVP 骨架的驱动 —— 一条确定性剧情把子系统串起来做"框架消费者视角"的 dogfood。
 ## 整段只调 CoreKit.* 与 KitInventory/KitDataRegistry 两个 class_name 类库,不碰 kit 内部。
 ##
-## 剧情:载数据表(crop + item 两类型)→ 发种子(上限走数据表)→ 播种 → 逐日推进(bus 驱动
-##       作物生长)→ 收获(单格上限数据驱动)→ 结算。
+## 剧情:载数据表(crop+item 两类型)→ 开店买种子(钱走 item 价、事件走 shop: 命名空间)→
+##       播种 → 逐日推进(bus 驱动生长)→ 收获 → 卖产物换钱 → 存档往返(含金币)→ 背包 UI 入栈。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
-## (首次需先 godot --headless --path . --import 生成 KitInventory/KitDataRegistry 类缓存。)
+## (首次需先 godot --headless --path . --import 生成 class_name 缓存。)
 
 const FarmScript := preload("res://examples/farm-sim/farm.gd")
+const ShopScript := preload("res://examples/farm-sim/shop.gd")
 const BackpackPanelScript := preload("res://examples/farm-sim/backpack_panel.gd")
 
 var _registry
 var _bag
+var _shop
+var _total_earned := 0   ## 由订阅 shop:sold 累计:演示游戏侧既发布又订阅自有命名空间事件
 
 
 func _ready() -> void:
@@ -24,14 +27,17 @@ func _ready() -> void:
 	CoreKit.log.info("[Farm] 载入 %d 作物 + %d 物品,registry 类型: [%s]" % [
 		n_crop, n_item, _join(_registry.types())])
 
-	# 2. 背包 + 发种子(数量走参数,单格上限走 item 表,不再硬编码)
+	# 2. 背包 + 商店(起始金币 200)+ 买种子。价格走 item 表,交易广播 shop: 命名空间事件。
+	#    并订阅自家 shop:sold 累计总收入 —— 游戏侧既发布又消费自有命名空间事件,验证约定通用。
 	_bag = KitInventory.new(20)
+	_shop = ShopScript.new()
+	_shop.name = "Shop"
+	_shop.bind(_registry, _bag, 200)
+	add_child(_shop)
+	CoreKit.bus.subscribe(_shop.EV_SOLD, _on_sold)
+	CoreKit.log.info("[Shop] 开局金币 %d" % _shop.gold)
 	for crop_id in _sorted(_registry.ids(&"crop")):
-		var cdef = _registry.get_def(&"crop", crop_id)
-		var sdef = _registry.get_def(&"item", cdef.seed_item)
-		_bag.add(cdef.seed_item, 3, {}, sdef.max_stack)
-	CoreKit.log.info("[Bag] 初始种子: turnip_seed=%d parsnip_seed=%d" % [
-		_bag.count(&"turnip_seed"), _bag.count(&"parsnip_seed")])
+		_shop.buy(_registry.get_def(&"crop", crop_id).seed_item, 3)
 
 	# 3. 农田,注入 registry + bag
 	var farm := FarmScript.new()
@@ -42,37 +48,38 @@ func _ready() -> void:
 	# 4. 播种(消耗种子)
 	farm.plant(&"turnip")
 	farm.plant(&"parsnip")
-	CoreKit.log.info("[Bag] 播种后种子: turnip_seed=%d parsnip_seed=%d" % [
-		_bag.count(&"turnip_seed"), _bag.count(&"parsnip_seed")])
 
 	# 5. 时钟逐日推进 —— 每天 clock:day_changed 触发 Crop 生长(见输出的 [Crop:*] 行)
 	CoreKit.log.info("[Clock] 开局 %s" % _date_str())
 	for i in range(4):
 		CoreKit.clock.advance_day()
 
-	# 6. 收获成熟作物入背包(防风草 item 表 max_stack=1 → 2 株产物占 2 格,数据驱动堆叠)
+	# 6. 收获成熟作物入背包(防风草 item 表 max_stack=1 → 2 株占 2 格,数据驱动堆叠)
 	farm.harvest_all()
-	CoreKit.log.info("[Bag] 收获后: turnip=%d parsnip=%d,已用格数=%d" % [
-		_bag.count(&"turnip"), _bag.count(&"parsnip"), _bag.used_slots()])
 
-	# 7. 存档往返 —— clock.to_dict + bag.to_dict 存进 CoreKit.saves,读回 from_dict 复原。
+	# 7. 卖掉白萝卜换钱(留着防风草给背包 UI 看);sell_price 走 item 表,shop:sold 触发收入累计
+	_shop.sell(&"turnip", _bag.count(&"turnip"))
+	CoreKit.log.info("[Shop] 结算:金币 %d,累计收入 %d" % [_shop.gold, _total_earned])
+
+	# 8. 存档往返 —— clock+bag+金币 存进 CoreKit.saves,读回 from_dict 复原。
 	#    验证第 4 个子系统 saves 接入,以及 to_dict/from_dict 扛得住 JSON int→float 往返。
 	var slot := "farm_demo"
-	CoreKit.saves.save(slot, {"clock": CoreKit.clock.to_dict(), "bag": _bag.to_dict()})
-	CoreKit.log.info("[Save] 已存档 '%s' @ %s turnip=%d" % [slot, _date_str(), _bag.count(&"turnip")])
-	# 存档后继续游戏(推进 5 天 + 凭空吃进 10 白萝卜),制造与存档点的差异
+	CoreKit.saves.save(slot, {"clock": CoreKit.clock.to_dict(), "bag": _bag.to_dict(), "gold": _shop.gold})
+	CoreKit.log.info("[Save] 已存档 '%s' @ %s gold=%d" % [slot, _date_str(), _shop.gold])
+	# 存档后继续游戏(推进 5 天 + 清空钱包),制造与存档点的差异
 	for i in range(5):
 		CoreKit.clock.advance_day()
-	_bag.add(&"turnip", 10)
-	CoreKit.log.info("[Save] 读档前(已变化): %s turnip=%d" % [_date_str(), _bag.count(&"turnip")])
-	# 读回存档:from_dict 把时钟与背包一并复原到存档点
+	_shop.gold = 0
+	CoreKit.log.info("[Save] 读档前(已变化): %s gold=%d" % [_date_str(), _shop.gold])
+	# 读回存档:from_dict 把时钟/背包复原,金币手动读回(游戏侧状态)
 	var snap = CoreKit.saves.load(slot)
 	CoreKit.clock.from_dict(snap["clock"])
 	_bag.from_dict(snap["bag"])
-	CoreKit.log.info("[Save] 读档后(已复原): %s turnip=%d" % [_date_str(), _bag.count(&"turnip")])
+	_shop.gold = int(snap["gold"])
+	CoreKit.log.info("[Save] 读档后(已复原): %s gold=%d" % [_date_str(), _shop.gold])
 	CoreKit.saves.delete_slot(slot)   # 清掉存档槽,保证示例可重复跑
 
-	# 8. 背包 UI 面板入栈 —— dogfood KitUiStack:push 一个反映背包内容的 Control 面板。
+	# 9. 背包 UI 面板入栈 —— dogfood KitUiStack:push 一个反映背包内容的 Control 面板。
 	var stack := KitUiStack.new()
 	stack.name = "UiStack"
 	add_child(stack)
@@ -82,6 +89,11 @@ func _ready() -> void:
 	CoreKit.log.info("[UI] 背包面板入栈,depth=%d" % stack.depth())
 	for line in panel.lines():
 		CoreKit.log.info("[UI]   %s" % line)
+
+
+## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
+func _on_sold(payload: Dictionary) -> void:
+	_total_earned += int(payload.get("earn", 0))
 
 
 func _date_str() -> String:

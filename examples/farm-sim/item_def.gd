@@ -7,3 +7,5 @@ extends Resource
 @export var display_name: String = ""        ## 展示名
 @export var max_stack: int = 99             ## 背包单格堆叠上限(数据驱动)
 @export var category: StringName = &"misc"   ## seed / produce / misc
+@export var buy_price: int = 0              ## 商店买入单价(0 = 不可购买)
+@export var sell_price: int = 0             ## 商店卖出单价(0 = 不可出售)
