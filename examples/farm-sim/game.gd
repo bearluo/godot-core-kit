@@ -8,7 +8,8 @@ extends Node
 ##       对象池复用第二茬(两茬共用 2 个实例)→ 成就结算(账号级存 settings,非存档)→
 ##       温室 KitContext 作用域服务(全局/作用域/shadow/provide_child 生命周期)→
 ##       i18n 本地化(内存翻译现建现加,切 zh/en/ja 同 key 出不同译文)→
-##       帧调度 ticker(every_n 错峰降频 tick + queue_task 分帧预算队列,对照按天的 clock)。
+##       帧调度 ticker(every_n 错峰降频 tick + queue_task 分帧预算队列,对照按天的 clock)→
+##       资源预热 res(preload_batch 异步批量预加载 + 缓存,与 ticker 分帧通道联动)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
@@ -244,6 +245,39 @@ func _ready() -> void:
 	while ticker.pending_task_count() > 0:        # 分帧跑,直至队列消化干净
 		await get_tree().process_frame
 	CoreKit.log.info("[Ticker] 巡查完成:%d 块,queue_drained=%s" % [surveyed[0], drained[0]])
+
+	# 16. 资源预热 CoreKit.res —— dogfood 异步批量预加载(桌面走线程通道 / Web 走 ticker 分帧通道,
+	#     对外 API/信号一致)。场景:进新赛季前把一批数据资源预热进缓存,完成后 get_resource 秒取。
+	var res = CoreKit.res
+	res.clear()
+	var assets := [
+		"res://examples/farm-sim/crop.tscn",
+		"res://examples/farm-sim/data/crops/turnip.tres",
+		"res://examples/farm-sim/data/crops/parsnip.tres",
+		"res://examples/farm-sim/data/items/turnip.tres",
+		"res://examples/farm-sim/data/quests/first_income.tres",
+	]
+	var progress := [0, 0]                        # [loaded, total];只记最终值,不打印到达顺序(线程序不定)
+	var on_prog := func(l, t): progress[0] = l; progress[1] = t
+	res.batch_progress.connect(on_prog)
+	var res_done := [false]
+	res.batch_completed.connect(func(): res_done[0] = true, CONNECT_ONE_SHOT)
+	res.preload_batch(assets)
+	CoreKit.log.info("[Res] 预热 %d 个资源…" % assets.size())
+	while not res_done[0]:                         # 等整批就绪(桌面线程通道跨帧轮询)
+		await get_tree().process_frame
+	res.batch_progress.disconnect(on_prog)
+	CoreKit.log.info("[Res] 批次完成:progress=%d/%d,缓存数=%d" % [
+		progress[0], progress[1], res.cached_count()])
+	# 命中缓存秒取 + release/is_cached/clear
+	var scene = res.get_resource("res://examples/farm-sim/crop.tscn")
+	var q_path := "res://examples/farm-sim/data/quests/first_income.tres"
+	var before := res.cached_count()
+	res.release(q_path)
+	CoreKit.log.info("[Res] get_resource(crop.tscn)=%s;release 一个后 缓存 %d→%d,is_cached=%s" % [
+		scene.get_class(), before, res.cached_count(), res.is_cached(q_path)])
+	res.clear()
+	CoreKit.log.info("[Res] clear 后缓存数=%d" % res.cached_count())
 
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
