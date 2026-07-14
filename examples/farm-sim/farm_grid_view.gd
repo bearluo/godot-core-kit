@@ -26,8 +26,9 @@ func _draw() -> void:
 			draw_rect(rect, Color(0, 0, 0, 0.15), false, 1.0)   # 网格线
 			if _grid.has_crop(c):
 				var r: float = _grid.crop_ratio(c)
-				var inset: float = cell * (0.5 - 0.32 * r)      # 越熟越大
-				var crop_rect := Rect2(origin + Vector2(inset, inset), Vector2(cell - inset * 2, cell - inset * 2))
+				var side: float = cell * lerpf(0.35, 0.8, r)    # 刚种下就有小苗,越熟越大(0.35→0.8 格)
+				var off: float = (cell - side) * 0.5            # 居中
+				var crop_rect := Rect2(origin + Vector2(off, off), Vector2(side, side))
 				draw_rect(crop_rect, Color(0.3, 0.8, 0.3).lerp(Color(0.95, 0.85, 0.2), r))  # 绿→金
 				if _grid.crop_mature(c):
 					draw_rect(crop_rect, Color(1, 1, 1, 0.9), false, 1.5)  # 成熟描边
