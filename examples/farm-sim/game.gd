@@ -6,7 +6,8 @@ extends Node
 ##       播种(从对象池借出)→ 逐日推进(clock→weather→crop 事件链驱动生长,雨天 +1)→
 ##       收获(归还池)→ 卖钱 → 存档往返(含金币/任务)→ 背包 UI 入栈 → 任务结算 →
 ##       对象池复用第二茬(两茬共用 2 个实例)→ 成就结算(账号级存 settings,非存档)→
-##       温室 KitContext 作用域服务(全局/作用域/shadow/provide_child 生命周期)。
+##       温室 KitContext 作用域服务(全局/作用域/shadow/provide_child 生命周期)→
+##       i18n 本地化(内存翻译现建现加,切 zh/en/ja 同 key 出不同译文)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
@@ -197,10 +198,46 @@ func _ready() -> void:
 		reg_out.has_def(&"crop", &"golden_turnip")])
 	greenhouse.free()   # 释放温室作用域 → provide_child 的 climate 连带释放(见其 _exit_tree 日志)
 
+	# 14. i18n 本地化 —— dogfood CoreKit.i18n:运行时切语言,同一 key 出不同译文。
+	#     翻译用【内存 Translation 现建现加】(add_translation,免 .po 编辑器导入);locale 是
+	#     跨存档偏好,set_locale 自动持久化走 Settings(section "locale",不进存档槽)。
+	var i18n = CoreKit.i18n
+	_add_tr("zh", {"FARM_WELCOME": "欢迎来到农场!", "CROP_turnip": "白萝卜", "CROP_parsnip": "防风草"})
+	_add_tr("en", {"FARM_WELCOME": "Welcome to the farm!", "CROP_turnip": "Turnip", "CROP_parsnip": "Parsnip"})
+	_add_tr("ja", {"FARM_WELCOME": "農場へようこそ!", "CROP_turnip": "カブ", "CROP_parsnip": "パースニップ"})
+	var locs := Array(i18n.available_locales())   # PackedStringArray → Array 以便排序
+	locs.sort()
+	CoreKit.log.info("[i18n] 已加载语言: [%s]" % _join(locs))
+	i18n.set_locale("en")                         # baseline:先定到 en(免首次切换是否触发依赖持久化)
+	i18n.locale_changed.connect(_on_locale)       # 连信号后再逐语言切,保证每次都打点
+	for loc in ["zh", "en", "ja"]:
+		i18n.set_locale(loc)
+		CoreKit.log.info("[i18n] [%s] %s | turnip=%s | parsnip=%s" % [
+			loc, i18n.t("FARM_WELCOME"), i18n.t("CROP_turnip"), i18n.t("CROP_parsnip")])
+	i18n.locale_changed.disconnect(_on_locale)
+	# 缺翻译回退:未注册 key → has_translation=false、t() 原样返回 key(debug 下会去重告警帮发现漏翻)
+	CoreKit.log.info("[i18n] 缺失 key 回退:has=%s t()=%s" % [
+		i18n.has_translation("CROP_golden"), i18n.t("CROP_golden")])
+	CoreKit.settings.erase_section("locale")      # 复位持久化 locale,保证示例可重复跑
+
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
 func _on_sold(payload: Dictionary) -> void:
 	_total_earned += int(payload.get("earn", 0))
+
+
+## 现建一份内存 Translation 并注册(免 .po 编辑器导入);key→译文 映射由 msgs 给出。
+func _add_tr(locale: String, msgs: Dictionary) -> void:
+	var tr := Translation.new()
+	tr.locale = locale
+	for k in msgs:
+		tr.add_message(k, msgs[k])
+	CoreKit.i18n.add_translation(tr)
+
+
+## locale_changed 信号打点(证明切语言广播了信号)。
+func _on_locale(loc: String) -> void:
+	CoreKit.log.info("[i18n] locale_changed → %s" % loc)
 
 
 ## 对象池 "crop" 的记账三元组(空闲/在用/总数),供 [Pool] 演示行。
