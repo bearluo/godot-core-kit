@@ -53,7 +53,23 @@ func _ready() -> void:
 	farm.harvest_all()
 	CoreKit.log.info("[Bag] 收获后: turnip=%d parsnip=%d,已用格数=%d" % [
 		_bag.count(&"turnip"), _bag.count(&"parsnip"), _bag.used_slots()])
-	CoreKit.log.info("[Clock] 结束 %s" % _date_str())
+
+	# 7. 存档往返 —— clock.to_dict + bag.to_dict 存进 CoreKit.saves,读回 from_dict 复原。
+	#    验证第 4 个子系统 saves 接入,以及 to_dict/from_dict 扛得住 JSON int→float 往返。
+	var slot := "farm_demo"
+	CoreKit.saves.save(slot, {"clock": CoreKit.clock.to_dict(), "bag": _bag.to_dict()})
+	CoreKit.log.info("[Save] 已存档 '%s' @ %s turnip=%d" % [slot, _date_str(), _bag.count(&"turnip")])
+	# 存档后继续游戏(推进 5 天 + 凭空吃进 10 白萝卜),制造与存档点的差异
+	for i in range(5):
+		CoreKit.clock.advance_day()
+	_bag.add(&"turnip", 10)
+	CoreKit.log.info("[Save] 读档前(已变化): %s turnip=%d" % [_date_str(), _bag.count(&"turnip")])
+	# 读回存档:from_dict 把时钟与背包一并复原到存档点
+	var snap = CoreKit.saves.load(slot)
+	CoreKit.clock.from_dict(snap["clock"])
+	_bag.from_dict(snap["bag"])
+	CoreKit.log.info("[Save] 读档后(已复原): %s turnip=%d" % [_date_str(), _bag.count(&"turnip")])
+	CoreKit.saves.delete_slot(slot)   # 清掉存档槽,保证示例可重复跑
 
 
 func _date_str() -> String:
