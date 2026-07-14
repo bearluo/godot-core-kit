@@ -2,10 +2,10 @@ extends Node
 ## 农场经营 MVP 骨架的驱动 —— 一条确定性剧情把子系统串起来做"框架消费者视角"的 dogfood。
 ## 整段只调 CoreKit.* 与 KitInventory/KitDataRegistry 两个 class_name 类库,不碰 kit 内部。
 ##
-## 剧情:载数据表(crop+item+quest)→ 开店买种子(钱走 item 价、事件走 shop: 命名空间)→
+## 剧情:载数据表(crop+item+quest+achievement)→ 开店买种子(钱走 item 价、事件走 shop:)→
 ##       播种(从对象池借出)→ 逐日推进(clock→weather→crop 事件链驱动生长,雨天 +1)→
 ##       收获(归还池)→ 卖钱 → 存档往返(含金币/任务)→ 背包 UI 入栈 → 任务结算 →
-##       对象池复用第二茬(两茬共用 2 个实例)。
+##       对象池复用第二茬(两茬共用 2 个实例)→ 成就结算(账号级存 settings,非存档)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
@@ -16,6 +16,7 @@ const ShopScript := preload("res://examples/farm-sim/shop.gd")
 const QuestLogScript := preload("res://examples/farm-sim/quest_log.gd")
 const BackpackPanelScript := preload("res://examples/farm-sim/backpack_panel.gd")
 const WeatherSystemScript := preload("res://examples/farm-sim/weather_system.gd")
+const AchievementTrackerScript := preload("res://examples/farm-sim/achievement_tracker.gd")
 
 var _registry
 var _bag
@@ -25,13 +26,14 @@ var _total_earned := 0   ## 由订阅 shop:sold 累计:演示游戏侧既发布�
 
 
 func _ready() -> void:
-	# 1. 载数据表:crop + item 两种类型同存一个 KitDataRegistry(多类型验证)
+	# 1. 载数据表:crop + item + quest + achievement 四种类型同存一个 KitDataRegistry(多类型验证)
 	_registry = KitDataRegistry.new()
 	var n_crop = _registry.load_dir(&"crop", "res://examples/farm-sim/data/crops")
 	var n_item = _registry.load_dir(&"item", "res://examples/farm-sim/data/items")
 	var n_quest = _registry.load_dir(&"quest", "res://examples/farm-sim/data/quests")
-	CoreKit.log.info("[Farm] 载入 %d 作物 + %d 物品 + %d 任务,registry 类型: [%s]" % [
-		n_crop, n_item, n_quest, _join(_registry.types(true))])   # types(true) = 字符串字典序(v0.18.0)
+	var n_ach = _registry.load_dir(&"achievement", "res://examples/farm-sim/data/achievements")
+	CoreKit.log.info("[Farm] 载入 %d 作物 + %d 物品 + %d 任务 + %d 成就,registry 类型: [%s]" % [
+		n_crop, n_item, n_quest, n_ach, _join(_registry.types(true))])   # types(true) = 字符串字典序(v0.18.0)
 
 	# 1b. 任务日志:载入 quest 定义,订阅 clock:day_changed + shop:sold 追踪目标。
 	#     dogfood:CoreKit.bus 作【多来源事件聚合器】;quest: 是游戏第 3 个自有命名空间。
@@ -40,6 +42,16 @@ func _ready() -> void:
 	_quest_log.name = "QuestLog"
 	_quest_log.bind(_registry)
 	add_child(_quest_log)
+
+	# 1c. 成就追踪器:载入 achievement 定义(registry 第 4 类型),聚合 shop:bought +
+	#     quest:completed + weather:changed 三来源判定里程碑。dogfood 关键:成就是【账号级】,
+	#     解锁写 CoreKit.settings("achievements" 分区)——不进存档槽、删档不丢(对照任务的
+	#     每档进度)。achievement: 是游戏自有命名空间(与 shop:/quest:/weather: 并列)。
+	#     必须在买/卖/天气事件之前入树(其 _ready 订阅这三个事件,晚了会漏)。
+	var achievements := AchievementTrackerScript.new()
+	achievements.name = "Achievements"
+	achievements.bind(_registry)
+	add_child(achievements)
 
 	# 2. 背包 + 商店(起始金币 200)+ 买种子。价格走 item 表,交易广播 shop: 命名空间事件。
 	#    并订阅自家 shop:sold 累计总收入 —— 游戏侧既发布又消费自有命名空间事件,验证约定通用。
@@ -103,6 +115,10 @@ func _ready() -> void:
 	_quest_log.forget_all()
 	CoreKit.log.info("[Save] 读档前(已变化): %s gold=%d 完成任务=%d" % [
 		_date_str(), _shop.gold, _quest_log.done_count()])
+	# settings ≠ saves 边界演示:任务进度被清空了(每档状态),但成就解锁不受影响——它存
+	# CoreKit.settings(账号级),既不进存档槽、也不被上面的 forget/复原动到。
+	CoreKit.log.info("[Achieve] 存档清空了任务进度,但成就仍解锁 %d/%d(存 settings 非存档槽,不受删档影响)" % [
+		achievements.unlocked_count(), achievements.total()])
 	# 读回存档:from_dict 把时钟/背包/任务复原,金币手动读回(游戏侧状态)
 	var snap = CoreKit.saves.load(slot)
 	CoreKit.clock.from_dict(snap["clock"])
@@ -144,6 +160,13 @@ func _ready() -> void:
 	#(池持有的游离节点不在树上,退出时不被 SceneTree 回收,不清会报 resources still in use)。
 	await get_tree().process_frame
 	CoreKit.pool.clear("crop")
+
+	# 12. 成就结算 —— 整局聚合 shop:/quest:/weather: 三来源解锁的账号级里程碑(存 settings)。
+	CoreKit.log.info("[Achieve] 结算(%d/%d 解锁,账号级存 settings):" % [
+		achievements.unlocked_count(), achievements.total()])
+	for line in achievements.summary_lines():
+		CoreKit.log.info("[Achieve]   %s" % line)
+	achievements.reset_all()   # erase_section 清掉 settings 里的成就分区,保证示例可重复跑
 
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
