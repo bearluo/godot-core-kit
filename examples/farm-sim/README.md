@@ -1,6 +1,6 @@
 # 农场经营 MVP 骨架(farm-sim)
 
-用一条确定性剧情把多个子系统串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈** → **任务结算**。整段是**框架消费者视角**——只调 `CoreKit.*` 与两个 `class_name` 类库(`KitInventory`/`KitDataRegistry`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
+用一条确定性剧情把多个子系统串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈** → **任务结算** → **对象池复用第二茬**。整段是**框架消费者视角**——只调 `CoreKit.*` 与两个 `class_name` 类库(`KitInventory`/`KitDataRegistry`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
 
 验证覆盖的子系统:
 
@@ -14,6 +14,7 @@
 | `CoreKit.saves` | 存档:`clock`+`bag`+金币+任务进度 存槽,`load`+`from_dict` 复原(经 JSON 往返) |
 | `KitUiStack`(off-facade) | 背包面板 `push` 进 UI 栈,面板内容反映背包 |
 | `KitStateMachine`(off-facade) | 每株作物一台状态机建模生命周期 **Growing → Mature**(教科书用例) |
+| `CoreKit.pool`(对象池) | 作物实例**池化复用**:收获归还、播种借出,两茬共用 2 个实例、零重复 `instantiate` |
 
 ## 文件
 
@@ -22,7 +23,7 @@
 | `crop_def.gd` + `data/crops/{turnip,parsnip}.tres` | 作物定义 `Resource`(id/天数/种子/产物/数量) |
 | `item_def.gd` + `data/items/*.tres` | 物品定义 `Resource`(id/展示名/max_stack/类别/买价/卖价) |
 | `quest_def.gd` + `data/quests/*.tres` | 任务定义 `Resource`(id/标题/条件类型/目标值/限定物品) |
-| `crop.gd` | 一株已播种作物(Node)。内建 `KitStateMachine`(Growing→Mature),订阅 `clock:day_changed` 推进生长 |
+| `crop.gd` + `crop.tscn` | 一株已播种作物(Node)。内建 `KitStateMachine`(Growing→Mature),订阅 `clock:day_changed` 推进生长;**可被 `CoreKit.pool` 复用**(订阅移到 `_enter_tree`、实现 `_pool_reset`) |
 | `farm.gd` | 农田 = 集成粘合层。持有注入的 registry+背包,负责 `plant`/`harvest_all` |
 | `shop.gd` | 商店 + 钱包(游戏侧经济)。`buy`/`sell` 按 item 表价格,交易广播 `shop:*` 事件 |
 | `quest_log.gd` | 任务日志。订阅 `clock:`+`shop:` 事件推进目标,达标广播 `quest:completed`,进度可存档 |
@@ -76,6 +77,21 @@
 [Quest]   ✓ 105/100 首笔收入:累计赚到 100 金币
 [Quest]   ✓ 5/5 坚持务农:撑到第 5 天
 [Quest]   ✓ 3/3 萝卜大户:卖出 3 个白萝卜
+[Pool] 第一茬收获后:空闲=2 在用=0 总实例=2
+[Farm] 播种 白萝卜 (消耗 1 白萝卜种子)
+[Farm] 播种 防风草 (消耗 1 防风草种子)
+[Pool] 第二茬播种后:空闲=0 在用=2 总实例=2(复用未新建)
+[Crop:白萝卜] 第 6 天 生长 1/2
+[Crop:防风草] 第 6 天 生长 1/4
+[Crop:白萝卜] 第 7 天 生长 2/2
+[Crop:白萝卜] 状态 Growing→Mature 已成熟
+[Crop:防风草] 第 7 天 生长 2/4
+[Crop:防风草] 第 8 天 生长 3/4
+[Crop:防风草] 第 9 天 生长 4/4
+[Crop:防风草] 状态 Growing→Mature 已成熟
+[Farm] 收获 白萝卜 x3 → 背包(单格上限 99)
+[Farm] 收获 防风草 x2 → 背包(单格上限 1)
+[Pool] 第二茬收获完,累计只 instantiate 过 2 个 Crop(两茬共用)
 ```
 
 逐段对应验证点:
@@ -87,6 +103,7 @@
 6. `[Save] 存 → 变 → 复原` —— `clock+bag+金币+任务进度` 存进 `CoreKit.saves`,推进 5 天+清空钱包+遗忘任务后 `load`+`from_dict` 完整复原(d5/gold=215/完成任务=3),证明 **saves 接入 + to_dict/from_dict 扛得住 JSON int→float 往返**。
 7. `[UI] 背包面板` —— `KitUiStack.push` 一个反映背包内容的 Control 面板,`depth=1`。
 8. `[Quest] 结算 3/3` —— 三条目标各由不同来源事件在整局中聚合达成。
+9. `[Pool] 复用` —— 第一茬收获后 2 个 Crop 实例归还池(空闲=2);第二茬播种直接借出复用(总实例仍=2、`instantiate` 零次),生长/成熟一切如常 → 证明 **`CoreKit.pool` 复用有状态节点**,省掉反复实例化。
 
 ## 要点
 
@@ -97,6 +114,9 @@
 - **每实体状态机用 `KitStateMachine`**:`crop.gd` 在代码里建一台状态机(`Growing`/`Mature` 用内部类作 KitState,免加文件),相位切换交给 `transition_to`、`is_ready()` 查 `current_state.name`。构造有次序要求:**所有 KitState 子节点 add_child、`initial_state` 设好、`state_changed` 连好,都要在 `add_child(machine)`(入树触发机器 `_ready`)之前完成**。生长计数留在 crop、相位交给 FSM 是常见分工(FSM 建模离散相位/行为,计时器留实体)。
 - **持久化边界**:`shop.gold` / 任务进度是游戏侧状态(kit 无货币/任务子系统),随存档 `to_dict/from_dict` 一起走——展示"什么归 kit、什么归游戏"。
 - **Node 监听者主动清理**:`Crop`/`QuestLog` 在 `_exit_tree` 调 `CoreKit.bus.unsubscribe_all(self)`,不留悬空订阅。
+- **对象池复用有状态节点(`CoreKit.pool`)**:作物是高频 spawn/despawn 的实体,`farm.plant` 用 `pool.acquire`、`harvest_all` 用 `pool.release`,两茬共用 2 个实例。池化有状态 Node 的三条铁律(见 `crop.gd`):① `_ready` 一生只跑一次(即使被反复摘挂树也不重跑)→ 只放"建一次"的 FSM 搭建;② 订阅/退订必须放 `_enter_tree`/`_exit_tree`(每次进出树都跑),否则复用后收不到事件;③ 实现约定钩子 `_pool_reset()`,归还时清本轮状态(`_stage=0`、FSM 拨回 `Growing`),下次复用从头开始。**池按 `PackedScene` 复用**,故作物需配一个 `crop.tscn`(裸 Node + 挂 `crop.gd`)。
+  - **`pool.release()` 用 `call_deferred` 摘父节点**(躲物理碰撞回调里同步改树的 "flushing queries" 报错),所以归还的节点**在本帧内仍挂树、仍订阅**。本 demo 同步推进时钟,收获后 `await get_tree().process_frame` 让延迟摘除落定、作物真正离树退订,之后 `advance_day` 才不会再喂到已归还实例(否则它们会继续长)。真实游戏每帧有天然帧边界,通常无需手动 await——这是"把整局压进一个 `_ready` 同步跑"的 demo 才凸显的注意点。
+  - **收尾 `pool.clear("crop")`**:池持有的空闲实例是游离节点(不在树上),退出时不被 SceneTree 回收,不清会报 `resources still in use`——仿 `saves.delete_slot` 一样收尾释放。
 - **dogfood 记到的四条坑,其中三条已反哺进 kit(v0.18.0)**——这正是"在 examples 里做游戏验证框架"的产出闭环:
   1. **`StringName` 数组的原生 `.sort()` 按指针地址排、非字典序**(Godot 行为)。→ **已修**:`KitDataRegistry.ids/types` 加 `sorted` 参数(`ids(&"crop", true)` 即字母序);本例已改用(见 `game.gd` / `quest_log._ready`)。
   2. **`KitInventory` 没有"列出全部物品"的聚合方法**,背包 UI 只能手动遍历 `capacity()`×`slot(i)`。→ **已修**:新增 `KitInventory.totals() -> {id:总数}`;本例已改用(见 `backpack_panel._aggregate`)。
@@ -105,4 +125,4 @@
   > 修复流程遵分支分流规矩:三条 kit 改进剥出来走 kit 正常 SDD → run_all 绿 → **ff-merge 进 main(0.17.0→0.18.0)**,再把本分支 rebase 到新 main、改用新 API。示例本身仍留在 `example/farm-sim` 不合 main。
 - **无类型返回值 + `:=` 会 parse error**:`var n := registry.load_dir(...)` 因 `registry` 无类型、编译期推不出返回类型而报错,退回普通 `var n = ...`。
 - **这是骨架不是成品**:没有网格地块、工具体力、动物 NPC、对话——那些是"游戏本体",不属于 kit。本例只验证这些地基能不能顺畅拼在一起。
-- 子系统完整 API 见 [`game-clock.md`](../../addons/godot-core-kit/docs/systems/game-clock.md) / [`kit-inventory.md`](../../addons/godot-core-kit/docs/inventory/kit-inventory.md) / [`kit-data-registry.md`](../../addons/godot-core-kit/docs/data/kit-data-registry.md) / [`save-manager.md`](../../addons/godot-core-kit/docs/systems/save-manager.md) / [`ui-stack.md`](../../addons/godot-core-kit/docs/ui/ui-stack.md) / [`state-machine.md`](../../addons/godot-core-kit/docs/state-machine.md)。
+- 子系统完整 API 见 [`game-clock.md`](../../addons/godot-core-kit/docs/systems/game-clock.md) / [`kit-inventory.md`](../../addons/godot-core-kit/docs/inventory/kit-inventory.md) / [`kit-data-registry.md`](../../addons/godot-core-kit/docs/data/kit-data-registry.md) / [`save-manager.md`](../../addons/godot-core-kit/docs/systems/save-manager.md) / [`ui-stack.md`](../../addons/godot-core-kit/docs/ui/ui-stack.md) / [`state-machine.md`](../../addons/godot-core-kit/docs/state-machine.md) / [`object-pool.md`](../../addons/godot-core-kit/docs/systems/object-pool.md)。

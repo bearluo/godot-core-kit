@@ -3,10 +3,14 @@ extends Node
 ## 订阅 CoreKit.bus 的 clock:day_changed 推进生长天数,到 grow_days 就把状态机转到 Mature;
 ## is_ready()(供农田收获判定)= 状态机处于 Mature。
 ##
-## dogfood 点:KitStateMachine 在【每实体状态】这一教科书用例——game 侧代码建机、
-## KitState 子节点、initial_state、transition_to、current_state 查询、state_changed 信号。
-## 状态用内部类(避免多加文件);生长计数留在 crop(相位切换才交给 FSM)。
-## bus 事件命名约定 namespace:event 的消费端;Node 监听者 _exit_tree 主动 unsubscribe_all。
+## 【增量8】改为可被 CoreKit.pool 复用:同一个 Crop 实例收获后归还池、下次播种时借出重用,
+## 免去反复 instantiate/free。池化有状态节点踩到的关键坑——
+##   - `_ready` 一生只跑一次(即使节点被反复摘挂树也不重跑)→ 只用来建 FSM(建一次);
+##   - 订阅/退订必须放 `_enter_tree`/`_exit_tree`(每次进出树都跑),否则复用后收不到事件;
+##   - 实现约定钩子 `_pool_reset()`,归还时清掉本轮生长状态,供下次从头开始。
+##
+## dogfood 点:KitStateMachine 每实体状态用例 + CoreKit.pool 复用有状态节点 +
+## bus 事件命名约定 namespace:event 的消费端;Node 监听者进出树对称订阅/退订。
 ##
 ## (自然扩展:再加个 Withered 态 + Mature→Withered 的"过熟"转移即可,本骨架未做。)
 
@@ -25,6 +29,8 @@ class MatureState extends KitState:
 	pass
 
 
+## 仅一次:建状态机。_ready 一生只跑一次,即使被对象池反复摘挂树也不重跑,故这里只放
+## "创建期一次性搭建",反复要做的订阅放 _enter_tree。
 func _ready() -> void:
 	_sm = KitStateMachine.new()
 	_sm.name = "CropFSM"
@@ -35,11 +41,24 @@ func _ready() -> void:
 	_sm.initial_state = growing        # 须在 add_child(入树触发机器 _ready)之前设好
 	_sm.state_changed.connect(_on_state_changed)
 	add_child(_sm)                     # 入树 → 机器 _ready 注册状态并进入 Growing
+
+
+## 每次入树都订阅:池复用时 _ready 不再触发,订阅只能放这里,否则复用后收不到 day_changed。
+## (首次入树 _enter_tree 先于 _ready,此刻 _sm 尚未建;但 _on_day 要等下一次 advance_day
+##  才可能被调,那时 _ready 早已跑完,安全。)
+func _enter_tree() -> void:
 	CoreKit.bus.subscribe(CoreKit.clock.EV_DAY_CHANGED, _on_day)
 
 
 func _exit_tree() -> void:
 	CoreKit.bus.unsubscribe_all(self)
+
+
+## 对象池归还钩子(release 时被调):清掉本轮生长状态,FSM 拨回 Growing,供下次复用从头长。
+func _pool_reset() -> void:
+	_stage = 0
+	if _sm != null:
+		_sm.transition_to("Growing")
 
 
 ## 是否已成熟可收(= 状态机处于 Mature)。is_in 为 v0.18.0 便利方法(null 安全)。

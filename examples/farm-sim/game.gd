@@ -50,13 +50,15 @@ func _ready() -> void:
 	for crop_id in _registry.ids(&"crop", true):   # ids(type, true) = 字母序(v0.18.0,免手写 sort_custom)
 		_shop.buy(_registry.get_def(&"crop", crop_id).seed_item, 3)
 
-	# 3. 农田,注入 registry + bag
+	# 3. 农田,注入 registry + bag。作物实例走对象池:先 register "crop" 池(prewarm 2 =
+	#    预热 2 个空闲实例),之后 plant/harvest 借还复用,免反复 instantiate/free。
+	CoreKit.pool.register("crop", preload("res://examples/farm-sim/crop.tscn"), 2)
 	var farm := FarmScript.new()
 	farm.name = "Farm"
 	farm.bind(_registry, _bag)
 	add_child(farm)
 
-	# 4. 播种(消耗种子)
+	# 4. 播种(消耗种子;从预热池借出,见 [Pool] 演示)
 	farm.plant(&"turnip")
 	farm.plant(&"parsnip")
 
@@ -67,6 +69,10 @@ func _ready() -> void:
 
 	# 6. 收获成熟作物入背包(防风草 item 表 max_stack=1 → 2 株占 2 格,数据驱动堆叠)
 	farm.harvest_all()
+	# 池化注意点:pool.release() 用 call_deferred 摘父节点(躲物理回调重入),故归还的作物
+	# 在本帧内仍挂树、仍订阅。本 demo 同步推进时钟,必须等一帧让延迟摘除落定、作物真正离树
+	# 退订,后续 advance_day 才不会再喂到"已归还"的实例(否则它们会继续长)。
+	await get_tree().process_frame
 
 	# 7. 卖掉白萝卜换钱(留着防风草给背包 UI 看);sell_price 走 item 表,shop:sold 触发收入累计
 	_shop.sell(&"turnip", _bag.count(&"turnip"))
@@ -113,10 +119,32 @@ func _ready() -> void:
 	for line in _quest_log.summary_lines():
 		CoreKit.log.info("[Quest]   %s" % line)
 
+	# 11. 对象池复用演示 —— dogfood CoreKit.pool:第一茬收获后 2 个实例已归还池;第二茬播种
+	#     直接复用这两个空闲实例,total_count 始终为 2(而非新建到 4),证明"零新实例化"复用。
+	CoreKit.log.info("[Pool] 第一茬收获后:空闲=%d 在用=%d 总实例=%d" % _pool_stat())
+	farm.plant(&"turnip")     # 复用上一茬归还的实例(_pool_reset 已把生长清零、FSM 拨回 Growing)
+	farm.plant(&"parsnip")
+	CoreKit.log.info("[Pool] 第二茬播种后:空闲=%d 在用=%d 总实例=%d(复用未新建)" % _pool_stat())
+	for i in range(4):
+		CoreKit.clock.advance_day()
+	farm.harvest_all()
+	CoreKit.log.info("[Pool] 第二茬收获完,累计只 instantiate 过 %d 个 Crop(两茬共用)" % [
+		CoreKit.pool.total_count("crop")])
+	# 收尾:等一帧让最后一批 release 的延迟摘除落定,再 clear 释放池内空闲实例
+	#(池持有的游离节点不在树上,退出时不被 SceneTree 回收,不清会报 resources still in use)。
+	await get_tree().process_frame
+	CoreKit.pool.clear("crop")
+
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
 func _on_sold(payload: Dictionary) -> void:
 	_total_earned += int(payload.get("earn", 0))
+
+
+## 对象池 "crop" 的记账三元组(空闲/在用/总数),供 [Pool] 演示行。
+func _pool_stat() -> Array:
+	return [CoreKit.pool.available_count("crop"), CoreKit.pool.in_use_count("crop"),
+		CoreKit.pool.total_count("crop")]
 
 
 func _date_str() -> String:

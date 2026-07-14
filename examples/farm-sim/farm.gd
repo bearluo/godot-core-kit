@@ -5,8 +5,11 @@ extends Node
 ## 演示三个新子系统协作:KitDataRegistry(crop+item 两类定义) + KitInventory(背包) +
 ## GameClock/bus(生长,在 Crop 里)。农田本身不 preload 任何子系统——registry/bag 全由
 ## 驱动方 bind 注入,保持解耦(消费者视角)。
+##
+## 【增量8】作物实例改由 CoreKit.pool 复用:plant 借出(acquire)、harvest 归还(release),
+## 不再各自 new/free。池的注册(register "crop" 池)由驱动方 game.gd 负责,农田只借还。
 
-const CropScript := preload("res://examples/farm-sim/crop.gd")
+const POOL_KEY := "crop"
 
 var _registry   ## KitDataRegistry(含 "crop" 与 "item" 两种类型)
 var _bag        ## KitInventory
@@ -28,7 +31,7 @@ func plant(crop_id: StringName) -> void:
 		CoreKit.log.warn("[Farm] 种子不足,无法播种 %s" % crop_id)
 		return
 	_bag.remove(def.seed_item, 1)
-	var crop := CropScript.new()
+	var crop = CoreKit.pool.acquire(POOL_KEY)   # 池借出:复用空闲实例,无则新建(_pool_reset 已归零)
 	crop.name = "Crop_%s_%d" % [crop_id, _crops.size()]
 	crop.crop_id = crop_id
 	crop.def = def
@@ -37,7 +40,7 @@ func plant(crop_id: StringName) -> void:
 	CoreKit.log.info("[Farm] 播种 %s (消耗 1 %s)" % [def.display_name, _name_of(def.seed_item)])
 
 
-## 收获所有已成熟作物:产物入背包(单格上限取自 item 表),作物 free()。未熟的留在地里。
+## 收获所有已成熟作物:产物入背包(单格上限取自 item 表),作物归还对象池。未熟的留在地里。
 func harvest_all() -> void:
 	var remaining: Array = []
 	for crop in _crops:
@@ -47,10 +50,15 @@ func harvest_all() -> void:
 			_bag.add(def.harvest_item, def.harvest_amount, {}, cap)
 			CoreKit.log.info("[Farm] 收获 %s x%d → 背包(单格上限 %d)" % [
 				_name_of(def.harvest_item), def.harvest_amount, cap])
-			crop.free()
+			CoreKit.pool.release(crop)   # 归还池(触发 crop._pool_reset 清状态),不 free
 		else:
 			remaining.append(crop)
 	_crops = remaining
+
+
+## 当前地里未收获(在树)的作物数——供对象池复用演示对照。
+func standing_count() -> int:
+	return _crops.size()
 
 
 ## 取物品展示名,查不到回退原 id。
