@@ -1,6 +1,6 @@
 # 农场经营 MVP 骨架(farm-sim)
 
-用一条确定性剧情把多个子系统串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进(天气影响)作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈** → **任务结算** → **对象池复用第二茬** → **成就结算** → **温室作用域服务** → **多语言本地化** → **帧调度环境 tick** → **异步资源预热** → **键位重绑定**。整段是**框架消费者视角**——只调 `CoreKit.*` 与三个 `class_name` 类库(`KitInventory`/`KitDataRegistry`/`KitContext`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
+用一条 17 段确定性剧情把 **kit 的 15 个子系统/类库**串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进(天气影响)作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈** → **任务结算** → **对象池复用第二茬** → **成就结算** → **温室作用域服务** → **多语言本地化** → **帧调度环境 tick** → **异步资源预热** → **键位重绑定**。整段是**框架消费者视角**——只调 `CoreKit.*` 与三个 `class_name` 类库(`KitInventory`/`KitDataRegistry`/`KitContext`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
 
 验证覆盖的子系统:
 
@@ -22,6 +22,8 @@
 | `CoreKit.ticker`(帧调度) | **按渲染帧**跑持续逻辑(对照按天广播的 clock):`every_n` 洒水器每 3 帧错峰脉冲;`queue_task` 把 12 块地巡查按 `budget_msec` 预算分帧消化,`queue_drained` 收尾 |
 | `CoreKit.res`(异步预热) | 进新赛季前 `preload_batch` 预热 5 个资源进缓存,`batch_progress`/`batch_completed` 驱动加载条,完成后 `get_resource` 秒取;`is_cached`/`release`/`clear`。桌面走线程通道、Web 复用 ticker 分帧通道,API 一致 |
 | `CoreKit.input`(键位) | 运行时 `rebind_action`("ui_accept"→H)改 InputMap + 落 Settings `"input"` 分区,`action_rebound` 广播,`reset_action` 恢复工程默认 + 清覆盖;`get_action_event` 取当前键。缓冲 `is_action_buffered` 需真实输入(见文档) |
+
+**本例干净 dogfood 了 10 个门面子系统 + 5 个 `class_name` 类库**(上表)。以下 5 个**刻意未覆盖**——它们要真实窗口 / 声音 / 整场景切换才有意义,塞进这个单文件 headless 剧情演示价值和确定性都低,更适合带真实 UI 的 demo 里验:`CoreKit.audio`(BGM 交叉淡入 / SFX 池,headless 无声)、`CoreKit.scenes`(切场景会打断本剧情)、`CoreKit.layers`(具名 CanvasLayer 层级)、`CoreKit.transition`(转场缓动)、调试控制台。它们各自的文档见 [`docs/README.md`](../../addons/godot-core-kit/docs/README.md)。
 
 ## 文件
 
