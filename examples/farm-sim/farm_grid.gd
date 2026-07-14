@@ -135,3 +135,39 @@ func advance_day() -> void:
 	for cell in _crop:
 		if not crop_mature(cell):
 			_crop[cell]["stage"] = int(_crop[cell]["stage"]) + 1
+
+
+## 持久化:Vector2i 键序列化成 "x,y" 字符串(JSON 安全),id 存 String。registry/bag 不入档
+## (由 setup 注入),读档前须先 setup 再 from_dict。
+func to_dict() -> Dictionary:
+	var st := {}
+	for cell in _state:
+		st[_key(cell)] = int(_state[cell])
+	var cr := {}
+	for cell in _crop:
+		cr[_key(cell)] = {"id": String(_crop[cell]["id"]), "stage": int(_crop[cell]["stage"])}
+	return {"w": _w, "h": _h, "state": st, "crop": cr}
+
+
+## 从存档还原。经 JSON 往返:键为 String、数值为 float、id 退化为 String —— 这里统一归一回
+## Vector2i 键 + int + StringName(见 dogfood 的 JSON 退化坑)。
+func from_dict(d: Dictionary) -> void:
+	_w = int(d.get("w", _w))
+	_h = int(d.get("h", _h))
+	_state = {}
+	var st: Dictionary = d.get("state", {})
+	for k in st:
+		_state[_unkey(k)] = int(st[k])
+	_crop = {}
+	var cr: Dictionary = d.get("crop", {})
+	for k in cr:
+		_crop[_unkey(k)] = {"id": StringName(cr[k]["id"]), "stage": int(cr[k]["stage"])}
+
+
+static func _key(cell: Vector2i) -> String:
+	return "%d,%d" % [cell.x, cell.y]
+
+
+static func _unkey(s: String) -> Vector2i:
+	var parts := s.split(",")
+	return Vector2i(int(parts[0]), int(parts[1]))

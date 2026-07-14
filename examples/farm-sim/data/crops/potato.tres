@@ -1,0 +1,12 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/crop_def.gd" id="1_crop"]
+
+[resource]
+script = ExtResource("1_crop")
+id = &"potato"
+display_name = "土豆"
+grow_days = 6
+seed_item = &"potato_seed"
+harvest_item = &"potato"
+harvest_amount = 2

@@ -4,14 +4,17 @@ extends Control
 
 var _clock
 var _wallet
+var _world        ## 提供 energy()/energy_max()/selected_crop_name()
 var _date_label: Label
 var _gold_label: Label
 var _energy_label: Label
+var _seed_label: Label
 
 
-func bind(clock, wallet) -> void:
+func bind(clock, wallet, world) -> void:
 	_clock = clock
 	_wallet = wallet
+	_world = world
 
 
 func _ready() -> void:
@@ -21,9 +24,11 @@ func _ready() -> void:
 	_date_label = Label.new()
 	_gold_label = Label.new()
 	_energy_label = Label.new()
+	_seed_label = Label.new()
 	vb.add_child(_date_label)
 	vb.add_child(_gold_label)
 	vb.add_child(_energy_label)
+	vb.add_child(_seed_label)
 
 
 func _process(_delta: float) -> void:
@@ -32,4 +37,6 @@ func _process(_delta: float) -> void:
 			_clock.year(), _clock.season_name(), _clock.day(), _clock.hour(), _clock.minute()]
 	if _wallet != null:
 		_gold_label.text = "金币: %d" % _wallet.gold
-	_energy_label.text = "体力: 100/100"
+	if _world != null:
+		_energy_label.text = "体力: %d/%d" % [_world.energy(), _world.energy_max()]
+		_seed_label.text = "选中: %s (Q 切换)" % _world.selected_crop_name()
