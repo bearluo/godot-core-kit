@@ -1,0 +1,52 @@
+extends Control
+## 极简背包 UI 面板(演示 KitUiStack.push 承载游戏面板)。给定背包 + 物品表,构建一列
+## Label 列出"物品展示名 × 总数"。headless 下 Control 照常构建(只是不渲染),本例把面板
+## 每行内容打进日志以证明 UI 反映了背包状态。
+##
+## 说明:这里用最朴素的 Control + VBox;真实项目可让面板组合一个 KitUiScreen 子节点拿到
+## entered/exited/covered/revealed 生命周期钩子(见 docs/ui/ui-stack.md)。
+
+var _lines: PackedStringArray = PackedStringArray()
+
+
+## 由背包 + 物品表构建面板内容(需在 push 前调用)。
+func setup(bag, registry) -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var vbox := VBoxContainer.new()
+	add_child(vbox)
+	var title := Label.new()
+	title.text = "背包"
+	vbox.add_child(title)
+	_lines = PackedStringArray()
+	for entry in _aggregate(bag):
+		var idef = registry.get_def_or(&"item", entry["id"], null)
+		var display := String(idef.display_name) if idef != null else String(entry["id"])
+		var line := "%s x%d" % [display, entry["count"]]
+		_lines.append(line)
+		var lbl := Label.new()
+		lbl.text = line
+		vbox.add_child(lbl)
+
+
+## 面板当前显示的每一行(供日志/断言用)。
+func lines() -> PackedStringArray:
+	return _lines
+
+
+## 遍历背包格子,按 id 汇总为 [{id, count}, ...] 并按 id 排序(确定性)。
+## 注:KitInventory 没有"列出全部物品"的聚合方法,消费者得手动遍历——见 README 要点里
+## 记的一个可补 kit 便利方法(如 totals()/entries())。
+func _aggregate(bag) -> Array:
+	var totals := {}
+	for i in bag.capacity():
+		var s = bag.slot(i)
+		if not s.is_empty():
+			var id = s["id"]
+			totals[id] = int(totals.get(id, 0)) + int(s["count"])
+	var ids = totals.keys()
+	# StringName 数组 .sort() 按指针地址排(非字典序,Godot 的坑),按 String 值比较拿字母序
+	ids.sort_custom(func(x, y): return String(x) < String(y))
+	var out := []
+	for id in ids:
+		out.append({"id": id, "count": totals[id]})
+	return out

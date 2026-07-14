@@ -10,6 +10,7 @@ extends Node
 ## (首次需先 godot --headless --path . --import 生成 KitInventory/KitDataRegistry 类缓存。)
 
 const FarmScript := preload("res://examples/farm-sim/farm.gd")
+const BackpackPanelScript := preload("res://examples/farm-sim/backpack_panel.gd")
 
 var _registry
 var _bag
@@ -71,16 +72,28 @@ func _ready() -> void:
 	CoreKit.log.info("[Save] 读档后(已复原): %s turnip=%d" % [_date_str(), _bag.count(&"turnip")])
 	CoreKit.saves.delete_slot(slot)   # 清掉存档槽,保证示例可重复跑
 
+	# 8. 背包 UI 面板入栈 —— dogfood KitUiStack:push 一个反映背包内容的 Control 面板。
+	var stack := KitUiStack.new()
+	stack.name = "UiStack"
+	add_child(stack)
+	var panel = BackpackPanelScript.new()
+	panel.setup(_bag, _registry)
+	stack.push(panel)
+	CoreKit.log.info("[UI] 背包面板入栈,depth=%d" % stack.depth())
+	for line in panel.lines():
+		CoreKit.log.info("[UI]   %s" % line)
+
 
 func _date_str() -> String:
 	var c = CoreKit.clock
 	return "y%d %s d%d %02d:%02d" % [c.year(), c.season_name(), c.day(), c.hour(), c.minute()]
 
 
-## 排序副本(不改原数组)。
+## 按字符串字典序排的副本(不改原数组)。注意:StringName 数组的原生 .sort() 是按
+## 指针地址排、非字典序(Godot 的坑),故这里用 String(x) 比较拿到稳定的字母序。
 func _sorted(a) -> Array:
 	var c := Array(a)
-	c.sort()
+	c.sort_custom(func(x, y): return String(x) < String(y))
 	return c
 
 
