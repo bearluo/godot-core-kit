@@ -1,0 +1,11 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/quest_def.gd" id="1_quest"]
+
+[resource]
+script = ExtResource("1_quest")
+id = &"turnip_tycoon"
+title = "萝卜大户:卖出 3 个白萝卜"
+kind = &"sell_count"
+target = 3
+item = &"turnip"

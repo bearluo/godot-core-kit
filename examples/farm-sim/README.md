@@ -1,16 +1,17 @@
 # 农场经营 MVP 骨架(farm-sim)
 
-用一条确定性剧情把多个子系统串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈**。整段是**框架消费者视角**——只调 `CoreKit.*` 与两个 `class_name` 类库(`KitInventory`/`KitDataRegistry`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
+用一条确定性剧情把多个子系统串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈** → **任务结算**。整段是**框架消费者视角**——只调 `CoreKit.*` 与两个 `class_name` 类库(`KitInventory`/`KitDataRegistry`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
 
 验证覆盖的子系统:
 
 | 子系统 | 在本例中的角色 |
 |---|---|
-| `KitDataRegistry`(off-facade) | 一个 registry 存 **crop + item 两种类型**:作物表、物品表(含价格),`load_dir` 载入、`get_def` 查 |
+| `KitDataRegistry`(off-facade) | 一个 registry 存 **crop + item + quest 三种类型**:作物/物品(含价格)/任务表,`load_dir` 载入、`get_def` 查 |
 | `KitInventory`(off-facade) | 玩家背包:买入/收获入库、播种/出售扣除;单格堆叠上限由 item 表驱动 |
-| `CoreKit.clock` + `CoreKit.bus` | 逐日推进,每天广播 `clock:day_changed`,作物订阅后生长(跨子系统解耦) |
-| `CoreKit.bus`(游戏侧命名空间) | 商店交易广播 **`shop:bought`/`shop:sold`**;游戏侧**既发布又订阅**,验证命名约定对游戏代码同样适用 |
-| `CoreKit.saves` | 存档:`clock.to_dict()`+`bag.to_dict()`+金币 存槽,`load`+`from_dict` 复原(经 JSON 往返) |
+| `CoreKit.clock` + `CoreKit.bus` | 逐日推进,每天广播 `clock:day_changed`,作物/任务订阅后各自反应(跨子系统解耦) |
+| `CoreKit.bus`(游戏侧命名空间) | 商店广播 **`shop:bought`/`shop:sold`**、任务广播 **`quest:completed`**;游戏侧**既发布又订阅** |
+| `CoreKit.bus`(多来源聚合) | 任务日志**一个订阅方汇聚 `clock:day_changed`+`shop:sold` 两个来源**推进目标 |
+| `CoreKit.saves` | 存档:`clock`+`bag`+金币+任务进度 存槽,`load`+`from_dict` 复原(经 JSON 往返) |
 | `KitUiStack`(off-facade) | 背包面板 `push` 进 UI 栈,面板内容反映背包 |
 
 ## 文件
@@ -18,12 +19,14 @@
 | 文件 | 作用 |
 |---|---|
 | `crop_def.gd` + `data/crops/{turnip,parsnip}.tres` | 作物定义 `Resource`(id/天数/种子/产物/数量) |
-| `item_def.gd` + `data/items/*.tres` | 物品定义 `Resource`(id/展示名/max_stack/类别/买价/卖价);种子 + 产物各 2 份 |
+| `item_def.gd` + `data/items/*.tres` | 物品定义 `Resource`(id/展示名/max_stack/类别/买价/卖价) |
+| `quest_def.gd` + `data/quests/*.tres` | 任务定义 `Resource`(id/标题/条件类型/目标值/限定物品) |
 | `crop.gd` | 一株已播种作物(Node)。订阅 `CoreKit.clock.EV_DAY_CHANGED`,每天长 1 格 |
 | `farm.gd` | 农田 = 集成粘合层。持有注入的 registry+背包,负责 `plant`/`harvest_all` |
 | `shop.gd` | 商店 + 钱包(游戏侧经济)。`buy`/`sell` 按 item 表价格,交易广播 `shop:*` 事件 |
+| `quest_log.gd` | 任务日志。订阅 `clock:`+`shop:` 事件推进目标,达标广播 `quest:completed`,进度可存档 |
 | `backpack_panel.gd` | 极简背包 UI 面板(Control):列出背包物品×总数,供 `KitUiStack.push` |
-| `game.gd` / `game.tscn` | 驱动:9 段剧情串起全部验证。整条故事的入口 |
+| `game.gd` / `game.tscn` | 驱动:10 段剧情串起全部验证。整条故事的入口 |
 
 ## 跑法
 
@@ -39,7 +42,7 @@
 (以下略去每行的 `[时间][INFO]` 日志前缀)
 
 ```
-[Farm] 载入 2 作物 + 4 物品,registry 类型: [crop, item]
+[Farm] 载入 2 作物 + 4 物品 + 3 任务,registry 类型: [crop, item, quest]
 [Shop] 开局金币 200
 [Shop] 买入 防风草种子 x3 花 60,余额 140
 [Shop] 买入 白萝卜种子 x3 花 30,余额 110
@@ -51,41 +54,50 @@
 [Crop:白萝卜] 第 3 天 生长 2/2  已成熟
 [Crop:防风草] 第 3 天 生长 2/4
 [Crop:防风草] 第 4 天 生长 3/4
+[Quest] 完成:坚持务农:撑到第 5 天
 [Crop:防风草] 第 5 天 生长 4/4  已成熟
 [Farm] 收获 白萝卜 x3 → 背包(单格上限 99)
 [Farm] 收获 防风草 x2 → 背包(单格上限 1)
+[Quest] 完成:首笔收入:累计赚到 100 金币
+[Quest] 完成:萝卜大户:卖出 3 个白萝卜
 [Shop] 卖出 白萝卜 x3 得 105,余额 215
 [Shop] 结算:金币 215,累计收入 105
-[Save] 已存档 'farm_demo' @ y1 spring d5 06:00 gold=215
-[Save] 读档前(已变化): y1 spring d10 06:00 gold=0
-[Save] 读档后(已复原): y1 spring d5 06:00 gold=215
+[Save] 已存档 'farm_demo' @ y1 spring d5 06:00 gold=215 完成任务=3
+[Save] 读档前(已变化): y1 spring d10 06:00 gold=0 完成任务=0
+[Save] 读档后(已复原): y1 spring d5 06:00 gold=215 完成任务=3
 [UI] 背包面板入栈,depth=1
 [UI]   防风草 x2
 [UI]   防风草种子 x2
 [UI]   白萝卜种子 x2
+[Quest] 结算(3/3 完成):
+[Quest]   ✓ 105/100 首笔收入:累计赚到 100 金币
+[Quest]   ✓ 5/5 坚持务农:撑到第 5 天
+[Quest]   ✓ 3/3 萝卜大户:卖出 3 个白萝卜
 ```
 
 逐段对应验证点:
-1. `载入 2 作物 + 4 物品 … [crop, item]` —— 一个 `KitDataRegistry` **同时承载两种类型**,`load_dir` 分别扫 `data/crops`、`data/items`。
+1. `载入 2 作物 + 4 物品 + 3 任务 … [crop, item, quest]` —— 一个 `KitDataRegistry` **同时承载三种类型**,`load_dir` 分别扫三个子目录。
 2. `[Shop] 买种子` —— 开局 200 金币,`shop.buy` 按 item 表 `buy_price` 扣钱入包,广播 `shop:bought`;价格数据驱动。
-3. `[Crop:*] 第 N 天 生长 x/y` —— 每次 `CoreKit.clock.advance_day()` 经 `CoreKit.bus` 广播 `clock:day_changed`,作物**只认事件、不认时钟**地长一格。
-4. `收获 … 单格上限 N` —— 上限取自 item 表:防风草 `max_stack=1`,收 2 株 → 占 2 格(UI 里仍聚合成"防风草 x2"),证明**数据驱动堆叠**。
-5. `[Shop] 卖 … 累计收入 105` —— `shop.sell` 按 `sell_price` 入账、广播 `shop:sold`;`game.gd` **订阅了自家的 `shop:sold`** 累计总收入,证明 bus 命名约定 `namespace:event` 在**游戏侧作为发布方+订阅方**同样成立(`shop:` 是游戏自有命名空间)。
-6. `[Save] 存 → 变 → 复原` —— `clock+bag+金币` 存进 `CoreKit.saves`,推进 5 天+清空钱包后 `load`+`from_dict` 完整复原到存档点(d5/gold=215),证明 **saves 接入 + to_dict/from_dict 扛得住 JSON int→float 往返**。
-7. `[UI] 背包面板` —— `KitUiStack.push` 一个反映背包内容的 Control 面板(白萝卜已卖出,留防风草+种子),`depth=1`。
+3. `[Crop:*] 生长` —— `CoreKit.clock.advance_day()` 经 bus 广播 `clock:day_changed`,作物**只认事件**地长一格。
+4. `[Quest] 完成:坚持务农`(第 5 天)—— 任务日志订阅 `clock:day_changed`,`reach_day` 目标在 d5 达标。
+5. `[Quest] 完成:首笔收入 / 萝卜大户`(卖出时)—— 任务日志**同时**订阅 `shop:sold`,`earn_gold`(累计 105≥100)与 `sell_count`(卖 3 白萝卜≥3)达标 → 证明 **bus 作多来源事件聚合器**(一个订阅方汇聚 clock:+shop: 两来源)。
+6. `[Save] 存 → 变 → 复原` —— `clock+bag+金币+任务进度` 存进 `CoreKit.saves`,推进 5 天+清空钱包+遗忘任务后 `load`+`from_dict` 完整复原(d5/gold=215/完成任务=3),证明 **saves 接入 + to_dict/from_dict 扛得住 JSON int→float 往返**。
+7. `[UI] 背包面板` —— `KitUiStack.push` 一个反映背包内容的 Control 面板,`depth=1`。
+8. `[Quest] 结算 3/3` —— 三条目标各由不同来源事件在整局中聚合达成。
 
 ## 要点
 
 - **消费者视角、零 kit 侵入**:整例不 `preload` 任何子系统脚本,`registry`/`bag` 全由驱动方 `bind(...)` 注入——这正是"用 core-kit 做游戏"的推荐姿势。
-- **跨子系统靠 bus 解耦**:作物不持有时钟引用,只订阅事件名常量 `CoreKit.clock.EV_DAY_CHANGED`(命名约定 `namespace:event`,见 [`event-bus.md`](../../addons/godot-core-kit/docs/core/event-bus.md))。换任何东西驱动"过一天"都不用改作物。
-- **游戏可定义自己的 bus 命名空间**:`shop.gd` 用 `shop:bought`/`shop:sold` 常量发布,与 kit 的 `clock:` 并存互不干扰——命名约定不止约束 kit,游戏侧照办即可解耦自己的系统。
-- **payload = 快照/结构**:`clock:*` payload 是 `clock.snapshot()`;`shop:*` payload 是 `{item,qty,cost/earn,gold}` 单 Dictionary(遵约定"单 Variant payload")。
-- **Node 监听者主动清理**:`Crop._exit_tree` 调 `CoreKit.bus.unsubscribe_all(self)`,收获 `free` 时不留悬空订阅。
-- **钱包是游戏侧状态**:kit 无货币子系统,`shop.gold` 是游戏自有 int,随存档 `to_dict/from_dict` 一起走——展示"什么归 kit、什么归游戏"的边界。
-- **dogfood 记到的两条坑**(留作后续可选的 kit 改进,均属"发现即价值"):
-  1. **`StringName` 数组的原生 `.sort()` 按指针地址排、非字典序**(Godot 行为)。想按字母序列出 `registry.ids()/types()` 或背包物品,必须 `sort_custom(func(x,y): return String(x) < String(y))`(见 `game.gd._sorted` / `backpack_panel._aggregate`)。kit 侧可考虑让 `ids()/types()` 提供 String 有序变体或在文档警示。
-  2. **`KitInventory` 没有"列出全部物品"的聚合方法**:背包 UI 想按 id 汇总只能手动遍历 `capacity()`×`slot(i)`(见 `backpack_panel._aggregate`)。kit 侧可考虑补 `totals() -> Dictionary` / `entries()` 便利方法。
-  > 按分支分流规矩,这两条若要修,应剥出来走 kit 正常 SDD → run_all 绿 → ff-merge 进 main(升版),再把本分支 rebase 上去;示例本身留在 `example/farm-sim` 不合 main。
+- **跨子系统靠 bus 解耦**:作物/任务都不持有时钟或商店引用,只订阅事件名常量(命名约定 `namespace:event`,见 [`event-bus.md`](../../addons/godot-core-kit/docs/core/event-bus.md))。
+- **游戏可定义自己的 bus 命名空间**:`shop:`(shop.gd)、`quest:`(quest_log.gd)与 kit 的 `clock:` 三者并存互不干扰——命名约定不止约束 kit,游戏侧照办即可解耦自己的系统。
+- **bus 是多来源聚合器**:`quest_log` 一个订阅方同时消费 `clock:day_changed` 与 `shop:sold`,把不同系统的事件汇成任务进度——这是"没有引用关系的广播"最典型的用法。
+- **持久化边界**:`shop.gold` / 任务进度是游戏侧状态(kit 无货币/任务子系统),随存档 `to_dict/from_dict` 一起走——展示"什么归 kit、什么归游戏"。
+- **Node 监听者主动清理**:`Crop`/`QuestLog` 在 `_exit_tree` 调 `CoreKit.bus.unsubscribe_all(self)`,不留悬空订阅。
+- **dogfood 记到的三条坑**(前两条留作后续可选的 kit 改进,均属"发现即价值"):
+  1. **`StringName` 数组的原生 `.sort()` 按指针地址排、非字典序**(Godot 行为)。列 `registry.ids()/types()` 或背包物品要字母序,必须 `sort_custom(func(x,y): return String(x) < String(y))`(见 `game.gd._sorted` / `backpack_panel._aggregate` / `quest_log._ready`)。kit 侧可考虑让 `ids()/types()` 提供 String 有序变体或在文档警示。
+  2. **`KitInventory` 没有"列出全部物品"的聚合方法**:背包 UI 想按 id 汇总只能手动遍历 `capacity()`×`slot(i)`(见 `backpack_panel._aggregate`)。kit 侧可考虑补 `totals() -> Dictionary` / `entries()`。
+  3. **`StringName` 作 Dictionary 键经存档(JSON)会退化为 `String`**:自定义 `to_dict/from_dict` 若用 StringName 键存 dict,`from_dict` 必须把键归一回 StringName(见 `quest_log.from_dict`),否则后续用 StringName 索引会 miss。kit 各子系统的 `from_dict` 已规避此坑(如 KitInventory 存 `String(id)`、读 `StringName(id)`),游戏侧照做即可。
+  > 按分支分流规矩,前两条若要修,应剥出来走 kit 正常 SDD → run_all 绿 → ff-merge 进 main(升版),再把本分支 rebase 上去;示例本身留在 `example/farm-sim` 不合 main。
 - **无类型返回值 + `:=` 会 parse error**:`var n := registry.load_dir(...)` 因 `registry` 无类型、编译期推不出返回类型而报错,退回普通 `var n = ...`。
-- **这是骨架不是成品**:没有网格地块、工具体力、动物 NPC、任务/对话——那些是"游戏本体",不属于 kit。本例只验证这些地基能不能顺畅拼在一起。
+- **这是骨架不是成品**:没有网格地块、工具体力、动物 NPC、对话——那些是"游戏本体",不属于 kit。本例只验证这些地基能不能顺畅拼在一起。
 - 子系统完整 API 见 [`game-clock.md`](../../addons/godot-core-kit/docs/systems/game-clock.md) / [`kit-inventory.md`](../../addons/godot-core-kit/docs/inventory/kit-inventory.md) / [`kit-data-registry.md`](../../addons/godot-core-kit/docs/data/kit-data-registry.md) / [`save-manager.md`](../../addons/godot-core-kit/docs/systems/save-manager.md) / [`ui-stack.md`](../../addons/godot-core-kit/docs/ui/ui-stack.md)。

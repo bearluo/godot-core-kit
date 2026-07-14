@@ -1,0 +1,11 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/quest_def.gd" id="1_quest"]
+
+[resource]
+script = ExtResource("1_quest")
+id = &"survive_day5"
+title = "坚持务农:撑到第 5 天"
+kind = &"reach_day"
+target = 5
+item = &""

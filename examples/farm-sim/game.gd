@@ -11,11 +11,13 @@ extends Node
 
 const FarmScript := preload("res://examples/farm-sim/farm.gd")
 const ShopScript := preload("res://examples/farm-sim/shop.gd")
+const QuestLogScript := preload("res://examples/farm-sim/quest_log.gd")
 const BackpackPanelScript := preload("res://examples/farm-sim/backpack_panel.gd")
 
 var _registry
 var _bag
 var _shop
+var _quest_log
 var _total_earned := 0   ## 由订阅 shop:sold 累计:演示游戏侧既发布又订阅自有命名空间事件
 
 
@@ -24,8 +26,17 @@ func _ready() -> void:
 	_registry = KitDataRegistry.new()
 	var n_crop = _registry.load_dir(&"crop", "res://examples/farm-sim/data/crops")
 	var n_item = _registry.load_dir(&"item", "res://examples/farm-sim/data/items")
-	CoreKit.log.info("[Farm] 载入 %d 作物 + %d 物品,registry 类型: [%s]" % [
-		n_crop, n_item, _join(_registry.types())])
+	var n_quest = _registry.load_dir(&"quest", "res://examples/farm-sim/data/quests")
+	CoreKit.log.info("[Farm] 载入 %d 作物 + %d 物品 + %d 任务,registry 类型: [%s]" % [
+		n_crop, n_item, n_quest, _join(_registry.types())])
+
+	# 1b. 任务日志:载入 quest 定义,订阅 clock:day_changed + shop:sold 追踪目标。
+	#     dogfood:CoreKit.bus 作【多来源事件聚合器】;quest: 是游戏第 3 个自有命名空间。
+	#     必须在时钟推进/卖出之前入树(其 _ready 里订阅,晚了会漏事件)。
+	_quest_log = QuestLogScript.new()
+	_quest_log.name = "QuestLog"
+	_quest_log.bind(_registry)
+	add_child(_quest_log)
 
 	# 2. 背包 + 商店(起始金币 200)+ 买种子。价格走 item 表,交易广播 shop: 命名空间事件。
 	#    并订阅自家 shop:sold 累计总收入 —— 游戏侧既发布又消费自有命名空间事件,验证约定通用。
@@ -64,19 +75,26 @@ func _ready() -> void:
 	# 8. 存档往返 —— clock+bag+金币 存进 CoreKit.saves,读回 from_dict 复原。
 	#    验证第 4 个子系统 saves 接入,以及 to_dict/from_dict 扛得住 JSON int→float 往返。
 	var slot := "farm_demo"
-	CoreKit.saves.save(slot, {"clock": CoreKit.clock.to_dict(), "bag": _bag.to_dict(), "gold": _shop.gold})
-	CoreKit.log.info("[Save] 已存档 '%s' @ %s gold=%d" % [slot, _date_str(), _shop.gold])
-	# 存档后继续游戏(推进 5 天 + 清空钱包),制造与存档点的差异
+	CoreKit.saves.save(slot, {
+		"clock": CoreKit.clock.to_dict(), "bag": _bag.to_dict(),
+		"gold": _shop.gold, "quests": _quest_log.to_dict()})
+	CoreKit.log.info("[Save] 已存档 '%s' @ %s gold=%d 完成任务=%d" % [
+		slot, _date_str(), _shop.gold, _quest_log.done_count()])
+	# 存档后继续游戏(推进 5 天 + 清空钱包 + 遗忘任务),制造与存档点的差异
 	for i in range(5):
 		CoreKit.clock.advance_day()
 	_shop.gold = 0
-	CoreKit.log.info("[Save] 读档前(已变化): %s gold=%d" % [_date_str(), _shop.gold])
-	# 读回存档:from_dict 把时钟/背包复原,金币手动读回(游戏侧状态)
+	_quest_log.forget_all()
+	CoreKit.log.info("[Save] 读档前(已变化): %s gold=%d 完成任务=%d" % [
+		_date_str(), _shop.gold, _quest_log.done_count()])
+	# 读回存档:from_dict 把时钟/背包/任务复原,金币手动读回(游戏侧状态)
 	var snap = CoreKit.saves.load(slot)
 	CoreKit.clock.from_dict(snap["clock"])
 	_bag.from_dict(snap["bag"])
 	_shop.gold = int(snap["gold"])
-	CoreKit.log.info("[Save] 读档后(已复原): %s gold=%d" % [_date_str(), _shop.gold])
+	_quest_log.from_dict(snap["quests"])
+	CoreKit.log.info("[Save] 读档后(已复原): %s gold=%d 完成任务=%d" % [
+		_date_str(), _shop.gold, _quest_log.done_count()])
 	CoreKit.saves.delete_slot(slot)   # 清掉存档槽,保证示例可重复跑
 
 	# 9. 背包 UI 面板入栈 —— dogfood KitUiStack:push 一个反映背包内容的 Control 面板。
@@ -89,6 +107,11 @@ func _ready() -> void:
 	CoreKit.log.info("[UI] 背包面板入栈,depth=%d" % stack.depth())
 	for line in panel.lines():
 		CoreKit.log.info("[UI]   %s" % line)
+
+	# 10. 任务结算概览(进度由 clock:/shop: 事件在整局中聚合而来)
+	CoreKit.log.info("[Quest] 结算(%d/%d 完成):" % [_quest_log.done_count(), _quest_log.quest_count()])
+	for line in _quest_log.summary_lines():
+		CoreKit.log.info("[Quest]   %s" % line)
 
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
