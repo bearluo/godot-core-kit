@@ -87,6 +87,17 @@ func count(id: StringName) -> int:
 	return total
 
 
+## 全部物品的 id -> 总数聚合(跨格合并同 id,忽略 data 分堆);空背包返回 {}。
+## 便于背包 UI / 存量查询按 id 汇总,免手动遍历 capacity()×slot()。
+func totals() -> Dictionary:
+	var out := {}
+	for s in _slots:
+		if s != null:
+			var id = s["id"]
+			out[id] = int(out.get(id, 0)) + int(s["count"])
+	return out
+
+
 func has(id: StringName, amount: int = 1) -> bool:
 	return count(id) >= amount
 

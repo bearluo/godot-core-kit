@@ -80,12 +80,21 @@ func all(type: StringName) -> Array:
 	return (_store[type] as Dictionary).values() if _store.has(type) else []
 
 
-func ids(type: StringName) -> Array:
-	return (_store[type] as Dictionary).keys() if _store.has(type) else []
+## 某 type 的全部 id(默认插入序)。sorted=true 时按【字符串字典序】返回——StringName
+## 数组的原生 sort() 按指针地址排、非字典序,列 UI/日志需稳定字母序时用它。
+func ids(type: StringName, sorted := false) -> Array:
+	var result: Array = (_store[type] as Dictionary).keys() if _store.has(type) else []
+	if sorted:
+		result.sort_custom(func(a, b): return String(a) < String(b))
+	return result
 
 
-func types() -> Array:
-	return _store.keys()
+## 全部已注册 type(默认插入序)。sorted=true 时按字符串字典序(理由同 ids())。
+func types(sorted := false) -> Array:
+	var result: Array = _store.keys()
+	if sorted:
+		result.sort_custom(func(a, b): return String(a) < String(b))
+	return result
 
 
 func count(type: StringName) -> int:

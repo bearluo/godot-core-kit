@@ -74,6 +74,18 @@ func _initialize() -> void:
 	if Reg.new().load_dir(&"x", "res://__nope__") != 0:
 		print("FAIL 9: 坏路径 load_dir 应返 0"); failures += 1
 
+	# 10. ids/types 排序变体(String 字典序,不受 StringName 指针序影响)
+	var rs = Reg.new()
+	rs.register(&"zeta", &"b", 1)
+	rs.register(&"alpha", &"c", 1)
+	rs.register(&"alpha", &"a", 1)
+	if rs.ids(&"alpha", true) != [&"a", &"c"]:
+		print("FAIL 10: ids sorted 应 [a, c],实际 %s" % str(rs.ids(&"alpha", true))); failures += 1
+	if rs.types(true) != [&"alpha", &"zeta"]:
+		print("FAIL 10: types sorted 应 [alpha, zeta],实际 %s" % str(rs.types(true))); failures += 1
+	if rs.ids(&"alpha").size() != 2:
+		print("FAIL 10: ids 默认应含 2 项"); failures += 1
+
 	if failures == 0:
 		print("test_kit_data_registry: ALL PASS")
 		quit(0)

@@ -78,6 +78,17 @@ func get_state(state_name: String) -> KitState:
 	return _states.get(state_name)
 
 
+## 当前态名(String);无当前态(空机器/未进入)返回空串。
+## 免去调用方每次写 String(current_state.name) + null 守卫。
+func state_name() -> String:
+	return String(current_state.name) if current_state != null else ""
+
+
+## 当前是否处于指定态(null 安全)。
+func is_in(query: String) -> bool:
+	return current_state != null and String(current_state.name) == query
+
+
 ## 登记一条事件转移。from_name 可为已注册态名或 ANYSTATE;event 为命名事件。
 ## to_name 未注册 → push_warning + 忽略;同 (from,event) 重复登记 → 覆盖 + push_warning。
 func add_transition(from_name: String, to_name: String, event: String) -> void:

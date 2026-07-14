@@ -50,6 +50,8 @@ const MAX_STACK := 32                              # pushdown 栈深守卫
 
 func transition_to(state_name: String) -> void    # 按状态名转换;未知名字 push_warning + 空操作
 func get_state(state_name: String) -> KitState    # 按名取状态节点;未知名字返回 null
+func state_name() -> String                        # 当前态名;无当前态返回 ""(null 安全)
+func is_in(query: String) -> bool                  # 当前是否处于指定态(null 安全)
 func add_transition(from_name: String, to_name: String, event: String) -> void  # 登记事件转移(from 可为 ANYSTATE)
 func dispatch(event: String) -> bool               # 派发事件:命中则转移返回 true;无匹配静默 false
 func push_state(state_name: String) -> void        # 压栈进新态(暂停语义,current.pause())

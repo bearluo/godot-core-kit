@@ -17,8 +17,8 @@ func get_def_or(type: StringName, id: StringName, fallback := null) -> Variant  
 func has_def(type: StringName, id: StringName) -> bool
 
 func all(type: StringName) -> Array        # 该 type 全部定义(插入序)
-func ids(type: StringName) -> Array
-func types() -> Array
+func ids(type: StringName, sorted := false) -> Array     # sorted=true 按字符串字典序
+func types(sorted := false) -> Array                     # sorted=true 按字符串字典序
 func count(type: StringName) -> int
 func clear(type := &"") -> void            # 空 type 清全部
 ```
@@ -65,3 +65,4 @@ bag.add(id, n, {}, reg.get_def(&"item", id).max_stack)
 - **id 派生规则**:定义有非空 `id_property`(默认 `id`)属性则用其值,否则用文件名 stem(`turnip.tres` → `&"turnip"`)。
 - **缺定义**:`get_def` 报 `push_warning` 并返回 null(与 `CoreKit.service` 的"未找到即报错"范式一致);要静默探测用 `has_def` 或 `get_def_or`。
 - **格式限 Resource**:v1 不提供 JSON 载入;`register` 的 `def` 是 `Variant`,游戏若坚持可塞 Dictionary,但目录扫描针对 `.tres`/`.res`。
+- **`ids`/`types` 的 `sorted` 参数**:默认返回插入序;`sorted=true` 按**字符串字典序**排(内部用 `String(x) < String(y)` 比较)。这是因为 `StringName` 数组的原生 `.sort()` 按**指针地址**排、非字典序——列 UI/日志需稳定字母序时务必用 `sorted=true`(或自己 `sort_custom`),别指望裸 `.sort()`。

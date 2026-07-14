@@ -337,6 +337,27 @@ func _initialize() -> void:
 		failures += 1
 	m13.free()
 
+	# P14. state_name / is_in 便利查询(null 安全)
+	var b14: Array = _build([["Idle", ProbeState], ["Run", ProbeState]])
+	var m14 = b14[0]
+	root.add_child(m14)
+	await process_frame
+	if m14.state_name() != "Idle" or not m14.is_in("Idle") or m14.is_in("Run"):
+		print("FAIL P14: 初始 state_name/is_in 不正确,name=%s" % m14.state_name())
+		failures += 1
+	m14.transition_to("Run")
+	if m14.state_name() != "Run" or not m14.is_in("Run"):
+		print("FAIL P14: 转移后 state_name/is_in 不正确,name=%s" % m14.state_name())
+		failures += 1
+	m14.free()
+	var empty14 = MachineScript.new()   # 无状态子节点 → 无当前态
+	root.add_child(empty14)
+	await process_frame
+	if empty14.state_name() != "" or empty14.is_in("X"):
+		print("FAIL P14: 空机器 state_name 应空串、is_in 应 false")
+		failures += 1
+	empty14.free()
+
 	if failures == 0:
 		print("test_state_machine: ALL PASS")
 		quit(0)

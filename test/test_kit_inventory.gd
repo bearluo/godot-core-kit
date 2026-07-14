@@ -107,6 +107,17 @@ func _initialize() -> void:
 	if fired["n"] < 1:
 		print("FAIL 14: add 应发 changed"); failures += 1
 
+	# 15. totals 聚合(跨格合并同 id,忽略 data 分堆)
+	var t = Inv.new(10, 5)
+	t.add(&"wood", 12)            # 5+5+2 三格
+	t.add(&"stone", 3)
+	t.add(&"wood", 2, {"q": 1})  # 不同 data 另起一格,但 totals 按 id 合并
+	var tot = t.totals()
+	if tot.get(&"wood") != 14 or tot.get(&"stone") != 3 or tot.size() != 2:
+		print("FAIL 15: totals 应 {wood:14, stone:3},实际 %s" % str(tot)); failures += 1
+	if not Inv.new(3).totals().is_empty():
+		print("FAIL 15: 空背包 totals 应 {}"); failures += 1
+
 	if failures == 0:
 		print("test_kit_inventory: ALL PASS")
 		quit(0)
