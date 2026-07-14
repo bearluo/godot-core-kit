@@ -1,6 +1,6 @@
 # 农场经营 MVP 骨架(farm-sim)
 
-用一条确定性剧情把多个子系统串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进(天气影响)作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈** → **任务结算** → **对象池复用第二茬** → **成就结算** → **温室作用域服务** → **多语言本地化** → **帧调度环境 tick** → **异步资源预热**。整段是**框架消费者视角**——只调 `CoreKit.*` 与三个 `class_name` 类库(`KitInventory`/`KitDataRegistry`/`KitContext`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
+用一条确定性剧情把多个子系统串起来做 **dogfood 验证**:载数据表 → 开店买种子 → 播种 → 逐日推进(天气影响)作物生长 → 收获 → 卖产物换钱 → **存档往返** → **背包 UI 面板入栈** → **任务结算** → **对象池复用第二茬** → **成就结算** → **温室作用域服务** → **多语言本地化** → **帧调度环境 tick** → **异步资源预热** → **键位重绑定**。整段是**框架消费者视角**——只调 `CoreKit.*` 与三个 `class_name` 类库(`KitInventory`/`KitDataRegistry`/`KitContext`),不碰 kit 内部,专门用来暴露多子系统协作时的缺口。
 
 验证覆盖的子系统:
 
@@ -21,6 +21,7 @@
 | `CoreKit.i18n`(本地化) | 运行时切 zh/en/ja,同一 key(`FARM_WELCOME`/`CROP_turnip`…)出不同译文;翻译**内存现建现加**(`add_translation`,免 .po 导入),`locale_changed` 广播,缺 key 回退原样;locale 持久化走 Settings(非存档) |
 | `CoreKit.ticker`(帧调度) | **按渲染帧**跑持续逻辑(对照按天广播的 clock):`every_n` 洒水器每 3 帧错峰脉冲;`queue_task` 把 12 块地巡查按 `budget_msec` 预算分帧消化,`queue_drained` 收尾 |
 | `CoreKit.res`(异步预热) | 进新赛季前 `preload_batch` 预热 5 个资源进缓存,`batch_progress`/`batch_completed` 驱动加载条,完成后 `get_resource` 秒取;`is_cached`/`release`/`clear`。桌面走线程通道、Web 复用 ticker 分帧通道,API 一致 |
+| `CoreKit.input`(键位) | 运行时 `rebind_action`("ui_accept"→H)改 InputMap + 落 Settings `"input"` 分区,`action_rebound` 广播,`reset_action` 恢复工程默认 + 清覆盖;`get_action_event` 取当前键。缓冲 `is_action_buffered` 需真实输入(见文档) |
 
 ## 文件
 
@@ -38,7 +39,7 @@
 | `quest_log.gd` | 任务日志。订阅 `clock:`+`shop:` 事件推进目标,达标广播 `quest:completed`,进度可存档(每档) |
 | `achievement_tracker.gd` | 成就追踪器。订阅 `shop:`+`quest:`+`weather:` 解锁里程碑,解锁写 `CoreKit.settings`(账号级、非存档) |
 | `backpack_panel.gd` | 极简背包 UI 面板(Control):列出背包物品×总数,供 `KitUiStack.push` |
-| `game.gd` / `game.tscn` | 驱动:16 段剧情串起全部验证。整条故事的入口 |
+| `game.gd` / `game.tscn` | 驱动:17 段剧情串起全部验证。整条故事的入口 |
 
 ## 跑法
 
@@ -133,6 +134,11 @@
 [Res] 批次完成:progress=5/5,缓存数=5
 [Res] get_resource(crop.tscn)=PackedScene;release 一个后 缓存 5→4,is_cached=false
 [Res] clear 后缓存数=0
+[Input] 'ui_accept' 默认键=Enter
+[Input] action_rebound 信号 → ui_accept
+[Input] 重绑定后键=H - Physical,settings.input 已存=true
+[Input] action_rebound 信号 → ui_accept
+[Input] reset 后键=Enter,settings.input 覆盖已清=true
 ```
 > 天气由固定种子 RNG 决定,序列可复现(晴/雨影响作物当天生长几格)。注意存档只回滚时钟,
 > 不回滚天气 RNG,所以读档后重玩的第 6~9 天天气与存档前的不同——天气是瞬态、不入档。
@@ -157,6 +163,7 @@
 13. `[i18n] 切 zh/en/ja` —— **`CoreKit.i18n` 本地化**:3 份翻译**内存现建现加**(`Translation.new`+`add_message`→`add_translation`,免 .po 编辑器导入);`set_locale` 逐一切换,同一 key `FARM_WELCOME`/`CROP_turnip`/`CROP_parsnip` 出不同译文,每次切换广播 `locale_changed`。缺 key(`CROP_golden`)`has_translation=false`、`t()` 原样返回 key(debug 下去重告警帮发现漏翻)。locale 是跨存档偏好 → `set_locale` 自动持久化到 Settings 的 `"locale"` 分区(**不进存档槽**),收尾 `erase_section` 复位。
 14. `[Ticker] 洒水器 / 巡查` —— **`CoreKit.ticker` 帧调度**(按渲染帧,和按天广播的 clock 对照):① `every_n(cb, 3)` 洒水器每 3 帧脉冲一次,9 帧内 3 次(不同 handle 靠 `(_frame+handle)%n` 自动错峰,上百实体不挤同帧);② `queue_task` 把 12 块地巡查一次性入队(`待办=12`),把 `budget_msec` 调到 0.1ms 强制**分帧消化**(每帧至少 1 个不饿死),全部跑完后 `queue_drained` 广播 → `巡查完成:12 块, drained=true`。脉冲数/巡查数由固定 await 帧数决定,确定性可复现(跑两遍一致)。
 15. `[Res] 预热 / 命中 / 释放` —— **`CoreKit.res` 异步批量预热**:`preload_batch` 一批 5 个资源路径,`batch_progress`(每完成一个)/`batch_completed`(整批一次)驱动加载条;等 `batch_completed` 后 `缓存数=5`,`get_resource("crop.tscn")` 命中缓存秒取(`PackedScene`);`release` 一个 → `5→4`、`is_cached=false`;`clear` → `0`。桌面走线程通道跨帧轮询、Web 复用 `ticker` 的分帧预算队列(**res 与 ticker 天然联动**,`res.bind_ticker` 已由门面接线),对外 API/信号一致。只锁终态不打印到达顺序(线程到达序不定),跑两遍一致。
+16. `[Input] 重绑定 / reset` —— **`CoreKit.input` 键位重绑定**:动作仍在工程 Input Map 定义(本例借内置 `ui_accept`),`rebind_action(action, KEY_H 事件)` 运行时改 `InputMap` 并落 **Settings `"input"` 分区**(`已存=true`),广播 `action_rebound`;`get_action_event` 取当前第一个绑定(`Enter`→`H - Physical`→`Enter`);`reset_action` 恢复**工程默认**(启动快照)并清持久化覆盖(`已清=true`),同样广播 `action_rebound`。键位是跨存档偏好 → 落 Settings 不进存档槽;收尾 `erase_section("input")` 复位(否则覆盖会在下次启动被 `bind_settings` 恢复而污染初值)。前缓冲 `is_action_buffered`/`consume_buffer` 需真实 `_input` 事件,headless 不便注入,见文档。
 
 ## 要点
 
@@ -174,6 +181,7 @@
   - **收尾 `pool.clear("crop")`**:池持有的空闲实例是游离节点(不在树上),退出时不被 SceneTree 回收,不清会报 `resources still in use`——仿 `saves.delete_slot` 一样收尾释放。
 - **本地化用 `CoreKit.i18n`(不是散落各处的 `tr()`)**:单点托管——`set_locale` 一处切、`t(key)` 处处取、`locale_changed` 一个信号驱动 UI 刷新。翻译资源除了 `.po`/`.csv` 编辑器导入外,**还能内存现建现加**(`Translation.new`+`add_message`→`i18n.add_translation`),适合运行时/热更/测试(本例即用此法免导入)。两条边界:①缺 key 时 `t()` 原样返回 key 且 debug 去重告警,是**发现漏翻**的抓手,别把它当报错;②**locale 是跨存档偏好 → 进 Settings 不进存档槽**(与成就同理,`set_locale` 自动落 `"locale"` 分区),切勿存进 SaveManager。展示名要本地化就把 `.tres` 里的中文字面量换成 key、用 `i18n.t(key)` 取(本例用独立 key 演示,未改数据表的 `display_name`)。
 - **帧驱动 `CoreKit.ticker` vs 天驱动 `clock`(选对节奏)**:两种"随时间跑逻辑"的通道各司其职——**离散、语义化、低频**的用 `clock:day_changed` 事件(作物生长、任务、天气);**连续、高频、每帧**的持续逻辑用 `ticker`。`every_n(cb, n)` 把高频回调降频到每 n 帧、不同 handle 自动错峰(上百实体的低频 AI 不挤同帧,靠 `(_frame+handle)%n`);`queue_task`+`budget_msec` 把批量一次性任务(批量生成/巡查/烘焙)按每帧预算分摊到多帧、`queue_drained` 收尾,避免卡单帧。二者都只吃渲染帧(`_process`),要物理帧节奏自己写 `_physics_process`。回调宿主 `free()` 后 `every_n` 自动剪除,一次性队列里失效 Callable 直接跳过。**热路径别每帧 resolve/分配**,该降频的降频、该分帧的分帧。
+- **键位重绑定用 `CoreKit.input`(动作定义仍归工程 Input Map)**:本子系统不发明第二套动作系统,只补三件事——`rebind_action` 运行时改键并落 Settings、`device_changed` 设备切换广播(切按键图标)、`is_action_buffered` 输入前缓冲(落地前提前按也算)。**键位是跨存档偏好** → 和成就/locale 同理落 Settings `"input"` 分区(不进存档槽),`reset_action`/`reset_all` 回工程默认。键盘绑定用 `physical_keycode`(布局无关,故显示 `H - Physical`)。缓冲那套需真实 `_input` 事件驱动,本例只演示了确定性可复现的 rebind/reset/持久化/信号。
 - **异步预热用 `CoreKit.res`(别在进场景那帧同步 `load` 一大批)**:`preload_batch(paths)` 把一批资源提前塞进缓存,`batch_progress`/`batch_completed` 正好驱动加载条,就绪后 `get_resource` 命中缓存秒取。**双通道对外一致**:桌面用 `ResourceLoader.load_threaded_request`+`_process` 轮询,Web/无线程复用 `ticker` 的分帧预算队列逐帧消化——`res` 与 `ticker` 天然联动(门面已 `res.bind_ticker` 接线),你的代码一份、平台自适应。边界:批次对已缓存/在途路径去重但仍计入 `total`(加载条不缺格);`release` 只是"kit 不再钉住",真正回收由引擎引用计数决定;粒度是整资源(超大资源该拆)。
 - **手动 `bind` 注入 vs `KitContext` 服务容器**:本例前 12 段全程用手动 `bind(registry, ...)` 注入依赖(消费者视角最直白);第 13 段 `KitContext` 展示 DI 容器怎么把这套接线做成**按 key 解析 + 层级回退**——`CoreKit.provide/service` 是整局全局作用域,`KitContext` 节点是关卡/实体级作用域,`resolve` 沿祖先链向上、树顶兜底全局根。独特价值在**作用域 + shadow + 生命周期**:温室 `provide("registry", 专属)` 在子树内 shadow 全局同名 key,`provide_child("climate", node)` 让 Node 服务随容器 `free` 连带释放(对照 `provide` 只存引用不管生命周期)。心智与 per-entity `KitStateMachine` 一致:每个作用域一个容器。热路径别每帧 `resolve`,在 `_ready` pull 一次存成员。(本例未演示的 `subscribe`〔化解"后代 `_ready` 早于祖先"的时序坑〕/ `provide_factory`〔SINGLETON/TRANSIENT scope〕见 [`kit-context.md`](../../addons/godot-core-kit/docs/di/kit-context.md)。)
 - **dogfood 记到的四条坑,其中三条已反哺进 kit(v0.18.0)**——这正是"在 examples 里做游戏验证框架"的产出闭环:
@@ -183,7 +191,7 @@
   4. **`KitStateMachine` 没有"当前态判定"便利方法**,查当前态要 `sm.current_state != null and String(sm.current_state.name) == "X"`。→ **已修**:新增 `state_name() -> String` / `is_in(query) -> bool`(null 安全);本例已改用(见 `crop.is_ready`)。
   > 修复流程遵分支分流规矩:三条 kit 改进剥出来走 kit 正常 SDD → run_all 绿 → **ff-merge 进 main(0.17.0→0.18.0)**,再把本分支 rebase 到新 main、改用新 API。示例本身仍留在 `example/farm-sim` 不合 main。
   >
-  > **增量 8~14(对象池 / 天气 / 成就 / KitContext / i18n / 帧调度 / 资源预热)未再暴露新的 kit 缺口**——`CoreKit.pool` / `CoreKit.bus`(嵌套 publish)/ `CoreKit.settings` / `KitContext` / `CoreKit.i18n` / `CoreKit.ticker` / `CoreKit.res` 的现有 API 都够用,只重踩了一次已知的 GDScript `:=` 坑(下条)。这本身是正向信号:kit 表面已能顺滑支撑这些常见玩法系统。
+  > **增量 8~15(对象池 / 天气 / 成就 / KitContext / i18n / 帧调度 / 资源预热 / 键位重绑定)未再暴露新的 kit 缺口**——`CoreKit.pool` / `CoreKit.bus`(嵌套 publish)/ `CoreKit.settings` / `KitContext` / `CoreKit.i18n` / `CoreKit.ticker` / `CoreKit.res` / `CoreKit.input` 的现有 API 都够用,只重踩了一次已知的 GDScript `:=` 坑(下条)。这本身是正向信号:kit 表面已能顺滑支撑这些常见玩法系统。
 - **无类型对象的返回值/属性 + `:=` 会 parse error**:`var n := registry.load_dir(...)`、`var shown := def.grow_days`——只要右侧取自无类型变量(`registry`/`def` 都是无类型注入的),编译期推不出类型就报 `Cannot infer the type`,退回普通 `var x = ...` 即可。**这条本增量又踩了一次**(crop 天气重构里 `var shown := ...`),是 GDScript 与"消费者视角注入(不写类型)"结合下的高频坑,不是 kit 缺陷。
 - **这是骨架不是成品**:没有网格地块、工具体力、动物 NPC、对话——那些是"游戏本体",不属于 kit。本例只验证这些地基能不能顺畅拼在一起。
-- 子系统完整 API 见 [`game-clock.md`](../../addons/godot-core-kit/docs/systems/game-clock.md) / [`kit-inventory.md`](../../addons/godot-core-kit/docs/inventory/kit-inventory.md) / [`kit-data-registry.md`](../../addons/godot-core-kit/docs/data/kit-data-registry.md) / [`save-manager.md`](../../addons/godot-core-kit/docs/systems/save-manager.md) / [`settings.md`](../../addons/godot-core-kit/docs/core/settings.md) / [`ui-stack.md`](../../addons/godot-core-kit/docs/ui/ui-stack.md) / [`state-machine.md`](../../addons/godot-core-kit/docs/state-machine.md) / [`object-pool.md`](../../addons/godot-core-kit/docs/systems/object-pool.md) / [`kit-context.md`](../../addons/godot-core-kit/docs/di/kit-context.md) / [`i18n.md`](../../addons/godot-core-kit/docs/systems/i18n.md) / [`frame-scheduler.md`](../../addons/godot-core-kit/docs/systems/frame-scheduler.md) / [`resource-manager.md`](../../addons/godot-core-kit/docs/systems/resource-manager.md)。
+- 子系统完整 API 见 [`game-clock.md`](../../addons/godot-core-kit/docs/systems/game-clock.md) / [`kit-inventory.md`](../../addons/godot-core-kit/docs/inventory/kit-inventory.md) / [`kit-data-registry.md`](../../addons/godot-core-kit/docs/data/kit-data-registry.md) / [`save-manager.md`](../../addons/godot-core-kit/docs/systems/save-manager.md) / [`settings.md`](../../addons/godot-core-kit/docs/core/settings.md) / [`ui-stack.md`](../../addons/godot-core-kit/docs/ui/ui-stack.md) / [`state-machine.md`](../../addons/godot-core-kit/docs/state-machine.md) / [`object-pool.md`](../../addons/godot-core-kit/docs/systems/object-pool.md) / [`kit-context.md`](../../addons/godot-core-kit/docs/di/kit-context.md) / [`i18n.md`](../../addons/godot-core-kit/docs/systems/i18n.md) / [`frame-scheduler.md`](../../addons/godot-core-kit/docs/systems/frame-scheduler.md) / [`resource-manager.md`](../../addons/godot-core-kit/docs/systems/resource-manager.md) / [`input-manager.md`](../../addons/godot-core-kit/docs/systems/input-manager.md)。

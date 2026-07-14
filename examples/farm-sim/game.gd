@@ -9,7 +9,8 @@ extends Node
 ##       温室 KitContext 作用域服务(全局/作用域/shadow/provide_child 生命周期)→
 ##       i18n 本地化(内存翻译现建现加,切 zh/en/ja 同 key 出不同译文)→
 ##       帧调度 ticker(every_n 错峰降频 tick + queue_task 分帧预算队列,对照按天的 clock)→
-##       资源预热 res(preload_batch 异步批量预加载 + 缓存,与 ticker 分帧通道联动)。
+##       资源预热 res(preload_batch 异步批量预加载 + 缓存,与 ticker 分帧通道联动)→
+##       键位重绑定 input(rebind_action 改键落 Settings + action_rebound 信号 + reset)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
@@ -278,6 +279,25 @@ func _ready() -> void:
 		scene.get_class(), before, res.cached_count(), res.is_cached(q_path)])
 	res.clear()
 	CoreKit.log.info("[Res] clear 后缓存数=%d" % res.cached_count())
+
+	# 17. 键位重绑定 CoreKit.input —— dogfood 运行时改键 + 落 Settings + action_rebound 信号 + reset。
+	#     动作仍在工程 Input Map 定义(本例无自定义动作,借引擎内置 ui_accept 演示)。前缓冲
+	#     is_action_buffered 需真实 _input 事件,headless 不便注入,见 input-manager.md。
+	var input = CoreKit.input
+	var action := "ui_accept"
+	var on_rebound := func(a): CoreKit.log.info("[Input] action_rebound 信号 → %s" % a)
+	input.action_rebound.connect(on_rebound)
+	CoreKit.log.info("[Input] '%s' 默认键=%s" % [action, input.get_action_event(action).as_text()])
+	var new_ev := InputEventKey.new()
+	new_ev.physical_keycode = KEY_H
+	input.rebind_action(action, new_ev)           # 改 InputMap + 落 Settings section "input"
+	CoreKit.log.info("[Input] 重绑定后键=%s,settings.input 已存=%s" % [
+		input.get_action_event(action).as_text(), CoreKit.settings.has_value("input", action)])
+	input.reset_action(action)                    # 恢复工程默认 + 清持久化覆盖
+	CoreKit.log.info("[Input] reset 后键=%s,settings.input 覆盖已清=%s" % [
+		input.get_action_event(action).as_text(), not CoreKit.settings.has_value("input", action)])
+	input.action_rebound.disconnect(on_rebound)
+	CoreKit.settings.erase_section("input")        # 收尾复位,保证可重复跑(否则覆盖会在下次启动被恢复)
 
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
