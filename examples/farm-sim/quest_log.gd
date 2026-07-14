@@ -20,11 +20,7 @@ func bind(registry) -> void:
 
 
 func _ready() -> void:
-	var qids := []
-	for qid in _registry.ids(&"quest"):
-		qids.append(qid)
-	qids.sort_custom(func(x, y): return String(x) < String(y))
-	for qid in qids:
+	for qid in _registry.ids(&"quest", true):   # ids(type, true) = 字母序(v0.18.0,免手写 sort_custom)
 		_quests.append(_registry.get_def(&"quest", qid))
 		_progress[qid] = 0
 	CoreKit.bus.subscribe(CoreKit.clock.EV_DAY_CHANGED, _on_day)

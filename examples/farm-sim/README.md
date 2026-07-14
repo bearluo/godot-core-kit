@@ -97,12 +97,12 @@
 - **每实体状态机用 `KitStateMachine`**:`crop.gd` 在代码里建一台状态机(`Growing`/`Mature` 用内部类作 KitState,免加文件),相位切换交给 `transition_to`、`is_ready()` 查 `current_state.name`。构造有次序要求:**所有 KitState 子节点 add_child、`initial_state` 设好、`state_changed` 连好,都要在 `add_child(machine)`(入树触发机器 `_ready`)之前完成**。生长计数留在 crop、相位交给 FSM 是常见分工(FSM 建模离散相位/行为,计时器留实体)。
 - **持久化边界**:`shop.gold` / 任务进度是游戏侧状态(kit 无货币/任务子系统),随存档 `to_dict/from_dict` 一起走——展示"什么归 kit、什么归游戏"。
 - **Node 监听者主动清理**:`Crop`/`QuestLog` 在 `_exit_tree` 调 `CoreKit.bus.unsubscribe_all(self)`,不留悬空订阅。
-- **dogfood 记到的三条坑**(前两条留作后续可选的 kit 改进,均属"发现即价值"):
-  1. **`StringName` 数组的原生 `.sort()` 按指针地址排、非字典序**(Godot 行为)。列 `registry.ids()/types()` 或背包物品要字母序,必须 `sort_custom(func(x,y): return String(x) < String(y))`(见 `game.gd._sorted` / `backpack_panel._aggregate` / `quest_log._ready`)。kit 侧可考虑让 `ids()/types()` 提供 String 有序变体或在文档警示。
-  2. **`KitInventory` 没有"列出全部物品"的聚合方法**:背包 UI 想按 id 汇总只能手动遍历 `capacity()`×`slot(i)`(见 `backpack_panel._aggregate`)。kit 侧可考虑补 `totals() -> Dictionary` / `entries()`。
-  3. **`StringName` 作 Dictionary 键经存档(JSON)会退化为 `String`**:自定义 `to_dict/from_dict` 若用 StringName 键存 dict,`from_dict` 必须把键归一回 StringName(见 `quest_log.from_dict`),否则后续用 StringName 索引会 miss。kit 各子系统的 `from_dict` 已规避此坑(如 KitInventory 存 `String(id)`、读 `StringName(id)`),游戏侧照做即可。
-  4. **`KitStateMachine` 没有"当前态判定"便利方法**:查当前态只能 `sm.current_state != null and String(sm.current_state.name) == "X"`(带 null 守卫 + StringName→String)。kit 侧可考虑补 `state_name() -> String` / `is_in(name) -> bool`。
-  > 按分支分流规矩,kit 改进候选(1/2/4)若要修,应剥出来走 kit 正常 SDD → run_all 绿 → ff-merge 进 main(升版),再把本分支 rebase 上去;示例本身留在 `example/farm-sim` 不合 main。
+- **dogfood 记到的四条坑,其中三条已反哺进 kit(v0.18.0)**——这正是"在 examples 里做游戏验证框架"的产出闭环:
+  1. **`StringName` 数组的原生 `.sort()` 按指针地址排、非字典序**(Godot 行为)。→ **已修**:`KitDataRegistry.ids/types` 加 `sorted` 参数(`ids(&"crop", true)` 即字母序);本例已改用(见 `game.gd` / `quest_log._ready`)。
+  2. **`KitInventory` 没有"列出全部物品"的聚合方法**,背包 UI 只能手动遍历 `capacity()`×`slot(i)`。→ **已修**:新增 `KitInventory.totals() -> {id:总数}`;本例已改用(见 `backpack_panel._aggregate`)。
+  3. **`StringName` 作 Dictionary 键经存档(JSON)会退化为 `String`**:自定义 `to_dict/from_dict` 若用 StringName 键存 dict,`from_dict` 必须把键归一回 StringName(见 `quest_log.from_dict`),否则后续用 StringName 索引会 miss。→ 这是**游戏侧惯例**,不是 kit 缺陷(kit 各子系统 `from_dict` 已规避,如 KitInventory 存 `String(id)`、读 `StringName(id)`),照做即可。
+  4. **`KitStateMachine` 没有"当前态判定"便利方法**,查当前态要 `sm.current_state != null and String(sm.current_state.name) == "X"`。→ **已修**:新增 `state_name() -> String` / `is_in(query) -> bool`(null 安全);本例已改用(见 `crop.is_ready`)。
+  > 修复流程遵分支分流规矩:三条 kit 改进剥出来走 kit 正常 SDD → run_all 绿 → **ff-merge 进 main(0.17.0→0.18.0)**,再把本分支 rebase 到新 main、改用新 API。示例本身仍留在 `example/farm-sim` 不合 main。
 - **无类型返回值 + `:=` 会 parse error**:`var n := registry.load_dir(...)` 因 `registry` 无类型、编译期推不出返回类型而报错,退回普通 `var n = ...`。
 - **这是骨架不是成品**:没有网格地块、工具体力、动物 NPC、对话——那些是"游戏本体",不属于 kit。本例只验证这些地基能不能顺畅拼在一起。
 - 子系统完整 API 见 [`game-clock.md`](../../addons/godot-core-kit/docs/systems/game-clock.md) / [`kit-inventory.md`](../../addons/godot-core-kit/docs/inventory/kit-inventory.md) / [`kit-data-registry.md`](../../addons/godot-core-kit/docs/data/kit-data-registry.md) / [`save-manager.md`](../../addons/godot-core-kit/docs/systems/save-manager.md) / [`ui-stack.md`](../../addons/godot-core-kit/docs/ui/ui-stack.md) / [`state-machine.md`](../../addons/godot-core-kit/docs/state-machine.md)。

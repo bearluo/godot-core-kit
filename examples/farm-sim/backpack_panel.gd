@@ -33,18 +33,11 @@ func lines() -> PackedStringArray:
 	return _lines
 
 
-## 遍历背包格子,按 id 汇总为 [{id, count}, ...] 并按 id 排序(确定性)。
-## 注:KitInventory 没有"列出全部物品"的聚合方法,消费者得手动遍历——见 README 要点里
-## 记的一个可补 kit 便利方法(如 totals()/entries())。
+## 用 KitInventory.totals()(v0.18.0)拿 {id:总数} 聚合,再按 id 字母序排成 [{id,count}, ...]。
+## (totals 返回 dict、无序,故仍需 sort_custom;字典序理由见 KitDataRegistry 文档的 StringName 坑。)
 func _aggregate(bag) -> Array:
-	var totals := {}
-	for i in bag.capacity():
-		var s = bag.slot(i)
-		if not s.is_empty():
-			var id = s["id"]
-			totals[id] = int(totals.get(id, 0)) + int(s["count"])
+	var totals = bag.totals()
 	var ids = totals.keys()
-	# StringName 数组 .sort() 按指针地址排(非字典序,Godot 的坑),按 String 值比较拿字母序
 	ids.sort_custom(func(x, y): return String(x) < String(y))
 	var out := []
 	for id in ids:

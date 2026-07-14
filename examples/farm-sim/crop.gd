@@ -42,9 +42,9 @@ func _exit_tree() -> void:
 	CoreKit.bus.unsubscribe_all(self)
 
 
-## 是否已成熟可收(= 状态机处于 Mature)。
+## 是否已成熟可收(= 状态机处于 Mature)。is_in 为 v0.18.0 便利方法(null 安全)。
 func is_ready() -> bool:
-	return _sm.current_state != null and String(_sm.current_state.name) == "Mature"
+	return _sm.is_in("Mature")
 
 
 func _on_day(snap: Dictionary) -> void:

@@ -28,7 +28,7 @@ func _ready() -> void:
 	var n_item = _registry.load_dir(&"item", "res://examples/farm-sim/data/items")
 	var n_quest = _registry.load_dir(&"quest", "res://examples/farm-sim/data/quests")
 	CoreKit.log.info("[Farm] 载入 %d 作物 + %d 物品 + %d 任务,registry 类型: [%s]" % [
-		n_crop, n_item, n_quest, _join(_registry.types())])
+		n_crop, n_item, n_quest, _join(_registry.types(true))])   # types(true) = 字符串字典序(v0.18.0)
 
 	# 1b. 任务日志:载入 quest 定义,订阅 clock:day_changed + shop:sold 追踪目标。
 	#     dogfood:CoreKit.bus 作【多来源事件聚合器】;quest: 是游戏第 3 个自有命名空间。
@@ -47,7 +47,7 @@ func _ready() -> void:
 	add_child(_shop)
 	CoreKit.bus.subscribe(_shop.EV_SOLD, _on_sold)
 	CoreKit.log.info("[Shop] 开局金币 %d" % _shop.gold)
-	for crop_id in _sorted(_registry.ids(&"crop")):
+	for crop_id in _registry.ids(&"crop", true):   # ids(type, true) = 字母序(v0.18.0,免手写 sort_custom)
 		_shop.buy(_registry.get_def(&"crop", crop_id).seed_item, 3)
 
 	# 3. 农田,注入 registry + bag
@@ -124,17 +124,10 @@ func _date_str() -> String:
 	return "y%d %s d%d %02d:%02d" % [c.year(), c.season_name(), c.day(), c.hour(), c.minute()]
 
 
-## 按字符串字典序排的副本(不改原数组)。注意:StringName 数组的原生 .sort() 是按
-## 指针地址排、非字典序(Godot 的坑),故这里用 String(x) 比较拿到稳定的字母序。
-func _sorted(a) -> Array:
-	var c := Array(a)
-	c.sort_custom(func(x, y): return String(x) < String(y))
-	return c
-
-
-## 把(StringName)数组排序后拼成干净的 "a, b, c"(避免 str() 打出 &"...")。
+## 把(StringName)数组拼成干净的 "a, b, c"(避免 str() 打出 &"...")。
+## 排序交给上游 registry.ids/types(sorted=true)(v0.18.0),这里只做 String 转换。
 func _join(a) -> String:
 	var parts := PackedStringArray()
-	for x in _sorted(a):
+	for x in a:
 		parts.append(String(x))
 	return ", ".join(parts)
