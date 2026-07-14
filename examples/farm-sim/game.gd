@@ -5,7 +5,8 @@ extends Node
 ## 剧情:载数据表(crop+item+quest+achievement)→ 开店买种子(钱走 item 价、事件走 shop:)→
 ##       播种(从对象池借出)→ 逐日推进(clock→weather→crop 事件链驱动生长,雨天 +1)→
 ##       收获(归还池)→ 卖钱 → 存档往返(含金币/任务)→ 背包 UI 入栈 → 任务结算 →
-##       对象池复用第二茬(两茬共用 2 个实例)→ 成就结算(账号级存 settings,非存档)。
+##       对象池复用第二茬(两茬共用 2 个实例)→ 成就结算(账号级存 settings,非存档)→
+##       温室 KitContext 作用域服务(全局/作用域/shadow/provide_child 生命周期)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
@@ -17,6 +18,7 @@ const QuestLogScript := preload("res://examples/farm-sim/quest_log.gd")
 const BackpackPanelScript := preload("res://examples/farm-sim/backpack_panel.gd")
 const WeatherSystemScript := preload("res://examples/farm-sim/weather_system.gd")
 const AchievementTrackerScript := preload("res://examples/farm-sim/achievement_tracker.gd")
+const ClimateScript := preload("res://examples/farm-sim/climate.gd")
 
 var _registry
 var _bag
@@ -167,6 +169,33 @@ func _ready() -> void:
 	for line in achievements.summary_lines():
 		CoreKit.log.info("[Achieve]   %s" % line)
 	achievements.reset_all()   # erase_section 清掉 settings 里的成就分区,保证示例可重复跑
+
+	# 13. KitContext 作用域服务 —— dogfood off-facade DI 容器(对照前面全程手动 bind 注入)。
+	#     ① 全局服务:把农田 registry 注册进 CoreKit 全局根,整局按 key 可取;
+	#     ② 作用域 + shadow:温室是一个 KitContext,provide 一份【专属 registry】(多一种温室
+	#        限定作物 golden_turnip)shadow 全局的;provide_child 一个随温室释放的 climate 服务;
+	#     ③ 层级回退:温室【内】的节点与【外】的节点跑同一份 KitContext.resolve,因所在子树不同
+	#        拿到不同服务——温室内命中温室作用域,温室外回退到全局根。
+	CoreKit.provide("registry", _registry)   # ① 全局注册(整局作用域,进程内有效)
+	var greenhouse := KitContext.new()
+	greenhouse.name = "GreenhouseCtx"
+	add_child(greenhouse)
+	var gh_registry = KitDataRegistry.new()
+	gh_registry.load_dir(&"crop", "res://examples/farm-sim/data/greenhouse_crops")
+	greenhouse.provide("registry", gh_registry)               # ② shadow 全局 registry(仅温室子树)
+	greenhouse.provide_child("climate", ClimateScript.new())  # ② 作用域 Node 服务,随温室释放
+	var inside := Node.new(); inside.name = "GreenhousePlant"
+	greenhouse.add_child(inside)                              # 温室子树内的一个消费者节点
+	# 温室【内】resolve:命中温室作用域(专属 registry 有 golden_turnip、能取到 climate)
+	var reg_in = KitContext.resolve(inside, "registry")
+	var clim_in = KitContext.resolve(inside, "climate")
+	CoreKit.log.info("[Context] 温室内 resolve:registry 有 golden_turnip=%s,climate 生长+%d" % [
+		reg_in.has_def(&"crop", &"golden_turnip"), clim_in.growth_bonus])
+	# 温室【外】resolve(game 根节点,不在任何 KitContext 下):回退到全局根 registry
+	var reg_out = KitContext.resolve(self, "registry")
+	CoreKit.log.info("[Context] 温室外 resolve:registry 有 golden_turnip=%s(回退全局,看不到温室专属)" % [
+		reg_out.has_def(&"crop", &"golden_turnip")])
+	greenhouse.free()   # 释放温室作用域 → provide_child 的 climate 连带释放(见其 _exit_tree 日志)
 
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
