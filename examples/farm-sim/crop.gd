@@ -29,4 +29,4 @@ func _on_day(snap: Dictionary) -> void:
 	_stage += 1
 	var grown := is_ready()
 	CoreKit.log.info("[Crop:%s] 第 %d 天 生长 %d/%d%s" % [
-		crop_id, int(snap.get("day", 0)), _stage, def.grow_days, "  已成熟" if grown else ""])
+		def.display_name, int(snap.get("day", 0)), _stage, def.grow_days, "  已成熟" if grown else ""])
