@@ -7,7 +7,8 @@ extends Node
 ##       收获(归还池)→ 卖钱 → 存档往返(含金币/任务)→ 背包 UI 入栈 → 任务结算 →
 ##       对象池复用第二茬(两茬共用 2 个实例)→ 成就结算(账号级存 settings,非存档)→
 ##       温室 KitContext 作用域服务(全局/作用域/shadow/provide_child 生命周期)→
-##       i18n 本地化(内存翻译现建现加,切 zh/en/ja 同 key 出不同译文)。
+##       i18n 本地化(内存翻译现建现加,切 zh/en/ja 同 key 出不同译文)→
+##       帧调度 ticker(every_n 错峰降频 tick + queue_task 分帧预算队列,对照按天的 clock)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
@@ -219,6 +220,30 @@ func _ready() -> void:
 	CoreKit.log.info("[i18n] 缺失 key 回退:has=%s t()=%s" % [
 		i18n.has_translation("CROP_golden"), i18n.t("CROP_golden")])
 	CoreKit.settings.erase_section("locale")      # 复位持久化 locale,保证示例可重复跑
+
+	# 15. 帧调度 CoreKit.ticker —— dogfood 帧驱动的降频 tick + 分帧任务队列。与按天广播的
+	#     clock:day_changed 正好对照:clock 按【游戏日】发离散事件,ticker 按【渲染帧】跑持续逻辑。
+	var ticker = CoreKit.ticker
+	# ① every_n 错峰降频:洒水器每 3 帧脉冲一次(上百实体的低频 AI/环境 tick 走这个通道,
+	#    不同 handle 自动错峰不挤同一帧)。用数组作可变闭包盒(GDScript lambda 按值捕获)。
+	var pulses := [0]
+	var sprinkler := ticker.every_n(func(): pulses[0] += 1, 3)
+	for i in range(9):
+		await get_tree().process_frame
+	ticker.cancel(sprinkler)
+	CoreKit.log.info("[Ticker] 洒水器 every_n(3):9 帧内脉冲 %d 次(错峰降频)" % pulses[0])
+	# ② queue_task 分帧消化:把 12 块地的巡查一次性入队,按 budget_msec 预算分摊到多帧跑完
+	#    (每帧至少 1 个不会饿死),消化完 queue_drained 广播一次。
+	var surveyed := [0]
+	ticker.budget_msec = 0.1                      # 故意调小预算,凸显"分帧消化"(热改立即生效)
+	for plot_i in range(12):
+		ticker.queue_task(func(): surveyed[0] += 1)
+	CoreKit.log.info("[Ticker] 入队 12 块地巡查,待办=%d" % ticker.pending_task_count())
+	var drained := [false]
+	ticker.queue_drained.connect(func(): drained[0] = true, CONNECT_ONE_SHOT)
+	while ticker.pending_task_count() > 0:        # 分帧跑,直至队列消化干净
+		await get_tree().process_frame
+	CoreKit.log.info("[Ticker] 巡查完成:%d 块,queue_drained=%s" % [surveyed[0], drained[0]])
 
 
 ## 订阅 shop:sold 累计总收入(游戏侧消费自有命名空间事件)。
