@@ -1,7 +1,11 @@
 extends Node
 ## 一株已播种作物(农田子节点)。生命周期用 KitStateMachine 建模:Growing → Mature。
-## 订阅 CoreKit.bus 的 clock:day_changed 推进生长天数,到 grow_days 就把状态机转到 Mature;
-## is_ready()(供农田收获判定)= 状态机处于 Mature。
+## 订阅 CoreKit.bus 的 weather:changed 推进生长(每天长 1 格,雨天 +1),到 grow_days 就把
+## 状态机转到 Mature;is_ready()(供农田收获判定)= 状态机处于 Mature。
+##
+## 【增量9】生长改由 weather:changed 驱动(而非直接认 clock:day_changed)——天气系统把
+## clock:day_changed 丰富成带 growth_bonus 的 weather:changed,作物只认后者:clock→weather→crop
+## 的 bus 事件链,每级无直接引用。
 ##
 ## 【增量8】改为可被 CoreKit.pool 复用:同一个 Crop 实例收获后归还池、下次播种时借出重用,
 ## 免去反复 instantiate/free。池化有状态节点踩到的关键坑——
@@ -10,9 +14,11 @@ extends Node
 ##   - 实现约定钩子 `_pool_reset()`,归还时清掉本轮生长状态,供下次从头开始。
 ##
 ## dogfood 点:KitStateMachine 每实体状态用例 + CoreKit.pool 复用有状态节点 +
-## bus 事件命名约定 namespace:event 的消费端;Node 监听者进出树对称订阅/退订。
+## bus 事件命名约定 namespace:event 的消费端(天气事件链);Node 监听者进出树对称订阅/退订。
 ##
 ## (自然扩展:再加个 Withered 态 + Mature→Withered 的"过熟"转移即可,本骨架未做。)
+
+const EV_WEATHER := "weather:changed"   ## 游戏侧天气事件(见 weather_system.gd,按约定用字面量解耦)
 
 var def                     ## CropDef Resource(由 Farm 播种时注入)
 var crop_id: StringName = &""
@@ -43,11 +49,11 @@ func _ready() -> void:
 	add_child(_sm)                     # 入树 → 机器 _ready 注册状态并进入 Growing
 
 
-## 每次入树都订阅:池复用时 _ready 不再触发,订阅只能放这里,否则复用后收不到 day_changed。
-## (首次入树 _enter_tree 先于 _ready,此刻 _sm 尚未建;但 _on_day 要等下一次 advance_day
+## 每次入树都订阅:池复用时 _ready 不再触发,订阅只能放这里,否则复用后收不到天气事件。
+## (首次入树 _enter_tree 先于 _ready,此刻 _sm 尚未建;但 _on_weather 要等下一次 advance_day
 ##  才可能被调,那时 _ready 早已跑完,安全。)
 func _enter_tree() -> void:
-	CoreKit.bus.subscribe(CoreKit.clock.EV_DAY_CHANGED, _on_day)
+	CoreKit.bus.subscribe(EV_WEATHER, _on_weather)
 
 
 func _exit_tree() -> void:
@@ -66,12 +72,16 @@ func is_ready() -> bool:
 	return _sm.is_in("Mature")
 
 
-func _on_day(snap: Dictionary) -> void:
+## weather:changed 处理:每天长 1 格,雨天额外 +growth_bonus。到 grow_days 转 Mature。
+func _on_weather(payload: Dictionary) -> void:
 	if is_ready():
 		return  # 已成熟:不再生长,也不再刷屏
-	_stage += 1
-	CoreKit.log.info("[Crop:%s] 第 %d 天 生长 %d/%d" % [
-		def.display_name, int(snap.get("day", 0)), _stage, def.grow_days])
+	var bonus := int(payload.get("growth_bonus", 0))
+	_stage += 1 + bonus
+	var shown = _stage if _stage < def.grow_days else def.grow_days   # 显示封顶到 grow_days(def 无类型,不用 :=)
+	CoreKit.log.info("[Crop:%s] 第 %d 天 生长 %d/%d%s" % [
+		def.display_name, int(payload.get("day", 0)), shown, def.grow_days,
+		"(雨+%d)" % bonus if bonus > 0 else ""])
 	if _stage >= def.grow_days:
 		_sm.transition_to("Mature")
 

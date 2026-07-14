@@ -2,8 +2,10 @@ extends Node
 ## 农场经营 MVP 骨架的驱动 —— 一条确定性剧情把子系统串起来做"框架消费者视角"的 dogfood。
 ## 整段只调 CoreKit.* 与 KitInventory/KitDataRegistry 两个 class_name 类库,不碰 kit 内部。
 ##
-## 剧情:载数据表(crop+item 两类型)→ 开店买种子(钱走 item 价、事件走 shop: 命名空间)→
-##       播种 → 逐日推进(bus 驱动生长)→ 收获 → 卖产物换钱 → 存档往返(含金币)→ 背包 UI 入栈。
+## 剧情:载数据表(crop+item+quest)→ 开店买种子(钱走 item 价、事件走 shop: 命名空间)→
+##       播种(从对象池借出)→ 逐日推进(clock→weather→crop 事件链驱动生长,雨天 +1)→
+##       收获(归还池)→ 卖钱 → 存档往返(含金币/任务)→ 背包 UI 入栈 → 任务结算 →
+##       对象池复用第二茬(两茬共用 2 个实例)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
 ##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
@@ -13,6 +15,7 @@ const FarmScript := preload("res://examples/farm-sim/farm.gd")
 const ShopScript := preload("res://examples/farm-sim/shop.gd")
 const QuestLogScript := preload("res://examples/farm-sim/quest_log.gd")
 const BackpackPanelScript := preload("res://examples/farm-sim/backpack_panel.gd")
+const WeatherSystemScript := preload("res://examples/farm-sim/weather_system.gd")
 
 var _registry
 var _bag
@@ -49,6 +52,13 @@ func _ready() -> void:
 	CoreKit.log.info("[Shop] 开局金币 %d" % _shop.gold)
 	for crop_id in _registry.ids(&"crop", true):   # ids(type, true) = 字母序(v0.18.0,免手写 sort_custom)
 		_shop.buy(_registry.get_def(&"crop", crop_id).seed_item, 3)
+
+	# 2c. 天气系统:订阅 clock:day_changed,每天掷晴/雨并广播 weather:changed(作物据此长)。
+	#     dogfood:bus 事件链 clock→weather→crop;weather: 是游戏第 4 个自有命名空间。
+	#     必须在 advance_day 之前入树(其 _ready 订阅 clock,晚了漏事件)。
+	var weather := WeatherSystemScript.new()
+	weather.name = "Weather"
+	add_child(weather)
 
 	# 3. 农田,注入 registry + bag。作物实例走对象池:先 register "crop" 池(prewarm 2 =
 	#    预热 2 个空闲实例),之后 plant/harvest 借还复用,免反复 instantiate/free。
