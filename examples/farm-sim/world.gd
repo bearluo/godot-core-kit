@@ -1,9 +1,12 @@
 extends Node2D
-## 农场游戏世界根(P0 视觉切片)。构建并接线农田网格 + 玩家 + 高亮 + HUD,复用 core-kit 的
-## 数据(KitDataRegistry/KitInventory)与门面(clock/bus/layers);工具作用于玩家面前那一格。
+## 农场游戏世界根(P0 切片 → P2 内容)。接线农田网格 + 玩家 + 高亮 + HUD + 天气 + 任务/成就 + UI,
+## 复用 core-kit 数据(KitDataRegistry/KitInventory)与门面(clock/bus/layers/i18n/audio/settings/saves)。
 ##
 ## 逻辑与表现分离:FarmGrid 管状态、FarmGridView 画占位美术;世界这里只做"接线 + 输入派发"。
-## 操作:WASD 走动;J(farm_use)对面前格 耕→种→浇→收;N(farm_next_day)推进一天让作物生长。
+## 操作:WASD 走动;J 用工具(耕→种→浇→收,浇水可升级 3×3);N 睡觉(推进一天+回体力);
+##   Q 切种子;I 背包;P 商店(买种子/卖收成/买水壶升级);L 任务/成就;Esc 菜单(存/读档/设置)。
+## P2:四季轮替(7天/季)+ 季节限定作物(南瓜秋季)、天气(雨天视觉+生长加成)、i18n 中/英、
+##   程序化音效/BGM、设置面板(语言/音量/键位重绑定)。事件链:clock:day_changed→weather:changed→生长。
 
 const FarmGrid = preload("res://examples/farm-sim/farm_grid.gd")
 const FarmGridView = preload("res://examples/farm-sim/farm_grid_view.gd")

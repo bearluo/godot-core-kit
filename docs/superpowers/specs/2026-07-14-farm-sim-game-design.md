@@ -108,13 +108,13 @@ World (Node2D)                      # 游戏世界根（新主场景）
 - [x] 菜单 存档/读档（`CoreKit.saves`：地块/背包/金币/时钟全量往返）
 - [x] 一个完整"日循环"闭环可反复玩
 
-### P2 · 内容与深度
-- [ ] 四季轮替 + 季节限定作物（`CoreKit.clock` 季节）
-- [ ] 天气可见效果（weather_system 接渲染，雨天视觉 + 免浇水/生长加成）
-- [ ] 工具升级（如浇水 3×3）
-- [ ] 任务/成就进 UI（quest_log / achievement_tracker 面板）
-- [ ] 语言切换（`CoreKit.i18n`，作物/UI 文案 key 化）
-- [ ] 基础音效 + BGM（`CoreKit.audio`）+ 键位重绑定 UI（`CoreKit.input`）
+### P2 · 内容与深度 ✅
+- [x] 四季轮替 + 季节限定作物（`CoreKit.clock` 季节；7天/季，南瓜秋季限定）
+- [x] 天气可见效果（weather_system 接 world，雨天视觉覆盖 + 生长加成）
+- [x] 工具升级（浇水 3×3，商店购买 + 随存档）
+- [x] 任务/成就进 UI（quest_log / achievement_tracker 面板，L 键）
+- [x] 语言切换（`CoreKit.i18n`，中/英，作物/UI 文案 key 化）
+- [x] 基础音效 + BGM（`CoreKit.audio`，程序化合成）+ 键位重绑定 UI（`KitRebindList`）
 
 ### P3 · 生活模拟支柱
 - [ ] NPC（日程/对话框/送礼/好感度；NPC 定义进 `KitDataRegistry`）
