@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
+Farm="*res://examples/farm-sim/farm_state.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [dotnet]
