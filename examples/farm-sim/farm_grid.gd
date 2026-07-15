@@ -90,11 +90,24 @@ func till(cell: Vector2i) -> bool:
 	return true
 
 
-## 播种:已耕/已浇且无作物,背包有该作物种子 → 扣 1 种子并种下(stage 0)。
-func plant(cell: Vector2i, crop_id_arg: StringName) -> bool:
+## 该作物在给定季节能否种(seasons 空=全季;season 为 &"" 视为不校验)。
+func crop_plantable(crop_id_arg: StringName, season: StringName) -> bool:
+	if season == &"":
+		return true
+	var def = _registry.get_def_or(&"crop", crop_id_arg, null)
+	if def == null:
+		return false
+	var ss: Array = def.seasons
+	return ss.is_empty() or ss.has(season)
+
+
+## 播种:已耕/已浇且无作物,背包有该作物种子,且当季可种 → 扣 1 种子并种下(stage 0)。
+func plant(cell: Vector2i, crop_id_arg: StringName, season: StringName = &"") -> bool:
 	if not cell_valid(cell) or _crop.has(cell):
 		return false
 	if tile_state(cell) != State.TILLED and tile_state(cell) != State.WATERED:
+		return false
+	if not crop_plantable(crop_id_arg, season):
 		return false
 	var def = _registry.get_def(&"crop", crop_id_arg)
 	if def == null:
@@ -130,11 +143,14 @@ func harvest(cell: Vector2i) -> bool:
 	return true
 
 
-## 推进一天:所有未成熟作物生长一格(P0 固定 +1)。
-func advance_day() -> void:
+## 推进一天:每株未成熟作物 +(1+bonus)格,封顶在 grow_days。bonus 由天气注入(雨天 +1)。
+func advance_day(bonus: int = 0) -> void:
+	var step := 1 + maxi(0, bonus)
 	for cell in _crop:
 		if not crop_mature(cell):
-			_crop[cell]["stage"] = int(_crop[cell]["stage"]) + 1
+			var def = _registry.get_def(&"crop", _crop[cell]["id"])
+			var cap := int(def.grow_days) if def != null else int(_crop[cell]["stage"]) + step
+			_crop[cell]["stage"] = mini(cap, int(_crop[cell]["stage"]) + step)
 
 
 ## 持久化:Vector2i 键序列化成 "x,y" 字符串(JSON 安全),id 存 String。registry/bag 不入档

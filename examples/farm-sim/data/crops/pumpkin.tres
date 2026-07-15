@@ -1,0 +1,13 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/crop_def.gd" id="1_crop"]
+
+[resource]
+script = ExtResource("1_crop")
+id = &"pumpkin"
+display_name = "南瓜"
+grow_days = 5
+seed_item = &"pumpkin_seed"
+harvest_item = &"pumpkin"
+harvest_amount = 1
+seasons = [&"fall"]

@@ -39,4 +39,6 @@ func _process(_delta: float) -> void:
 		_gold_label.text = "金币: %d" % _wallet.gold
 	if _world != null:
 		_energy_label.text = "体力: %d/%d" % [_world.energy(), _world.energy_max()]
-		_seed_label.text = "选中: %s (Q 切换)" % _world.selected_crop_name()
+		var ok_season: bool = _world.selected_crop_plantable()
+		_seed_label.text = "选中: %s%s (Q 切换)" % [
+			_world.selected_crop_name(), "" if ok_season else " [非当季]"]

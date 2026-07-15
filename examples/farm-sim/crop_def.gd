@@ -10,3 +10,4 @@ extends Resource
 @export var seed_item: StringName = &""     ## 播种消耗的种子物品 id
 @export var harvest_item: StringName = &""  ## 成熟收获的产物物品 id
 @export var harvest_amount: int = 1         ## 每株收获数量
+@export var seasons: Array = []             ## 可种植季节(StringName,如 [&"fall"]);空 = 全季可种

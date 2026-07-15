@@ -51,7 +51,11 @@ func _ready() -> void:
 	_bag.add(&"turnip_seed", 10, {}, 99)
 	_bag.add(&"parsnip_seed", 10, {}, 99)
 	_bag.add(&"potato_seed", 10, {}, 99)
-	_crop_ids = _registry.ids(&"crop", true)   # 可选作物字母序:[parsnip, potato, turnip]
+	_bag.add(&"pumpkin_seed", 5, {}, 99)
+	_crop_ids = _registry.ids(&"crop", true)   # 可选作物字母序:[parsnip, potato, pumpkin, turnip]
+
+	# 时钟:每季 7 天(默认 28),让四季在一局内可达 → 季节轮替、季节限定作物有意义
+	CoreKit.clock.configure({"days_per_season": 7})
 
 	# 农田网格 + 占位渲染
 	_grid = FarmGrid.new()
@@ -105,7 +109,7 @@ func _run_smoke() -> void:
 	var seed_start := _selected_crop
 	for i in range(_crop_ids.size()):
 		_cycle_seed()
-	ok = ok and _crop_ids.size() >= 3 and _selected_crop == seed_start
+	ok = ok and _crop_ids.size() >= 4 and _selected_crop == seed_start
 	_use_tool()   # 空 → 耕
 	ok = ok and _grid.tile_state(c) == FarmGrid.State.TILLED
 	_use_tool()   # 已耕 → 种
@@ -256,9 +260,12 @@ func _use_tool() -> void:
 		did = _grid.till(c)
 		if did: CoreKit.log.info("[World] 耕地 @ %s" % c)
 	else:
-		did = _grid.plant(c, _selected_crop)
+		var season := StringName(CoreKit.clock.season_name())
+		did = _grid.plant(c, _selected_crop, season)
 		if did:
 			CoreKit.log.info("[World] 播种 %s @ %s" % [_selected_crop, c])
+		elif not _grid.crop_plantable(_selected_crop, season):
+			CoreKit.log.info("[World] %s 不在当季(%s)可种" % [selected_crop_name(), CoreKit.clock.season_name()])
 		else:
 			did = _grid.water(c)
 			if did: CoreKit.log.info("[World] 浇水 @ %s" % c)
@@ -283,6 +290,11 @@ func _cycle_seed() -> void:
 func selected_crop_name() -> String:
 	var def = _registry.get_def_or(&"crop", _selected_crop, null)
 	return def.display_name if def != null else String(_selected_crop)
+
+
+## 当前选中种子在当季能否种(供 HUD 标注 [非当季])。
+func selected_crop_plantable() -> bool:
+	return _grid.crop_plantable(_selected_crop, StringName(CoreKit.clock.season_name()))
 
 
 ## 睡觉:推进一天(作物生长)+ 体力回满。
