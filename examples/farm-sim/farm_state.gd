@@ -28,6 +28,15 @@ const ENERGY_MAX := 100
 const ACTION_COST := 8            ## 每个工具动作耗的体力
 const WATER_UPGRADE_COST := 200   ## 水壶升级(浇水 3×3)售价
 
+# 区域(P3 多区域):场景路径 + 各区到达落点(世界坐标)。门/切换引用这些常量。
+const AREA_FARM := "res://examples/farm-sim/world.tscn"
+const AREA_HOUSE := "res://examples/farm-sim/house_area.tscn"
+const AREA_TOWN := "res://examples/farm-sim/town_area.tscn"
+const HOUSE_ENTRY := Vector2(96, 96)      ## 进农舍落点(农舍返回门右侧,避免立刻回触发)
+const TOWN_ENTRY := Vector2(96, 128)      ## 进小镇落点
+const FARM_FROM_HOUSE := Vector2(328, 60) ## 从农舍回农田落点(网格右侧外,农田→农舍门左侧)
+const FARM_FROM_TOWN := Vector2(140, 264) ## 从小镇回农田落点(网格下方外,农田→小镇门上侧)
+
 var started := false
 var registry                       ## KitDataRegistry(crop/item/quest/achievement/npc)
 var bag                            ## KitInventory
@@ -38,8 +47,9 @@ var quest_log                      ## QuestLog(Farm 子节点)
 var tracker                        ## AchievementTracker(Farm 子节点)
 var relationships: Dictionary = {} ## {npc_id:int} 好感度(P5)
 var unlocked: Dictionary = {}      ## {npc_id:true} 好感解锁已发放(P6)
-var current_area := "farm"         ## 当前区域名
-var pending_spawn := Vector2.ZERO  ## 切区目标出生点(切前写,新区读)
+var current_area := "farm"         ## 当前区域名(各区 _ready 置)
+var pending_spawn := Vector2.ZERO  ## 切区目标出生点(切前写,新区读;ZERO=用本区默认出生点)
+var pending_facing := Vector2i.ZERO ## 切区目标朝向(跨区读档用;ZERO=不覆盖)
 
 var _selected_crop: StringName = &"turnip"
 var _crop_ids: Array = []
@@ -101,6 +111,48 @@ func start() -> void:
 ## 区域场景 _ready 注入本区玩家(用于开面板时锁输入)。
 func bind_player(player) -> void:
 	_player = player
+
+
+## 当前区域玩家(门/交互判定用;切换间隙可能为旧节点,调用方自行容错)。
+func current_player():
+	return _player
+
+
+# --- 区域切换(P3 多区域)---
+
+## 切到目标区:写 pending_spawn(新区 _ready 读)+ change_scene(可带转场)。HUD/UI 栈挂
+## CoreKit.layers、Farm 状态在本单例,均不随场景替换丢失,故切区后农田/背包/金币照旧。
+func go_to(area_path: String, spawn: Vector2, transition) -> void:
+	pending_spawn = spawn
+	await CoreKit.scenes.change_scene(area_path, transition)
+
+
+## 区域名 → 场景路径。
+func _area_path(area: String) -> String:
+	match area:
+		"house":
+			return AREA_HOUSE
+		"town":
+			return AREA_TOWN
+		_:
+			return AREA_FARM
+
+
+## 淡入淡出转场(农田↔农舍用)。
+func fade() -> KitTransition:
+	var t := KitTransition.new()
+	t.type = KitTransition.Type.FADE
+	t.duration = 0.3
+	return t
+
+
+## 滑动转场(农田↔小镇用;dir = KitTransition.Dir.*)。
+func slide(dir: int) -> KitTransition:
+	var t := KitTransition.new()
+	t.type = KitTransition.Type.SLIDE
+	t.direction = dir
+	t.duration = 0.35
+	return t
 
 
 func _exit_tree() -> void:
@@ -339,15 +391,33 @@ func load_game() -> bool:
 	unlocked = {}
 	for uid in d.get("unlocked", []):
 		unlocked[StringName(uid)] = true
-	current_area = str(d.get("area", "farm"))
+	var here := current_area
+	var saved_area := str(d.get("area", "farm"))
 	var pp: Dictionary = d.get("player", {})
-	if _player != null and pp.has("x"):
-		_player.global_position = Vector2(float(pp["x"]), float(pp["y"]))
-		_player.facing = Vector2i(int(pp.get("fx", _player.facing.x)), int(pp.get("fy", _player.facing.y)))
-		_player.queue_redraw()
+	var target_pos := Vector2.ZERO
+	var target_facing := Vector2i(0, 1)
+	if pp.has("x"):
+		target_pos = Vector2(float(pp["x"]), float(pp["y"]))
+		target_facing = Vector2i(int(pp.get("fx", 0)), int(pp.get("fy", 1)))
+	current_area = saved_area
 	grid_changed.emit()
+	if saved_area != here:
+		# 跨区读档:延迟一帧(等调用方 _activate 收尾)再关面板 + 切到存档区,玩家落存档点
+		call_deferred("_resume_saved_area", saved_area, target_pos, target_facing)
+	elif _player != null and pp.has("x"):
+		# 同区读档:直接复位当前玩家(Task1 手感不变)
+		_player.global_position = target_pos
+		_player.facing = target_facing
+		_player.queue_redraw()
 	CoreKit.log.info("[Farm] 已读档")
 	return true
+
+
+## 跨区读档收尾(deferred):关面板 → 切到存档区,玩家落存档点/朝向。
+func _resume_saved_area(area: String, pos: Vector2, facing: Vector2i) -> void:
+	_close_ui()
+	pending_facing = facing
+	go_to(_area_path(area), pos, fade())
 
 
 ## headless 端到端自测(farm 场景 _ready 在 FARM_SMOKE=1 时 call_deferred 调)。用 use_tool_on(cell) 走 model 级
@@ -419,6 +489,16 @@ func run_smoke() -> void:
 		ok = ok and _active_ui == uiname and _ui_stack.depth() == 1
 		_close_ui()
 		ok = ok and _active_ui == "" and _ui_stack.is_empty()
+	# 区域切换状态字段读写(真实 change_scene 需场景树,留 F5)+ 农田状态跨"模拟切区"不丢
+	var area0 = current_area
+	pending_spawn = HOUSE_ENTRY
+	current_area = "house"
+	ok = ok and pending_spawn == HOUSE_ENTRY and current_area == "house"
+	grid.till(Vector2i(3, 3))                       # 在"农舍"时改农田模型
+	var st33 = grid.tile_state(Vector2i(3, 3))
+	current_area = area0                             # 模拟切回农田(只逻辑,不真换场景)
+	pending_spawn = Vector2.ZERO
+	ok = ok and grid.tile_state(Vector2i(3, 3)) == st33 and st33 == FarmGrid.State.TILLED
 	CoreKit.log.info("[Farm][SMOKE] %s(体力回满=%s,存读档=%s,任务=%d/%d,成就=%d/%d,语言=%s)" % [
 		"PASS" if ok else "FAIL", _energy == ENERGY_MAX, loaded,
 		quest_log.done_count(), quest_log.quest_count(),
