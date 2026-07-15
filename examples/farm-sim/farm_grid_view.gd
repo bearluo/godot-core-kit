@@ -1,8 +1,10 @@
 extends Node2D
-## 农田占位渲染(薄 renderer):只读 FarmGrid 逐格画彩色方块 + 作物按生长比例的小方块。
-## 逻辑全在 FarmGrid,这里零逻辑——P5 换成 TileMapLayer + 真 tileset 时本文件整体替换,不动模型。
+## 农田占位渲染(薄 renderer):只读 FarmGrid 逐格画瓦片贴图 + 作物贴图(按生长比例缩放 + 绿→金着色)。
+## 逻辑全在 FarmGrid,这里零逻辑。贴图经 ArtBank 接缝取(程序化默认,真素材可换入)——P5 从 draw_rect
+## 升级到 draw_texture_rect;P5 后期转 TileMapLayer/真 tileset 时本文件整体替换,不动模型。
 
 const FarmGrid = preload("res://examples/farm-sim/farm_grid.gd")
+const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
 
 var _grid
 
@@ -22,23 +24,23 @@ func _draw() -> void:
 			var c := Vector2i(x, y)
 			var origin: Vector2 = _grid.cell_to_world(c)
 			var rect := Rect2(origin, Vector2(cell, cell))
-			draw_rect(rect, _tile_color(_grid.tile_state(c)))
-			draw_rect(rect, Color(0, 0, 0, 0.15), false, 1.0)   # 网格线
+			draw_texture_rect(ArtBank.tex(_tile_key(_grid.tile_state(c))), rect, false)
 			if _grid.has_crop(c):
 				var r: float = _grid.crop_ratio(c)
-				var side: float = cell * lerpf(0.35, 0.8, r)    # 刚种下就有小苗,越熟越大(0.35→0.8 格)
-				var off: float = (cell - side) * 0.5            # 居中
+				var side: float = cell * lerpf(0.35, 0.85, r)    # 刚种下小苗,越熟越大
+				var off: float = (cell - side) * 0.5             # 居中
 				var crop_rect := Rect2(origin + Vector2(off, off), Vector2(side, side))
-				draw_rect(crop_rect, Color(0.3, 0.8, 0.3).lerp(Color(0.95, 0.85, 0.2), r))  # 绿→金
+				var tint := Color(0.3, 0.8, 0.3).lerp(Color(0.95, 0.85, 0.2), r)   # 绿→金
+				draw_texture_rect(ArtBank.tex(&"crop"), crop_rect, false, tint)
 				if _grid.crop_mature(c):
-					draw_rect(crop_rect, Color(1, 1, 1, 0.9), false, 1.5)  # 成熟描边
+					draw_rect(crop_rect, Color(1, 1, 1, 0.9), false, 1.5)          # 成熟描边
 
 
-func _tile_color(state: int) -> Color:
+func _tile_key(state: int) -> StringName:
 	match state:
 		FarmGrid.State.TILLED:
-			return Color(0.55, 0.35, 0.2)    # 已耕:棕
+			return &"tile_tilled"
 		FarmGrid.State.WATERED:
-			return Color(0.35, 0.22, 0.12)   # 已浇:深棕
+			return &"tile_watered"
 		_:
-			return Color(0.35, 0.6, 0.25)    # 空地:草绿
+			return &"tile_grass"
