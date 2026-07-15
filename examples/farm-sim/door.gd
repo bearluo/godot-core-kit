@@ -4,6 +4,7 @@ extends Node2D
 ## 触发一次即锁(_triggered),切场景后随旧场景一起释放,不会重复触发。
 
 const SIZE := Vector2(40, 40)
+const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
 
 var _target_path := ""
 var _target_spawn := Vector2.ZERO
@@ -38,5 +39,5 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(-SIZE * 0.5, SIZE), _color)
-	draw_rect(Rect2(-SIZE * 0.5, SIZE), Color(1, 1, 1, 0.5), false, 2.0)
+	# 门贴图(近白)用 modulate 上各门颜色;中心对齐
+	draw_texture_rect(ArtBank.tex(&"door"), Rect2(-SIZE * 0.5, SIZE), false, _color)

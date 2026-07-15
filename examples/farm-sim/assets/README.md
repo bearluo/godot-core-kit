@@ -19,7 +19,7 @@
 | `npc` | NPC 小人 | 24×24 |
 | `bed` | 农舍床 | 48×64 |
 | `shop_sign` | 小镇商店牌 | 72×56 |
-| `door_h` / `door_v` | 门(横/竖) | 40×40 |
+| `door` | 门(近白,door.gd 用 modulate 上各门颜色) | 40×40 |
 | `fx_star` / `fx_drop` / `fx_dust` / `fx_gold` | 粒子点纹理 | 8×8 |
 
 ## 说明

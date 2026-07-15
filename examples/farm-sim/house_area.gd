@@ -3,6 +3,7 @@ extends "res://examples/farm-sim/area_base.gd"
 ## 回农田的门(FADE)。无农田网格;farm_use(J)= 与身边物件交互。
 
 const DoorScript = preload("res://examples/farm-sim/door.gd")
+const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
 
 const FLOOR_SIZE := Vector2(256, 192)
 const BED_POS := Vector2(200, 56)
@@ -42,5 +43,4 @@ func _on_use() -> void:
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, FLOOR_SIZE), Color(0.32, 0.26, 0.22))              # 地板
 	draw_rect(Rect2(Vector2.ZERO, FLOOR_SIZE), Color(0, 0, 0, 0.25), false, 2.0)
-	draw_rect(Rect2(BED_POS, BED_SIZE), Color(0.7, 0.4, 0.4))                        # 床
-	draw_rect(Rect2(BED_POS, BED_SIZE), Color(1, 1, 1, 0.5), false, 2.0)
+	draw_texture(ArtBank.tex(&"bed"), BED_POS)                                       # 床(贴图)

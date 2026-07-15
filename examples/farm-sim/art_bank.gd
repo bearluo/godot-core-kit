@@ -44,6 +44,30 @@ static func _generate(key: StringName) -> Texture2D:
 			return _tile(Color(0.34, 0.22, 0.13), "wet")
 		&"crop":
 			return _crop_tex()
+		&"player_down_0":
+			return _player_tex("down", 0)
+		&"player_down_1":
+			return _player_tex("down", 1)
+		&"player_up_0":
+			return _player_tex("up", 0)
+		&"player_up_1":
+			return _player_tex("up", 1)
+		&"player_left_0":
+			return _player_tex("left", 0)
+		&"player_left_1":
+			return _player_tex("left", 1)
+		&"player_right_0":
+			return _player_tex("right", 0)
+		&"player_right_1":
+			return _player_tex("right", 1)
+		&"npc":
+			return _npc_tex()
+		&"bed":
+			return _bed_tex()
+		&"shop_sign":
+			return _shop_sign_tex()
+		&"door":
+			return _door_tex()
 		_:
 			return _fallback()
 
@@ -86,6 +110,73 @@ static func _crop_tex() -> Texture2D:
 	return ImageTexture.create_from_image(img)
 
 
+## 玩家 24² 小人:头 + 躯干 + 两腿(踏步帧交替抬腿)+ 朝向标记。透明底。
+static func _player_tex(dir: String, frame: int) -> Texture2D:
+	var img := Image.create(24, 24, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var skin := Color(0.96, 0.82, 0.66)
+	var shirt := Color(0.86, 0.83, 0.62)
+	var dark := Color(0.35, 0.3, 0.22)
+	var l1y := 19 if frame == 0 else 20      # 踏步:两腿一前一后
+	var l2y := 20 if frame == 0 else 19
+	_rect(img, 8, l1y, 11, 23, dark)
+	_rect(img, 13, l2y, 16, 23, dark)
+	_rect(img, 7, 11, 17, 19, shirt)         # 躯干
+	_disc(img, 12, 7, 5, skin)               # 头
+	match dir:                               # 朝向标记(深色)
+		"down":
+			_rect(img, 10, 8, 14, 9, dark)
+		"up":
+			_rect(img, 10, 4, 14, 5, dark)
+		"left":
+			_rect(img, 7, 6, 9, 8, dark)
+		"right":
+			_rect(img, 15, 6, 17, 8, dark)
+	return ImageTexture.create_from_image(img)
+
+
+## NPC 24² 小人(蓝衣,区别于玩家)。
+static func _npc_tex() -> Texture2D:
+	var img := Image.create(24, 24, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 8, 19, 11, 23, Color(0.25, 0.2, 0.3))
+	_rect(img, 13, 19, 16, 23, Color(0.25, 0.2, 0.3))
+	_rect(img, 7, 11, 17, 19, Color(0.4, 0.52, 0.82))   # 蓝衣
+	_disc(img, 12, 7, 5, Color(0.95, 0.82, 0.66))
+	_rect(img, 10, 8, 14, 9, Color(0.2, 0.2, 0.3))      # 脸朝下
+	return ImageTexture.create_from_image(img)
+
+
+## 农舍床 48×64:木框 + 被褥 + 枕头。
+static func _bed_tex() -> Texture2D:
+	var img := Image.create(48, 64, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 2, 2, 45, 61, Color(0.5, 0.32, 0.2))
+	_rect(img, 5, 6, 42, 57, Color(0.75, 0.42, 0.42))
+	_rect(img, 7, 8, 40, 22, Color(0.92, 0.9, 0.86))
+	return ImageTexture.create_from_image(img)
+
+
+## 小镇商店牌 72×56:牌面 + 顶边 + 柱。
+static func _shop_sign_tex() -> Texture2D:
+	var img := Image.create(72, 56, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 4, 4, 67, 40, Color(0.72, 0.6, 0.3))
+	_rect(img, 4, 4, 67, 8, Color(0.55, 0.42, 0.2))
+	_rect(img, 32, 40, 39, 55, Color(0.4, 0.3, 0.18))
+	return ImageTexture.create_from_image(img)
+
+
+## 门 40²(近白,door.gd 用 modulate 上各门颜色)+ 门把。
+static func _door_tex() -> Texture2D:
+	var img := Image.create(40, 40, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 3, 3, 36, 36, Color(0.95, 0.95, 0.95))
+	_rect(img, 3, 3, 36, 7, Color(0.75, 0.75, 0.75))
+	_disc(img, 30, 20, 2, Color(1, 1, 0.7))
+	return ImageTexture.create_from_image(img)
+
+
 static func _fallback() -> Texture2D:
 	var img := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
 	img.fill(Color(1, 0, 1))   # 品红醒目,提示缺 key
@@ -103,11 +194,22 @@ static func _edge(img: Image, color: Color) -> void:
 		img.set_pixel(TILE - 1, i, color.lerp(Color(1, 1, 1), 0.25))
 
 
-## 填实心圆(cx,cy 圆心,r 半径)。
+## 填实心矩形(x0,y0..x1,y1 含端点,越界自动裁)。
+static func _rect(img: Image, x0: int, y0: int, x1: int, y1: int, color: Color) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
+	for y in range(maxi(0, y0), mini(h, y1 + 1)):
+		for x in range(maxi(0, x0), mini(w, x1 + 1)):
+			img.set_pixel(x, y, color)
+
+
+## 填实心圆(cx,cy 圆心,r 半径;按图像实际尺寸裁边)。
 static func _disc(img: Image, cx: int, cy: int, r: int, color: Color) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
 	for y in range(cy - r, cy + r + 1):
 		for x in range(cx - r, cx + r + 1):
-			if x >= 0 and y >= 0 and x < TILE and y < TILE:
+			if x >= 0 and y >= 0 and x < w and y < h:
 				var dx := x - cx
 				var dy := y - cy
 				if dx * dx + dy * dy <= r * r:

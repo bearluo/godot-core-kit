@@ -22,6 +22,21 @@ func _initialize() -> void:
 	if crop == null or crop.get_width() != 32:
 		failures += 1; print("FAIL: crop tex")
 
+	# 角色/物件精灵:各 key 生成非空 Texture2D + 期望尺寸
+	var sprite_specs := {
+		&"player_down_0": Vector2i(24, 24), &"player_down_1": Vector2i(24, 24),
+		&"player_up_0": Vector2i(24, 24), &"player_left_0": Vector2i(24, 24),
+		&"player_right_0": Vector2i(24, 24), &"npc": Vector2i(24, 24),
+		&"bed": Vector2i(48, 64), &"shop_sign": Vector2i(72, 56), &"door": Vector2i(40, 40),
+	}
+	for key in sprite_specs:
+		var t = ArtBank.tex(key)
+		var want: Vector2i = sprite_specs[key]
+		if t == null or not (t is Texture2D):
+			failures += 1; print("FAIL: %s not a Texture2D" % key)
+		elif t.get_width() != want.x or t.get_height() != want.y:
+			failures += 1; print("FAIL: %s size %dx%d want %dx%d" % [key, t.get_width(), t.get_height(), want.x, want.y])
+
 	# 缓存命中:同 key 两次返回同一实例
 	var a = ArtBank.tex(&"tile_grass")
 	var b = ArtBank.tex(&"tile_grass")

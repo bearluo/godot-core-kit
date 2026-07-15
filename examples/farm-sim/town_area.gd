@@ -3,6 +3,7 @@ extends "res://examples/farm-sim/area_base.gd"
 ## 回农田的门(SLIDE 向上)。NPC 在 Task3 加入。farm_use(J)= 与身边物件/NPC 交互。
 
 const DoorScript = preload("res://examples/farm-sim/door.gd")
+const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
 
 const GROUND_SIZE := Vector2(384, 256)
 const SHOP_POS := Vector2(296, 56)
@@ -42,7 +43,6 @@ func _on_use() -> void:
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, GROUND_SIZE), Color(0.5, 0.5, 0.45))               # 地面
 	draw_rect(Rect2(Vector2.ZERO, GROUND_SIZE), Color(0, 0, 0, 0.2), false, 2.0)
-	draw_rect(Rect2(SHOP_POS, SHOP_SIZE), Color(0.72, 0.6, 0.3))                     # 商店牌
-	draw_rect(Rect2(SHOP_POS, SHOP_SIZE), Color(1, 1, 1, 0.5), false, 2.0)
+	draw_texture(ArtBank.tex(&"shop_sign"), SHOP_POS)                                # 商店牌(贴图)
 	var lbl := Vector2(SHOP_POS.x + 10, SHOP_POS.y + SHOP_SIZE.y + 14)
 	draw_string(ThemeDB.fallback_font, lbl, "商店", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
