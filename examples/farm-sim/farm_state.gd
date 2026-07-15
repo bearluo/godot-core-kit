@@ -10,6 +10,7 @@ extends Node
 ## NPC 社交:npcs_in_area(按日程)/open_dialogue/gift_to/chat_with/friendship + 好感解锁(_check_unlock 幂等发放)。
 
 signal grid_changed   ## 农田模型变更(耕种浇收/生长/读档)→ 区域 view 连此重绘
+signal fx_requested(kind, cell)   ## 玩法动作成功(收获/浇水/耕地/播种)→ 农田区连此爆粒子 + 目标格顿挫
 
 const FarmGrid = preload("res://examples/farm-sim/farm_grid.gd")
 const HudScript = preload("res://examples/farm-sim/hud.gd")
@@ -259,6 +260,8 @@ func fade() -> KitTransition:
 	var t := KitTransition.new()
 	t.type = KitTransition.Type.FADE
 	t.duration = 0.3
+	t.ease_type = Tween.EASE_IN_OUT
+	t.trans_type = Tween.TRANS_CUBIC
 	return t
 
 
@@ -268,6 +271,8 @@ func slide(dir: int) -> KitTransition:
 	t.type = KitTransition.Type.SLIDE
 	t.direction = dir
 	t.duration = 0.35
+	t.ease_type = Tween.EASE_IN_OUT
+	t.trans_type = Tween.TRANS_CUBIC
 	return t
 
 
@@ -338,6 +343,7 @@ func use_tool_on(cell: Vector2i) -> bool:
 	if did:
 		if sfx_name != &"":
 			_sfx(sfx_name)
+			fx_requested.emit(sfx_name, cell)
 		_energy = maxi(0, _energy - ACTION_COST)
 		grid_changed.emit()
 		if _energy == 0:

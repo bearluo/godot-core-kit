@@ -10,6 +10,7 @@ const FarmGridView = preload("res://examples/farm-sim/farm_grid_view.gd")
 const TargetHighlight = preload("res://examples/farm-sim/target_highlight.gd")
 const WeatherView = preload("res://examples/farm-sim/weather_view.gd")
 const DoorScript = preload("res://examples/farm-sim/door.gd")
+const Fx = preload("res://examples/farm-sim/fx.gd")
 
 var _view
 var _highlight
@@ -48,6 +49,9 @@ func _build_area() -> void:
 	to_town.setup(Farm.AREA_TOWN, Farm.TOWN_ENTRY, Farm.slide(KitTransition.Dir.DOWN), "小镇 ↓", Color(0.3, 0.5, 0.6))
 	add_child(to_town)
 
+	# 玩法动作粒子:model 成功动作(耕/种/浇/收)→ 本区爆粒子 + 目标格顿挫
+	Farm.fx_requested.connect(_on_fx_requested)
+
 	CoreKit.log.info("[World] 农田就绪:WASD 走动,J 用工具,N 睡觉,走进门→农舍/小镇")
 
 
@@ -59,3 +63,10 @@ func _after_player() -> void:
 
 func _on_use() -> void:
 	Farm.use_tool_on(_player.facing_cell())
+
+
+## 玩法动作成功 → 该格中心爆一簇粒子 + 高亮框"顿一下"。
+func _on_fx_requested(kind, cell) -> void:
+	Fx.burst(self, Farm.grid.cell_to_world(cell) + Vector2(16, 16), kind)
+	if _highlight != null:
+		_highlight.punch(cell)

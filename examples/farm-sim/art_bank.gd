@@ -68,6 +68,14 @@ static func _generate(key: StringName) -> Texture2D:
 			return _shop_sign_tex()
 		&"door":
 			return _door_tex()
+		&"fx_star":
+			return _point_tex(Color(1.0, 0.9, 0.35), "star")
+		&"fx_drop":
+			return _point_tex(Color(0.55, 0.72, 1.0), "disc")
+		&"fx_dust":
+			return _point_tex(Color(0.72, 0.6, 0.44), "disc")
+		&"fx_gold":
+			return _point_tex(Color(1.0, 0.85, 0.32), "disc")
 		_:
 			return _fallback()
 
@@ -174,6 +182,19 @@ static func _door_tex() -> Texture2D:
 	_rect(img, 3, 3, 36, 36, Color(0.95, 0.95, 0.95))
 	_rect(img, 3, 3, 36, 7, Color(0.75, 0.75, 0.75))
 	_disc(img, 30, 20, 2, Color(1, 1, 0.7))
+	return ImageTexture.create_from_image(img)
+
+
+## 粒子点 8²(十字星 / 实心圆),透明底。Fx 用作 CPUParticles2D 的 texture,再由粒子叠色/缩放。
+static func _point_tex(color: Color, shape: String) -> Texture2D:
+	var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	if shape == "star":
+		_rect(img, 3, 0, 4, 7, color)                 # 竖
+		_rect(img, 0, 3, 7, 4, color)                 # 横
+		_disc(img, 4, 4, 1, color.lightened(0.35))    # 中心高光
+	else:
+		_disc(img, 4, 4, 3, color)
 	return ImageTexture.create_from_image(img)
 
 

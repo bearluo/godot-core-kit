@@ -28,6 +28,8 @@ func _initialize() -> void:
 		&"player_up_0": Vector2i(24, 24), &"player_left_0": Vector2i(24, 24),
 		&"player_right_0": Vector2i(24, 24), &"npc": Vector2i(24, 24),
 		&"bed": Vector2i(48, 64), &"shop_sign": Vector2i(72, 56), &"door": Vector2i(40, 40),
+		&"fx_star": Vector2i(8, 8), &"fx_drop": Vector2i(8, 8),
+		&"fx_dust": Vector2i(8, 8), &"fx_gold": Vector2i(8, 8),
 	}
 	for key in sprite_specs:
 		var t = ArtBank.tex(key)
