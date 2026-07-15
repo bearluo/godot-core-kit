@@ -8,6 +8,7 @@ extends Node
 ## model 与 view 剥离:use_tool_on(cell) 吃传入格(facing 由区域算),grid 变化经 grid_changed 信号通知 view 重绘。
 ## 区域切换:go_to(path,spawn,transition) 写 pending_spawn + CoreKit.scenes.change_scene(整替换);状态在本单例不丢。
 ## NPC 社交:npcs_in_area(按日程)/open_dialogue/gift_to/chat_with/friendship + 好感解锁(_check_unlock 幂等发放)。
+## P5 手感:use_tool_on 成功发 fx_requested(kind,cell) 供区域爆粒子;fade()/slide() 带 TRANS_CUBIC 缓动。数值曲线见 P5 spec §5.1。
 
 signal grid_changed   ## 农田模型变更(耕种浇收/生长/读档)→ 区域 view 连此重绘
 signal fx_requested(kind, cell)   ## 玩法动作成功(收获/浇水/耕地/播种)→ 农田区连此爆粒子 + 目标格顿挫

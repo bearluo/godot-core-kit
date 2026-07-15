@@ -2,6 +2,7 @@ extends "res://examples/farm-sim/area_base.gd"
 ## 农田区域场景(P3 多区域的 farm 区,继承 area_base)。持久状态全在 Farm autoload;本场景建农田网格
 ## 渲染 + 面前格高亮 + 天气视觉 + 通往农舍/小镇的门,farm_use(J)=用工具。切到别区时本场景整替换,
 ## 农田状态(已种作物/浇水/生长)留在 Farm 不丢。
+## P5 手感:美术全走 ArtBank 贴图;玩法动作成功经 Farm.fx_requested → Fx.burst 爆粒子 + 目标格顿挫;门转场带缓动。
 ##
 ## 操作:WASD 走动;J 用工具(耕→种→浇→收,可升级 3×3);N 睡觉;Q 切种子;
 ##   走进右侧门→农舍(FADE)、下方门→小镇(SLIDE);I 背包 / P 商店 / L 任务成就 / Esc 菜单(存读档/设置)。
