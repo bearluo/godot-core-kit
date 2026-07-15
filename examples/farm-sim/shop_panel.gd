@@ -26,7 +26,7 @@ func _ready() -> void:
 	box.position = Vector2(60, 60)
 	add_child(box)
 	var title := Label.new()
-	title.text = "商店  (↑↓ 选,J 买/卖,P 关闭)"
+	title.text = CoreKit.i18n.t("SHOP_TITLE")
 	box.add_child(title)
 	_info = Label.new()
 	box.add_child(_info)

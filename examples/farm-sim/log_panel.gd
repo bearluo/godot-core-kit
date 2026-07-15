@@ -19,7 +19,7 @@ func _ready() -> void:
 	box.position = Vector2(60, 60)
 	add_child(box)
 	var title := Label.new()
-	title.text = "任务 / 成就  (L 关闭)"
+	title.text = CoreKit.i18n.t("LOG_TITLE")
 	box.add_child(title)
 	_list = VBoxContainer.new()
 	box.add_child(_list)

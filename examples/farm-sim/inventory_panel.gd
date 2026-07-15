@@ -18,7 +18,7 @@ func _ready() -> void:
 	box.position = Vector2(60, 60)
 	add_child(box)
 	var title := Label.new()
-	title.text = "背包  (I 关闭)"
+	title.text = CoreKit.i18n.t("INV_TITLE")
 	box.add_child(title)
 	_list = VBoxContainer.new()
 	box.add_child(_list)
@@ -33,7 +33,7 @@ func _refresh() -> void:
 	ids.sort_custom(func(a, b): return String(a) < String(b))
 	if ids.is_empty():
 		var e := Label.new()
-		e.text = "(空)"
+		e.text = CoreKit.i18n.t("INV_EMPTY")
 		_list.add_child(e)
 		return
 	for id in ids:

@@ -3,7 +3,7 @@ extends Control
 ## (world.save_game/load_game/close_menu)。
 
 var _world
-var _items := ["存档", "读档", "继续"]
+var _items := ["MENU_SAVE", "MENU_LOAD", "MENU_SETTINGS", "MENU_CONTINUE"]   ## i18n key
 var _cursor := 0
 var _list: VBoxContainer
 var _msg: Label
@@ -19,7 +19,7 @@ func _ready() -> void:
 	box.position = Vector2(80, 80)
 	add_child(box)
 	var title := Label.new()
-	title.text = "菜单  (↑↓ 选,J 确认,Esc 关闭)"
+	title.text = CoreKit.i18n.t("MENU_TITLE")
 	box.add_child(title)
 	_list = VBoxContainer.new()
 	box.add_child(_list)
@@ -34,7 +34,7 @@ func _refresh() -> void:
 	for i in range(_items.size()):
 		var mark := "▶ " if i == _cursor else "   "
 		var l := Label.new()
-		l.text = mark + _items[i]
+		l.text = mark + CoreKit.i18n.t(_items[i])
 		_list.add_child(l)
 
 
@@ -54,11 +54,13 @@ func _activate() -> void:
 	match _cursor:
 		0:
 			_world.save_game()
-			_msg.text = "已存档"
+			_msg.text = CoreKit.i18n.t("MENU_SAVED")
 		1:
 			if _world.load_game():
-				_msg.text = "已读档"
+				_msg.text = CoreKit.i18n.t("MENU_LOADED")
 			else:
-				_msg.text = "无存档"
+				_msg.text = CoreKit.i18n.t("MENU_NOSAVE")
 		2:
+			_world.open_settings()
+		3:
 			_world.close_menu()

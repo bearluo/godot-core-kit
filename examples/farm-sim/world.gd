@@ -19,6 +19,9 @@ const WeatherView = preload("res://examples/farm-sim/weather_view.gd")
 const QuestLogScript = preload("res://examples/farm-sim/quest_log.gd")
 const AchievementTracker = preload("res://examples/farm-sim/achievement_tracker.gd")
 const LogPanel = preload("res://examples/farm-sim/log_panel.gd")
+const SettingsPanel = preload("res://examples/farm-sim/settings_panel.gd")
+const I18nStrings = preload("res://examples/farm-sim/i18n_strings.gd")
+const AudioBank = preload("res://examples/farm-sim/audio_bank.gd")
 
 const GRID_W := 10
 const GRID_H := 8
@@ -53,6 +56,11 @@ func energy_max() -> int:
 
 func _ready() -> void:
 	CoreKit.log.info("[World] 农场世界启动")
+	# i18n:装载中/英内存翻译;默认中文(尊重已持久化的 zh/en 选择),locale 变化时重建活动面板
+	I18nStrings.install()
+	if not ["zh", "en"].has(CoreKit.i18n.get_locale()):
+		CoreKit.i18n.set_locale("zh")
+	CoreKit.i18n.locale_changed.connect(_on_locale_changed)
 	# 数据 + 背包(起始给点种子)
 	_registry = KitDataRegistry.new()
 	_registry.load_dir(&"crop", "res://examples/farm-sim/data/crops")
@@ -129,6 +137,10 @@ func _ready() -> void:
 	# 逐日推进走事件链 clock:day_changed →(weather 掷天气)→ weather:changed → 本世界长作物。
 	# 订阅天气(而非直接订时钟),保证"先定当天天气、再据加成生长"的顺序(与 dogfood crop.gd 同构)。
 	CoreKit.bus.subscribe(_weather.EV_CHANGED, _on_weather)
+	# 买卖音效:订阅商店事件点播(shop_panel 触发交易 → 事件 → 这里出声)
+	CoreKit.bus.subscribe(_shop.EV_BOUGHT, func(_p): _sfx(&"buy"))
+	CoreKit.bus.subscribe(_shop.EV_SOLD, func(_p): _sfx(&"sell"))
+	CoreKit.audio.play_music(AudioBank.bgm(), 1.0)   # 程序化 BGM 循环
 	CoreKit.log.info("[World] 就绪:WASD 走动,J 用工具(耕/种/浇/收),N 进下一天")
 
 	if OS.get_environment("FARM_SMOKE") == "1":
@@ -197,17 +209,31 @@ func _run_smoke() -> void:
 	ok = ok and _quest_log.done_count() == quests_done      # 读档复原任务进度
 	ok = ok and _grid.tile_state(Vector2i(7, 7)) == FarmGrid.State.EMPTY   # 读档回滚了 till
 	CoreKit.saves.delete_slot("farm")                       # 清存档槽,保证可重复跑
-	# UI 面板冒烟:四个面板各开各关一次,验证 build/push/pop 不报错(手感/布局仍需 F5)
-	for uiname in ["inventory", "shop", "menu", "log"]:
+	# i18n:切语言后同 key 出不同文案(不假设起始语言)
+	var loc0 = CoreKit.i18n.get_locale()
+	var save0 = CoreKit.i18n.t("MENU_SAVE")
+	cycle_locale()
+	ok = ok and CoreKit.i18n.get_locale() != loc0 and CoreKit.i18n.t("MENU_SAVE") != save0
+	cycle_locale()
+	ok = ok and CoreKit.i18n.get_locale() == loc0           # 切回起始语言
+	# 音频:程序化流非空;音量写读往返
+	ok = ok and AudioBank.sfx(&"till") != null and AudioBank.bgm() != null
+	CoreKit.audio.set_volume("music", 0.5)
+	ok = ok and absf(CoreKit.audio.get_volume("music") - 0.5) < 0.01
+	# UI 面板冒烟:五个面板各开各关一次,验证 build/push/pop 不报错(含 settings 的 KitRebindList)
+	for uiname in ["inventory", "shop", "menu", "log", "settings"]:
 		_open_ui(uiname)
 		ok = ok and _active_ui == uiname and _ui_stack.depth() == 1
 		_close_ui()
 		ok = ok and _active_ui == "" and _ui_stack.is_empty()
-	CoreKit.log.info("[World][SMOKE] %s(体力回满=%s,存读档=%s,任务=%d/%d,成就=%d/%d)" % [
+	CoreKit.log.info("[World][SMOKE] %s(体力回满=%s,存读档=%s,任务=%d/%d,成就=%d/%d,语言=%s)" % [
 		"PASS" if ok else "FAIL", _energy == ENERGY_MAX, loaded,
 		_quest_log.done_count(), _quest_log.quest_count(),
-		_tracker.unlocked_count(), _tracker.total()])
+		_tracker.unlocked_count(), _tracker.total(), CoreKit.i18n.get_locale()])
 	_tracker.reset_all()                                    # 清 settings 成就分区,保证可重复跑
+	CoreKit.settings.erase_section("locale")                # 复位语言/音量/键位持久化,保证可重复跑
+	CoreKit.settings.erase_section("audio")
+	CoreKit.settings.erase_section("input")
 	get_tree().quit(0 if ok else 1)
 
 
@@ -267,6 +293,9 @@ func _open_ui(name: String) -> void:
 		"log":
 			panel = LogPanel.new()
 			panel.bind(_quest_log, _tracker)
+		"settings":
+			panel = SettingsPanel.new()
+			panel.bind(self)
 		_:
 			return
 	_ui_stack.push(panel, {"hide_below": false, "dim": Color(0, 0, 0, 0.45)})  # 模态浮层:压暗背景、挡输入
@@ -285,6 +314,34 @@ func _close_ui() -> void:
 ## 供菜单"继续"调用。
 func close_menu() -> void:
 	_close_ui()
+
+
+## 切换中/英(设置面板 J 调用);set_locale 会广播 locale_changed → _rebuild_active_ui。
+func cycle_locale() -> void:
+	CoreKit.i18n.set_locale("en" if CoreKit.i18n.get_locale() == "zh" else "zh")
+
+
+## 暂停菜单"设置"入口:关菜单再开设置(避免栈叠)。
+func open_settings() -> void:
+	_close_ui()
+	_open_ui("settings")
+
+
+func _on_locale_changed(_loc: String) -> void:
+	call_deferred("_rebuild_active_ui")   # 延迟重建,避开在旧面板 handle_action 内 free 它
+
+
+## 语言变化后重建当前活动面板,使其标签用新语言(HUD 每帧读 t() 天然实时)。
+func _rebuild_active_ui() -> void:
+	if _active_ui == "":
+		return
+	var name := _active_ui
+	_close_ui()
+	_open_ui(name)
+
+
+func _sfx(name: StringName) -> void:
+	CoreKit.audio.play_sfx(AudioBank.sfx(name))
 
 
 ## 存档:地块 + 背包 + 金币 + 时钟 + 体力 全量存进 CoreKit.saves。
@@ -360,27 +417,39 @@ func _use_tool() -> void:
 		CoreKit.log.info("[World] 精疲力尽,按 N 睡觉")
 		return
 	var did := false
+	var sfx_name: StringName = &""
 	if _grid.has_crop(c):
 		if _grid.crop_mature(c):
 			did = _grid.harvest(c)
-			if did: CoreKit.log.info("[World] 收获 @ %s" % c)
+			if did:
+				CoreKit.log.info("[World] 收获 @ %s" % c)
+				sfx_name = &"harvest"
 		else:
 			did = _water_area(c)
-			if did: CoreKit.log.info("[World] 浇水 @ %s" % c)
+			if did:
+				CoreKit.log.info("[World] 浇水 @ %s" % c)
+				sfx_name = &"water"
 	elif _grid.tile_state(c) == FarmGrid.State.EMPTY:
 		did = _grid.till(c)
-		if did: CoreKit.log.info("[World] 耕地 @ %s" % c)
+		if did:
+			CoreKit.log.info("[World] 耕地 @ %s" % c)
+			sfx_name = &"till"
 	else:
 		var season := StringName(CoreKit.clock.season_name())
 		did = _grid.plant(c, _selected_crop, season)
 		if did:
 			CoreKit.log.info("[World] 播种 %s @ %s" % [_selected_crop, c])
+			sfx_name = &"plant"
 		elif not _grid.crop_plantable(_selected_crop, season):
 			CoreKit.log.info("[World] %s 不在当季(%s)可种" % [selected_crop_name(), CoreKit.clock.season_name()])
 		else:
 			did = _water_area(c)
-			if did: CoreKit.log.info("[World] 浇水 @ %s" % c)
+			if did:
+				CoreKit.log.info("[World] 浇水 @ %s" % c)
+				sfx_name = &"water"
 	if did:
+		if sfx_name != &"":
+			_sfx(sfx_name)
 		_energy = maxi(0, _energy - ACTION_COST)
 		_view.queue_redraw()
 		if _energy == 0:
@@ -397,10 +466,9 @@ func _cycle_seed() -> void:
 	CoreKit.log.info("[World] 选中种子:%s" % selected_crop_name())
 
 
-## 当前选中种子的展示名(供 HUD)。
+## 当前选中种子的展示名(供 HUD;经 i18n 本地化,缺 key 回退 .tres 原文)。
 func selected_crop_name() -> String:
-	var def = _registry.get_def_or(&"crop", _selected_crop, null)
-	return def.display_name if def != null else String(_selected_crop)
+	return I18nStrings.crop_name(_registry, _selected_crop)
 
 
 ## 当前选中种子在当季能否种(供 HUD 标注 [非当季])。
@@ -412,6 +480,7 @@ func selected_crop_plantable() -> bool:
 func _sleep() -> void:
 	CoreKit.clock.advance_day()
 	_energy = ENERGY_MAX
+	_sfx(&"day")
 	CoreKit.log.info("[World] 睡了一觉,体力回满")
 
 
@@ -420,10 +489,17 @@ func _on_weather(payload: Dictionary) -> void:
 	var bonus := int(payload.get("growth_bonus", 0))
 	_grid.advance_day(bonus)
 	_view.queue_redraw()
+	if payload.get("kind", &"") == &"rainy":
+		_sfx(&"rain")
 	if bonus > 0:
 		CoreKit.log.info("[World] 雨天,作物加速生长 +%d" % bonus)
 
 
-## 当前天气展示名(供 HUD)。
+## 当前天气展示名(供 HUD;经 i18n 本地化)。
 func weather_name() -> String:
-	return _weather.name_of(_weather.current_kind()) if _weather != null else ""
+	if _weather == null:
+		return ""
+	var k = _weather.current_kind()   # _weather 无类型,不用 :=
+	if k == &"":
+		k = &"sunny"
+	return CoreKit.i18n.t("WEATHER_" + String(k))

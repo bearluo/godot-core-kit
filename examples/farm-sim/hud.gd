@@ -35,14 +35,17 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	var i18n = CoreKit.i18n
 	if _clock != null:
 		_date_label.text = "y%d %s d%d  %02d:%02d" % [
-			_clock.year(), _clock.season_name(), _clock.day(), _clock.hour(), _clock.minute()]
+			_clock.year(), i18n.t("SEASON_" + _clock.season_name()),
+			_clock.day(), _clock.hour(), _clock.minute()]
 	if _wallet != null:
-		_gold_label.text = "金币: %d" % _wallet.gold
+		_gold_label.text = "%s: %d" % [i18n.t("HUD_GOLD"), _wallet.gold]
 	if _world != null:
-		_weather_label.text = "天气: %s" % _world.weather_name()
-		_energy_label.text = "体力: %d/%d" % [_world.energy(), _world.energy_max()]
+		_weather_label.text = "%s: %s" % [i18n.t("HUD_WEATHER"), _world.weather_name()]
+		_energy_label.text = "%s: %d/%d" % [i18n.t("HUD_ENERGY"), _world.energy(), _world.energy_max()]
 		var ok_season: bool = _world.selected_crop_plantable()
-		_seed_label.text = "选中: %s%s (Q 切换)" % [
-			_world.selected_crop_name(), "" if ok_season else " [非当季]"]
+		_seed_label.text = "%s: %s%s %s" % [
+			i18n.t("HUD_SEED"), _world.selected_crop_name(),
+			"" if ok_season else " " + i18n.t("HUD_OFFSEASON"), i18n.t("HUD_SEED_HINT")]
