@@ -4,7 +4,7 @@ extends Node2D
 ## 触发一次即锁(_triggered),切场景后随旧场景一起释放,不会重复触发。
 
 const SIZE := Vector2(40, 40)
-const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
+const ArtBank = preload("res://examples/farm-sim/gfx/art_bank.gd")
 
 var _target_path := ""
 var _target_spawn := Vector2.ZERO

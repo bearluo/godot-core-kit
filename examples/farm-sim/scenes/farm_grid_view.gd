@@ -3,8 +3,8 @@ extends Node2D
 ## 逻辑全在 FarmGrid,这里零逻辑。贴图经 ArtBank 接缝取(程序化默认,真素材可换入)——P5 从 draw_rect
 ## 升级到 draw_texture_rect;P5 后期转 TileMapLayer/真 tileset 时本文件整体替换,不动模型。
 
-const FarmGrid = preload("res://examples/farm-sim/farm_grid.gd")
-const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
+const FarmGrid = preload("res://examples/farm-sim/systems/farm_grid.gd")
+const ArtBank = preload("res://examples/farm-sim/gfx/art_bank.gd")
 
 var _grid
 

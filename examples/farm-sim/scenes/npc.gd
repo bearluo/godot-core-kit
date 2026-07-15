@@ -2,7 +2,7 @@ extends Node2D
 ## NPC 占位节点(P3)。色块 + 头顶名字 Label,按日程站到区域指定格。逻辑数据在 npc_def(Resource),
 ## 本节点只表现 + 暴露定义/格坐标供交互(相邻判定 → 对话,P4)。P5 换真 sprite 不动此接口。
 
-const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
+const ArtBank = preload("res://examples/farm-sim/gfx/art_bank.gd")
 
 var _def
 var _cell := Vector2i.ZERO

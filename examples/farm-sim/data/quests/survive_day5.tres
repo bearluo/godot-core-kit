@@ -1,6 +1,6 @@
 [gd_resource type="Resource" load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://examples/farm-sim/quest_def.gd" id="1_quest"]
+[ext_resource type="Script" path="res://examples/farm-sim/defs/quest_def.gd" id="1_quest"]
 
 [resource]
 script = ExtResource("1_quest")

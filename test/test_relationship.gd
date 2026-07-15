@@ -6,8 +6,8 @@ extends SceneTree
 ## 运行时送礼累加/扣物/当日防刷/解锁 由 FARM_SMOKE(带 CoreKit)覆盖,不在此重复。
 
 func _initialize() -> void:
-	var Relationship = load("res://examples/farm-sim/relationship.gd")
-	var NpcDef = load("res://examples/farm-sim/npc_def.gd")
+	var Relationship = load("res://examples/farm-sim/systems/relationship.gd")
+	var NpcDef = load("res://examples/farm-sim/defs/npc_def.gd")
 	var failures := 0
 
 	var d = NpcDef.new()

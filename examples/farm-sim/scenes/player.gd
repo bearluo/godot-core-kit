@@ -4,7 +4,7 @@ extends CharacterBody2D
 ## 贴图经接缝取(程序化默认,真素材 player_<dir>_<frame>.png 可换入)。Camera2D 跟随。
 
 const SPEED := 140.0
-const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
+const ArtBank = preload("res://examples/farm-sim/gfx/art_bank.gd")
 
 var facing := Vector2i(0, 1)   ## 4 向朝向(默认朝下)
 var input_locked := false       ## 开菜单时锁走动

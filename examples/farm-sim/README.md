@@ -48,7 +48,7 @@
 - **编辑器**:把 `game.tscn` 设为主场景运行,看输出面板。
 - **Headless**:
   ```
-  godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
+  godot --headless --path . res://examples/farm-sim/legacy/game.tscn --quit-after 120
   ```
   (首次需先 `godot --headless --path . --import` 生成 `KitInventory`/`KitDataRegistry`/`KitUiStack` 的 `class_name` 缓存。)
 

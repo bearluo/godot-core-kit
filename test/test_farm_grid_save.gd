@@ -6,7 +6,7 @@ extends SceneTree
 
 func _initialize() -> void:
 	var failures := 0
-	var FarmGrid = load("res://examples/farm-sim/farm_grid.gd")
+	var FarmGrid = load("res://examples/farm-sim/systems/farm_grid.gd")
 	var KitInv = load("res://addons/godot-core-kit/inventory/kit_inventory.gd")
 	var KitReg = load("res://addons/godot-core-kit/data/kit_data_registry.gd")
 

@@ -1,9 +1,9 @@
-extends "res://examples/farm-sim/area_base.gd"
+extends "res://examples/farm-sim/scenes/area_base.gd"
 ## 农舍区域(P3 多区域,继承 area_base)。占位室内:地板 + 一张床(走到床边按 J → 睡觉推进天+回体力)+
 ## 回农田的门(FADE)。无农田网格;farm_use(J)= 与身边物件交互。
 
-const DoorScript = preload("res://examples/farm-sim/door.gd")
-const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
+const DoorScript = preload("res://examples/farm-sim/scenes/door.gd")
+const ArtBank = preload("res://examples/farm-sim/gfx/art_bank.gd")
 
 const FLOOR_SIZE := Vector2(256, 192)
 const BED_POS := Vector2(200, 56)

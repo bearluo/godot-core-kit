@@ -10,8 +10,8 @@ extends Node2D
 ##   _after_player()   依赖玩家的东西(如面前格高亮)
 ##   _on_use()         farm_use(J):农田=用工具,小镇/农舍=交互身边物件/NPC
 
-const PlayerScript = preload("res://examples/farm-sim/player.gd")
-const NpcScript = preload("res://examples/farm-sim/npc.gd")
+const PlayerScript = preload("res://examples/farm-sim/scenes/player.gd")
+const NpcScript = preload("res://examples/farm-sim/scenes/npc.gd")
 
 var _player
 var _npcs: Array = []   ## 本区当前在场 NPC 节点(供交互找最近者,P4)

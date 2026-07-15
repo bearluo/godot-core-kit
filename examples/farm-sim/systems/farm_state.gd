@@ -13,21 +13,21 @@ extends Node
 signal grid_changed   ## 农田模型变更(耕种浇收/生长/读档)→ 区域 view 连此重绘
 signal fx_requested(kind, cell)   ## 玩法动作成功(收获/浇水/耕地/播种)→ 农田区连此爆粒子 + 目标格顿挫
 
-const FarmGrid = preload("res://examples/farm-sim/farm_grid.gd")
-const HudScript = preload("res://examples/farm-sim/hud.gd")
-const ShopScript = preload("res://examples/farm-sim/shop.gd")
-const InventoryPanel = preload("res://examples/farm-sim/inventory_panel.gd")
-const ShopPanel = preload("res://examples/farm-sim/shop_panel.gd")
-const PauseMenu = preload("res://examples/farm-sim/pause_menu.gd")
-const WeatherSystem = preload("res://examples/farm-sim/weather_system.gd")
-const QuestLogScript = preload("res://examples/farm-sim/quest_log.gd")
-const AchievementTracker = preload("res://examples/farm-sim/achievement_tracker.gd")
-const LogPanel = preload("res://examples/farm-sim/log_panel.gd")
-const SettingsPanel = preload("res://examples/farm-sim/settings_panel.gd")
-const DialoguePanel = preload("res://examples/farm-sim/dialogue_panel.gd")
-const I18nStrings = preload("res://examples/farm-sim/i18n_strings.gd")
-const AudioBank = preload("res://examples/farm-sim/audio_bank.gd")
-const Relationship = preload("res://examples/farm-sim/relationship.gd")
+const FarmGrid = preload("res://examples/farm-sim/systems/farm_grid.gd")
+const HudScript = preload("res://examples/farm-sim/ui/hud.gd")
+const ShopScript = preload("res://examples/farm-sim/systems/shop.gd")
+const InventoryPanel = preload("res://examples/farm-sim/ui/inventory_panel.gd")
+const ShopPanel = preload("res://examples/farm-sim/ui/shop_panel.gd")
+const PauseMenu = preload("res://examples/farm-sim/ui/pause_menu.gd")
+const WeatherSystem = preload("res://examples/farm-sim/systems/weather_system.gd")
+const QuestLogScript = preload("res://examples/farm-sim/systems/quest_log.gd")
+const AchievementTracker = preload("res://examples/farm-sim/systems/achievement_tracker.gd")
+const LogPanel = preload("res://examples/farm-sim/ui/log_panel.gd")
+const SettingsPanel = preload("res://examples/farm-sim/ui/settings_panel.gd")
+const DialoguePanel = preload("res://examples/farm-sim/ui/dialogue_panel.gd")
+const I18nStrings = preload("res://examples/farm-sim/gfx/i18n_strings.gd")
+const AudioBank = preload("res://examples/farm-sim/gfx/audio_bank.gd")
+const Relationship = preload("res://examples/farm-sim/systems/relationship.gd")
 
 const GRID_W := 10
 const GRID_H := 8
@@ -36,9 +36,9 @@ const ACTION_COST := 8            ## 每个工具动作耗的体力
 const WATER_UPGRADE_COST := 200   ## 水壶升级(浇水 3×3)售价
 
 # 区域(P3 多区域):场景路径 + 各区到达落点(世界坐标)。门/切换引用这些常量。
-const AREA_FARM := "res://examples/farm-sim/world.tscn"
-const AREA_HOUSE := "res://examples/farm-sim/house_area.tscn"
-const AREA_TOWN := "res://examples/farm-sim/town_area.tscn"
+const AREA_FARM := "res://examples/farm-sim/scenes/world.tscn"
+const AREA_HOUSE := "res://examples/farm-sim/scenes/house_area.tscn"
+const AREA_TOWN := "res://examples/farm-sim/scenes/town_area.tscn"
 const HOUSE_ENTRY := Vector2(96, 96)      ## 进农舍落点(农舍返回门右侧,避免立刻回触发)
 const TOWN_ENTRY := Vector2(96, 128)      ## 进小镇落点
 const FARM_FROM_HOUSE := Vector2(328, 60) ## 从农舍回农田落点(网格右侧外,农田→农舍门左侧)

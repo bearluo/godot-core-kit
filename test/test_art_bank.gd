@@ -4,7 +4,7 @@ extends SceneTree
 ## 按需单跑(不进 run_all $tests):godot --headless --path . -s res://test/test_art_bank.gd
 
 func _initialize() -> void:
-	var ArtBank = load("res://examples/farm-sim/art_bank.gd")
+	var ArtBank = load("res://examples/farm-sim/gfx/art_bank.gd")
 	var failures := 0
 
 	ArtBank.clear_cache()

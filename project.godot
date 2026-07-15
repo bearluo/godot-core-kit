@@ -12,14 +12,14 @@ config_version=5
 
 config/name="godot-core-kit (dev)"
 config/description="开发工程：托管并测试 godot-core-kit addon（纯 GDScript 通用基础库）。"
-run/main_scene="res://examples/farm-sim/world.tscn"
+run/main_scene="res://examples/farm-sim/scenes/world.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
-Farm="*res://examples/farm-sim/farm_state.gd"
+Farm="*res://examples/farm-sim/systems/farm_state.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [dotnet]

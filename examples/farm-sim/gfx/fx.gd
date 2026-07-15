@@ -2,7 +2,7 @@ extends RefCounted
 ## 粒子反馈 helper(P5)。按玩法动作 kind 建一次性 CPUParticles2D,挂到 parent、播完自 free。
 ## 零依赖、零二进制:纹理取自 ArtBank 程序化点贴图。headless 安全(dummy 驱动可创建,不渲染即不崩,已探针验)。
 
-const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
+const ArtBank = preload("res://examples/farm-sim/gfx/art_bank.gd")
 
 
 ## 在 parent 坐标系的 world_pos 处爆一簇粒子。kind ∈ harvest/water/plant/till(其余按尘土处理)。

@@ -13,16 +13,16 @@ extends Node
 ##       键位重绑定 input(rebind_action 改键落 Settings + action_rebound 信号 + reset)。
 ##
 ## 跑法:把 game.tscn 设为主场景运行,或 headless:
-##   godot --headless --path . res://examples/farm-sim/game.tscn --quit-after 120
+##   godot --headless --path . res://examples/farm-sim/legacy/game.tscn --quit-after 120
 ## (首次需先 godot --headless --path . --import 生成 class_name 缓存。)
 
-const FarmScript := preload("res://examples/farm-sim/farm.gd")
-const ShopScript := preload("res://examples/farm-sim/shop.gd")
-const QuestLogScript := preload("res://examples/farm-sim/quest_log.gd")
-const BackpackPanelScript := preload("res://examples/farm-sim/backpack_panel.gd")
-const WeatherSystemScript := preload("res://examples/farm-sim/weather_system.gd")
-const AchievementTrackerScript := preload("res://examples/farm-sim/achievement_tracker.gd")
-const ClimateScript := preload("res://examples/farm-sim/climate.gd")
+const FarmScript := preload("res://examples/farm-sim/legacy/farm.gd")
+const ShopScript := preload("res://examples/farm-sim/systems/shop.gd")
+const QuestLogScript := preload("res://examples/farm-sim/systems/quest_log.gd")
+const BackpackPanelScript := preload("res://examples/farm-sim/legacy/backpack_panel.gd")
+const WeatherSystemScript := preload("res://examples/farm-sim/systems/weather_system.gd")
+const AchievementTrackerScript := preload("res://examples/farm-sim/systems/achievement_tracker.gd")
+const ClimateScript := preload("res://examples/farm-sim/legacy/climate.gd")
 
 var _registry
 var _bag
@@ -80,7 +80,7 @@ func _ready() -> void:
 
 	# 3. 农田,注入 registry + bag。作物实例走对象池:先 register "crop" 池(prewarm 2 =
 	#    预热 2 个空闲实例),之后 plant/harvest 借还复用,免反复 instantiate/free。
-	CoreKit.pool.register("crop", preload("res://examples/farm-sim/crop.tscn"), 2)
+	CoreKit.pool.register("crop", preload("res://examples/farm-sim/legacy/crop.tscn"), 2)
 	var farm := FarmScript.new()
 	farm.name = "Farm"
 	farm.bind(_registry, _bag)
@@ -252,7 +252,7 @@ func _ready() -> void:
 	var res = CoreKit.res
 	res.clear()
 	var assets := [
-		"res://examples/farm-sim/crop.tscn",
+		"res://examples/farm-sim/legacy/crop.tscn",
 		"res://examples/farm-sim/data/crops/turnip.tres",
 		"res://examples/farm-sim/data/crops/parsnip.tres",
 		"res://examples/farm-sim/data/items/turnip.tres",
@@ -271,7 +271,7 @@ func _ready() -> void:
 	CoreKit.log.info("[Res] 批次完成:progress=%d/%d,缓存数=%d" % [
 		progress[0], progress[1], res.cached_count()])
 	# 命中缓存秒取 + release/is_cached/clear
-	var scene = res.get_resource("res://examples/farm-sim/crop.tscn")
+	var scene = res.get_resource("res://examples/farm-sim/legacy/crop.tscn")
 	var q_path := "res://examples/farm-sim/data/quests/first_income.tres"
 	var before := res.cached_count()
 	res.release(q_path)

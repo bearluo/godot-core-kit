@@ -1,9 +1,9 @@
-extends "res://examples/farm-sim/area_base.gd"
+extends "res://examples/farm-sim/scenes/area_base.gd"
 ## 小镇区域(P3 多区域,继承 area_base)。占位:地面 + 商店牌子(走到牌子边按 J → 开商店面板)+
 ## 回农田的门(SLIDE 向上)。NPC 在 Task3 加入。farm_use(J)= 与身边物件/NPC 交互。
 
-const DoorScript = preload("res://examples/farm-sim/door.gd")
-const ArtBank = preload("res://examples/farm-sim/art_bank.gd")
+const DoorScript = preload("res://examples/farm-sim/scenes/door.gd")
+const ArtBank = preload("res://examples/farm-sim/gfx/art_bank.gd")
 
 const GROUND_SIZE := Vector2(384, 256)
 const SHOP_POS := Vector2(296, 56)

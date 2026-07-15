@@ -1,4 +1,4 @@
-extends "res://examples/farm-sim/area_base.gd"
+extends "res://examples/farm-sim/scenes/area_base.gd"
 ## 农田区域场景(P3 多区域的 farm 区,继承 area_base)。持久状态全在 Farm autoload;本场景建农田网格
 ## 渲染 + 面前格高亮 + 天气视觉 + 通往农舍/小镇的门,farm_use(J)=用工具。切到别区时本场景整替换,
 ## 农田状态(已种作物/浇水/生长)留在 Farm 不丢。
@@ -7,11 +7,11 @@ extends "res://examples/farm-sim/area_base.gd"
 ## 操作:WASD 走动;J 用工具(耕→种→浇→收,可升级 3×3);N 睡觉;Q 切种子;
 ##   走进右侧门→农舍(FADE)、下方门→小镇(SLIDE);I 背包 / P 商店 / L 任务成就 / Esc 菜单(存读档/设置)。
 
-const FarmGridView = preload("res://examples/farm-sim/farm_grid_view.gd")
-const TargetHighlight = preload("res://examples/farm-sim/target_highlight.gd")
-const WeatherView = preload("res://examples/farm-sim/weather_view.gd")
-const DoorScript = preload("res://examples/farm-sim/door.gd")
-const Fx = preload("res://examples/farm-sim/fx.gd")
+const FarmGridView = preload("res://examples/farm-sim/scenes/farm_grid_view.gd")
+const TargetHighlight = preload("res://examples/farm-sim/scenes/target_highlight.gd")
+const WeatherView = preload("res://examples/farm-sim/scenes/weather_view.gd")
+const DoorScript = preload("res://examples/farm-sim/scenes/door.gd")
+const Fx = preload("res://examples/farm-sim/gfx/fx.gd")
 
 var _view
 var _highlight
