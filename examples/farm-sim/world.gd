@@ -185,11 +185,14 @@ func _run_smoke() -> void:
 	var quests_done = _quest_log.done_count()   # _quest_log 无类型,不用 :=
 	# 存读档往返:存 → 改(金币/体力/地块/水壶半径/任务)→ 读 → 全量复原
 	var gold_at_save = _shop.gold   # _shop 无类型,不用 :=
+	var pos_at_save = _player.global_position   # _player 无类型,不用 :=
 	save_game()
 	_grid.till(Vector2i(7, 7)); _shop.gold = 123; _energy = 10; _water_radius = 0
+	_player.global_position = pos_at_save + Vector2(200, 200)   # 移开小人,验证读档拉回
 	_quest_log.forget_all()                                 # 清任务进度,验证读档复原
 	var loaded := load_game()
 	ok = ok and loaded and _shop.gold == gold_at_save and _energy == ENERGY_MAX
+	ok = ok and _player.global_position == pos_at_save      # 读档复原小人位置
 	ok = ok and _water_radius == 1                          # 读档复原水壶升级
 	ok = ok and _quest_log.done_count() == quests_done      # 读档复原任务进度
 	ok = ok and _grid.tile_state(Vector2i(7, 7)) == FarmGrid.State.EMPTY   # 读档回滚了 till
@@ -289,7 +292,10 @@ func save_game() -> void:
 	CoreKit.saves.save("farm", {
 		"grid": _grid.to_dict(), "bag": _bag.to_dict(),
 		"gold": _shop.gold, "clock": CoreKit.clock.to_dict(), "energy": _energy,
-		"water_radius": _water_radius, "quests": _quest_log.to_dict()})
+		"water_radius": _water_radius, "quests": _quest_log.to_dict(),
+		"player": {
+			"x": _player.global_position.x, "y": _player.global_position.y,
+			"fx": _player.facing.x, "fy": _player.facing.y}})
 	CoreKit.log.info("[World] 已存档")
 
 
@@ -306,6 +312,11 @@ func load_game() -> bool:
 	_energy = int(d["energy"])
 	_water_radius = int(d.get("water_radius", 0))
 	_quest_log.from_dict(d.get("quests", {}))
+	var pp: Dictionary = d.get("player", {})   # 小人位置 + 朝向(旧存档无此键则不动)
+	if pp.has("x"):
+		_player.global_position = Vector2(float(pp["x"]), float(pp["y"]))
+		_player.facing = Vector2i(int(pp.get("fx", _player.facing.x)), int(pp.get("fy", _player.facing.y)))
+		_player.queue_redraw()
 	_view.queue_redraw()
 	CoreKit.log.info("[World] 已读档")
 	return true
