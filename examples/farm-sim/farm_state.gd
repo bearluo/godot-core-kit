@@ -594,6 +594,7 @@ func run_smoke() -> void:
 	# 任务/成就
 	shop.buy(&"turnip_seed", 1)
 	ok = ok and tracker.unlocked_count() >= 1
+	bag.add(&"turnip", 6, {}, 99)                # 凑量:首笔收入任务需累计 100 金币(白萝卜 18/个 → 卖 6 个=108≥100)
 	shop.sell(&"turnip", bag.count(&"turnip"))
 	ok = ok and quest_log.done_count() >= 2
 	var quests_done = quest_log.done_count()   # 无类型,不用 :=

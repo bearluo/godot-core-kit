@@ -8,5 +8,5 @@ id = &"potato_seed"
 display_name = "土豆种子"
 max_stack = 99
 category = &"seed"
-buy_price = 20
+buy_price = 24
 sell_price = 0

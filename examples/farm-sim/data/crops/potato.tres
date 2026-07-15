@@ -6,7 +6,7 @@
 script = ExtResource("1_crop")
 id = &"potato"
 display_name = "土豆"
-grow_days = 6
+grow_days = 3
 seed_item = &"potato_seed"
 harvest_item = &"potato"
 harvest_amount = 2

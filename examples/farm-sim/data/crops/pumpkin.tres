@@ -9,5 +9,5 @@ display_name = "南瓜"
 grow_days = 5
 seed_item = &"pumpkin_seed"
 harvest_item = &"pumpkin"
-harvest_amount = 1
+harvest_amount = 2
 seasons = [&"fall"]

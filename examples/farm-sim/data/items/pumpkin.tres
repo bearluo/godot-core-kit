@@ -9,4 +9,4 @@ display_name = "南瓜"
 max_stack = 99
 category = &"produce"
 buy_price = 0
-sell_price = 120
+sell_price = 115

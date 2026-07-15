@@ -8,5 +8,5 @@ id = &"pumpkin_seed"
 display_name = "南瓜种子"
 max_stack = 99
 category = &"seed"
-buy_price = 30
+buy_price = 45
 sell_price = 0

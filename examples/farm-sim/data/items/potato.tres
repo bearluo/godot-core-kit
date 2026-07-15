@@ -9,4 +9,4 @@ display_name = "土豆"
 max_stack = 99
 category = &"produce"
 buy_price = 0
-sell_price = 90
+sell_price = 51
