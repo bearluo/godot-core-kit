@@ -38,6 +38,20 @@ func _on_use() -> void:
 	pass
 
 
+## 与玩家相邻(≤ ~1.5 格)的最近 NPC;无则 null。供小镇/农舍 _on_use 优先交互 NPC。
+func _nearest_npc():
+	if _player == null or _npcs.is_empty():
+		return null
+	var best = null
+	var best_d := 48.0
+	for npc in _npcs:
+		var d = _player.global_position.distance_to(npc.position)
+		if d <= best_d:
+			best_d = d
+			best = npc
+	return best
+
+
 ## 按 Farm 日程实例化本区此刻在场的 NPC(cell*32 居中摆放)。
 func _spawn_area_npcs() -> void:
 	_npcs = []

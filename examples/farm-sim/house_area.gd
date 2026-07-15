@@ -27,7 +27,12 @@ func _build_area() -> void:
 
 
 func _on_use() -> void:
-	# 靠近床 → 睡觉(推进一天 + 回体力)
+	# 优先:相邻 NPC → 对话(傍晚奶奶在此)
+	var npc = _nearest_npc()
+	if npc != null:
+		Farm.open_dialogue(npc.npc_def())
+		return
+	# 否则:靠近床 → 睡觉(推进一天 + 回体力)
 	if _player != null and _player.global_position.distance_to(BED_POS + BED_SIZE * 0.5) < 52.0:
 		Farm.sleep()
 	else:

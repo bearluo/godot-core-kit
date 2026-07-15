@@ -19,6 +19,7 @@ const QuestLogScript = preload("res://examples/farm-sim/quest_log.gd")
 const AchievementTracker = preload("res://examples/farm-sim/achievement_tracker.gd")
 const LogPanel = preload("res://examples/farm-sim/log_panel.gd")
 const SettingsPanel = preload("res://examples/farm-sim/settings_panel.gd")
+const DialoguePanel = preload("res://examples/farm-sim/dialogue_panel.gd")
 const I18nStrings = preload("res://examples/farm-sim/i18n_strings.gd")
 const AudioBank = preload("res://examples/farm-sim/audio_bank.gd")
 
@@ -57,6 +58,7 @@ var _energy := ENERGY_MAX
 var _water_radius := 0
 var _ui_stack                      ## KitUiStack
 var _active_ui := ""               ## 当前打开面板名(""=无)
+var _dialogue_def                  ## 当前对话的 npc_def(open_dialogue 置;供 _open_ui/locale 重建)
 var _player                        ## 当前区域的玩家(区域 _ready 经 bind_player 注入;开面板时锁其输入)
 
 
@@ -341,6 +343,10 @@ func _open_ui(name: String) -> void:
 			panel = LogPanel.new(); panel.bind(quest_log, tracker)
 		"settings":
 			panel = SettingsPanel.new(); panel.bind(self)
+		"dialogue":
+			if _dialogue_def == null:
+				return
+			panel = DialoguePanel.new(); panel.bind(_dialogue_def, self)
 		_:
 			return
 	_ui_stack.push(panel, {"hide_below": false, "dim": Color(0, 0, 0, 0.45)})
@@ -365,6 +371,16 @@ func close_menu() -> void:
 func open_settings() -> void:
 	_close_ui()
 	_open_ui("settings")
+
+
+## 打开与 def 的对话面板(区域 _on_use 找到相邻 NPC 时调用)。走 UI 栈、锁玩家;locale 切换经
+## _dialogue_def 重建。
+func open_dialogue(def) -> void:
+	if def == null:
+		return
+	_close_ui()
+	_dialogue_def = def
+	_open_ui("dialogue")
 
 
 ## 面板开时,区域把 move_up/down/farm_use 转来,派发给活动面板。
@@ -535,6 +551,14 @@ func run_smoke() -> void:
 	ok = ok and npcs_in_area("house", 6).is_empty()      # 白天农舍无人
 	ok = ok and npcs_in_area("house", 20).size() == 1    # 傍晚奶奶在农舍
 	ok = ok and npcs_in_area("town", 20).size() == 1     # 傍晚镇上只剩商人
+	# 对话面板 build/push/pop(商人 def)+ 聊天不崩
+	var mdef = registry.get_def(&"npc", &"merchant")
+	open_dialogue(mdef)
+	ok = ok and _active_ui == "dialogue" and _ui_stack.depth() == 1
+	route_action("farm_use")   # 聊天:出下一句台词
+	route_action("move_down")  # 光标移到送礼(占位禁用)
+	close_menu()
+	ok = ok and _active_ui == "" and _ui_stack.is_empty()
 	CoreKit.log.info("[Farm][SMOKE] %s(体力回满=%s,存读档=%s,任务=%d/%d,成就=%d/%d,语言=%s)" % [
 		"PASS" if ok else "FAIL", _energy == ENERGY_MAX, loaded,
 		quest_log.done_count(), quest_log.quest_count(),

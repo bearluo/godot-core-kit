@@ -27,7 +27,12 @@ func _build_area() -> void:
 
 
 func _on_use() -> void:
-	# 靠近商店牌 → 开商店面板
+	# 优先:相邻 NPC → 对话
+	var npc = _nearest_npc()
+	if npc != null:
+		Farm.open_dialogue(npc.npc_def())
+		return
+	# 否则:靠近商店牌 → 开商店面板
 	if _player != null and _player.global_position.distance_to(SHOP_POS + SHOP_SIZE * 0.5) < 60.0:
 		Farm.toggle_ui("shop")
 	else:

@@ -17,6 +17,7 @@ const ZH := {
 	"INV_TITLE": "背包  (I 关闭)", "INV_EMPTY": "(空)",
 	"SHOP_TITLE": "商店  (↑↓ 选,J 买/卖,P 关闭)",
 	"LOG_TITLE": "任务 / 成就  (L 关闭)",
+	"DLG_CHAT": "聊天", "DLG_GIFT": "送礼", "DLG_LEAVE": "离开", "DLG_HINT": "(↑↓ 选,J 确认)",
 	"KEY_UP": "上", "KEY_DOWN": "下", "KEY_LEFT": "左", "KEY_RIGHT": "右",
 	"KEY_USE": "用工具", "KEY_SLEEP": "睡觉", "KEY_SEED": "切种子",
 }
@@ -35,6 +36,7 @@ const EN := {
 	"INV_TITLE": "Bag  (I close)", "INV_EMPTY": "(empty)",
 	"SHOP_TITLE": "Shop  (Up/Down select, J buy/sell, P close)",
 	"LOG_TITLE": "Quests / Achievements  (L close)",
+	"DLG_CHAT": "Chat", "DLG_GIFT": "Gift", "DLG_LEAVE": "Leave", "DLG_HINT": "(Up/Down select, J confirm)",
 	"KEY_UP": "Up", "KEY_DOWN": "Down", "KEY_LEFT": "Left", "KEY_RIGHT": "Right",
 	"KEY_USE": "Use tool", "KEY_SLEEP": "Sleep", "KEY_SEED": "Cycle seed",
 }
