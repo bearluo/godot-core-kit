@@ -1,0 +1,12 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/crop_def.gd" id="1_crop"]
+
+[resource]
+script = ExtResource("1_crop")
+id = &"star_fruit"
+display_name = "星之果"
+grow_days = 4
+seed_item = &"star_seed"
+harvest_item = &"star_fruit"
+harvest_amount = 1

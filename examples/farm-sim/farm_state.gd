@@ -22,6 +22,7 @@ const SettingsPanel = preload("res://examples/farm-sim/settings_panel.gd")
 const DialoguePanel = preload("res://examples/farm-sim/dialogue_panel.gd")
 const I18nStrings = preload("res://examples/farm-sim/i18n_strings.gd")
 const AudioBank = preload("res://examples/farm-sim/audio_bank.gd")
+const Relationship = preload("res://examples/farm-sim/relationship.gd")
 
 const GRID_W := 10
 const GRID_H := 8
@@ -60,6 +61,8 @@ var _ui_stack                      ## KitUiStack
 var _active_ui := ""               ## 当前打开面板名(""=无)
 var _dialogue_def                  ## 当前对话的 npc_def(open_dialogue 置;供 _open_ui/locale 重建)
 var _player                        ## 当前区域的玩家(区域 _ready 经 bind_player 注入;开面板时锁其输入)
+var _gifted_today: Dictionary = {} ## {npc_id:true} 当日已收礼(防刷,跨天清)
+var _chatted_today: Dictionary = {} ## {npc_id:true} 当日已首聊(+好感一次,跨天清)
 
 
 ## 幂等启动:首次被农田场景调用才建全部持久状态。demo/kit 测试不调 → 不触发。
@@ -107,6 +110,7 @@ func start() -> void:
 	CoreKit.bus.subscribe(weather.EV_CHANGED, _on_weather)
 	CoreKit.bus.subscribe(shop.EV_BOUGHT, func(_p): _sfx(&"buy"))
 	CoreKit.bus.subscribe(shop.EV_SOLD, func(_p): _sfx(&"sell"))
+	CoreKit.bus.subscribe(CoreKit.clock.EV_DAY_CHANGED, _on_new_day)   # 跨天清送礼/聊天防刷
 	CoreKit.audio.play_music(AudioBank.bgm(), 1.0)
 	CoreKit.log.info("[Farm] 启动:持久状态就绪")
 
@@ -158,6 +162,82 @@ func _npc_slot(def, hour: int) -> Dictionary:
 		if int(item.get("after_hour", 0)) <= hour:
 			chosen = item
 	return chosen
+
+
+# --- 送礼 + 好感度 + 解锁(P5/P6)---
+
+func friendship(npc_id: StringName) -> int:
+	return int(relationships.get(npc_id, 0))
+
+
+func friendship_level(npc_id: StringName) -> int:
+	return Relationship.level_of(friendship(npc_id))
+
+
+## 背包中可送礼的物品(produce 类且持有 >0):[{id, name, count}]。对话面板据此列送礼清单。
+func giftable_items() -> Array:
+	var result: Array = []
+	if registry == null:
+		return result
+	for iid in registry.ids(&"item"):
+		var idef = registry.get_def_or(&"item", iid, null)
+		if idef == null or idef.category != &"produce":
+			continue
+		var c = bag.count(iid)   # bag 无类型,不用 :=
+		if c > 0:
+			result.append({"id": iid, "name": idef.display_name, "count": c})
+	return result
+
+
+## 当日首聊 +好感(防刷:一天一次)。
+func chat_with(npc_id: StringName) -> void:
+	if _chatted_today.has(npc_id):
+		return
+	_chatted_today[npc_id] = true
+	relationships[npc_id] = friendship(npc_id) + Relationship.GIFT_NEUTRAL
+	CoreKit.bus.publish("npc:friendship_changed",
+		{"npc_id": String(npc_id), "points": friendship(npc_id), "level": friendship_level(npc_id)})
+	_check_unlock(npc_id)
+
+
+## 送物品给 NPC:按偏好加减好感,扣背包 1 个,当日对同一 NPC 只接一次礼。返回
+## {reaction, delta, unlocked}。reaction:none(无效)/already(当日已送)/loved/liked/neutral/disliked。
+func gift_to(npc_id: StringName, item_id: StringName) -> Dictionary:
+	var def = registry.get_def_or(&"npc", npc_id, null)
+	if def == null or bag.count(item_id) < 1:
+		return {"reaction": "none", "delta": 0, "unlocked": false}
+	if _gifted_today.has(npc_id):
+		return {"reaction": "already", "delta": 0, "unlocked": false}
+	_gifted_today[npc_id] = true
+	var delta := Relationship.gift_delta(def, item_id)
+	bag.remove(item_id, 1)
+	relationships[npc_id] = friendship(npc_id) + delta
+	CoreKit.bus.publish("npc:gift_given", {"npc_id": String(npc_id), "item": String(item_id), "delta": delta})
+	CoreKit.bus.publish("npc:friendship_changed",
+		{"npc_id": String(npc_id), "points": friendship(npc_id), "level": friendship_level(npc_id)})
+	var did_unlock := _check_unlock(npc_id)
+	return {"reaction": Relationship.reaction_of(delta), "delta": delta, "unlocked": did_unlock}
+
+
+## 好感达 def.unlock_at 且未发放且 unlock_item 非空 → 发物品入背包 + 记 unlocked + 广播 npc:unlocked。
+## 幂等(unlocked 记录后不再发)。返回本次是否发放。
+func _check_unlock(npc_id: StringName) -> bool:
+	var def = registry.get_def_or(&"npc", npc_id, null)
+	if def == null or unlocked.has(npc_id):
+		return false
+	if String(def.unlock_item) == "" or friendship(npc_id) < int(def.unlock_at):
+		return false
+	bag.add(def.unlock_item, 1, {}, 99)
+	unlocked[npc_id] = true
+	CoreKit.bus.publish("npc:unlocked", {"npc_id": String(npc_id), "item": String(def.unlock_item)})
+	CoreKit.log.info("[Farm] 好感解锁:%s 赠 %s" % [def.display_name, def.unlock_item])
+	return true
+
+
+## 跨天:清送礼/聊天防刷记录。
+func _on_new_day(_payload) -> void:
+	_gifted_today.clear()
+	_chatted_today.clear()
 
 
 ## 区域名 → 场景路径。
@@ -556,9 +636,30 @@ func run_smoke() -> void:
 	open_dialogue(mdef)
 	ok = ok and _active_ui == "dialogue" and _ui_stack.depth() == 1
 	route_action("farm_use")   # 聊天:出下一句台词
-	route_action("move_down")  # 光标移到送礼(占位禁用)
+	route_action("move_down")  # 光标移到送礼
 	close_menu()
 	ok = ok and _active_ui == "" and _ui_stack.is_empty()
+	# 送礼 + 好感度 + 解锁(商人爱萝卜,unlock_at=100 → 送两次触发星之种子)
+	bag.add(&"turnip", 5, {}, 99)
+	var f0 = friendship(&"merchant")
+	var g1 = gift_to(&"merchant", &"turnip")
+	ok = ok and g1.reaction == "loved" and friendship(&"merchant") == f0 + Relationship.GIFT_LOVED
+	var g2 = gift_to(&"merchant", &"turnip")                 # 当日防刷
+	ok = ok and g2.reaction == "already" and friendship(&"merchant") == f0 + Relationship.GIFT_LOVED
+	CoreKit.clock.advance_day()                              # 翻天清防刷
+	var g3 = gift_to(&"merchant", &"turnip")                 # 再 +50 → 100 触发解锁
+	ok = ok and g3.unlocked and unlocked.has(&"merchant") and bag.count(&"star_seed") >= 1
+	CoreKit.clock.advance_day()
+	var star_before = bag.count(&"star_seed")
+	gift_to(&"merchant", &"turnip")                          # 幂等:不重发
+	ok = ok and bag.count(&"star_seed") == star_before
+	# 好感/解锁随存读档
+	var fm = friendship(&"merchant")
+	save_game()
+	relationships.clear(); unlocked.clear()
+	load_game()
+	ok = ok and friendship(&"merchant") == fm and unlocked.has(&"merchant")
+	CoreKit.saves.delete_slot("farm")
 	CoreKit.log.info("[Farm][SMOKE] %s(体力回满=%s,存读档=%s,任务=%d/%d,成就=%d/%d,语言=%s)" % [
 		"PASS" if ok else "FAIL", _energy == ENERGY_MAX, loaded,
 		quest_log.done_count(), quest_log.quest_count(),

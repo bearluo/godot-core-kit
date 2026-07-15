@@ -1,0 +1,12 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/item_def.gd" id="1_item"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"star_seed"
+display_name = "星之种子"
+max_stack = 99
+category = &"seed"
+buy_price = 0
+sell_price = 0
