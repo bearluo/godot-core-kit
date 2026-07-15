@@ -1,10 +1,13 @@
 extends Node
 ## Farm —— 农场游戏的持久状态 autoload(P3 引入)。承载**跨整场景切换保留**的全部状态与持久节点:
-## 数据/背包/农田模型/钱包/任务/成就/天气 + HUD + UI 栈 + 全部面板。区域场景(农田/农舍/小镇)变薄,
-## 只建 view+player+本地布景,读本单例。clock 本就是 CoreKit autoload,HUD 挂 CoreKit.layers 天然常驻。
+## 数据(含 NPC 定义)/背包/农田模型/钱包/任务/成就/天气/好感度 + HUD + UI 栈 + 全部面板。区域场景
+## (农田/农舍/小镇)变薄,只建 view+player+本地布景,读本单例。clock 本就是 CoreKit autoload,
+## HUD 挂 CoreKit.layers 天然常驻。
 ##
 ## 惰性:_ready 什么都不做(demo/kit 测试不触发);农田场景首次 _ready 调 start() 才建全部(幂等)。
 ## model 与 view 剥离:use_tool_on(cell) 吃传入格(facing 由区域算),grid 变化经 grid_changed 信号通知 view 重绘。
+## 区域切换:go_to(path,spawn,transition) 写 pending_spawn + CoreKit.scenes.change_scene(整替换);状态在本单例不丢。
+## NPC 社交:npcs_in_area(按日程)/open_dialogue/gift_to/chat_with/friendship + 好感解锁(_check_unlock 幂等发放)。
 
 signal grid_changed   ## 农田模型变更(耕种浇收/生长/读档)→ 区域 view 连此重绘
 

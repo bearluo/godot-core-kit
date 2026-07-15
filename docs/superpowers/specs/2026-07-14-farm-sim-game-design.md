@@ -116,10 +116,10 @@ World (Node2D)                      # 游戏世界根（新主场景）
 - [x] 语言切换（`CoreKit.i18n`，中/英，作物/UI 文案 key 化）
 - [x] 基础音效 + BGM（`CoreKit.audio`，程序化合成）+ 键位重绑定 UI（`KitRebindList`）
 
-### P3 · 生活模拟支柱
-- [ ] NPC（日程/对话框/送礼/好感度；NPC 定义进 `KitDataRegistry`）
-- [ ] 好感度解锁（配方/剧情），随存档
-- [ ] 多区域世界（农舍/小镇），走到边界切场景（`CoreKit.scenes` + `transition`）
+### P3 · 生活模拟支柱 ✅
+- [x] NPC（日程/对话框/送礼/好感度；NPC 定义进 `KitDataRegistry` 第5类型）——2 个数据驱动 NPC（商人/奶奶），轻量日程按 hour 换站位，相邻 J 对话（聊天轮换台词），送礼列背包 produce 选送、按喜好加减好感 + 反应台词 + 当日防刷，广播 `npc:` 命名空间事件
+- [x] 好感度解锁（专属高价值作物星之果），随存档——好感达阈值幂等发放星之种子入背包，`unlocked` 随存档
+- [x] 多区域世界（农田/农舍/小镇），走到门切场景（`CoreKit.scenes` + `KitTransition` FADE/SLIDE）——持久状态上移 `Farm` autoload，区域场景变薄，农田状态跨区留存
 
 ### P4 · 扩展支柱（可选深水区，按口味挑，每个数周量级）
 - [ ] 采矿 / 钓鱼 / 采集 / 制作加工 / 节日 —— 立项前单独评估
