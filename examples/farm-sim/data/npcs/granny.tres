@@ -1,0 +1,26 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/npc_def.gd" id="1_npc"]
+
+[resource]
+script = ExtResource("1_npc")
+id = &"granny"
+display_name = "奶奶"
+home_area = &"town"
+schedule = [{
+"after_hour": 0,
+"area": &"town",
+"x": 3,
+"y": 5
+}, {
+"after_hour": 18,
+"area": &"house",
+"x": 5,
+"y": 2
+}]
+dialogue = ["慢点走，孩子。", "地里的活儿别太累着。", "南瓜要秋天才种得活哦。", "记得常回来看看。"]
+gift_loved = [&"pumpkin"]
+gift_liked = [&"potato"]
+gift_disliked = [&"parsnip"]
+unlock_at = 80
+unlock_item = &""

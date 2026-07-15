@@ -1,0 +1,21 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/farm-sim/npc_def.gd" id="1_npc"]
+
+[resource]
+script = ExtResource("1_npc")
+id = &"merchant"
+display_name = "商人阿福"
+home_area = &"town"
+schedule = [{
+"after_hour": 0,
+"area": &"town",
+"x": 6,
+"y": 3
+}]
+dialogue = ["今天也来逛逛?", "新鲜种子刚到货喔。", "萝卜是我的最爱，哈哈。", "常来常往，交个朋友。"]
+gift_loved = [&"turnip"]
+gift_liked = [&"potato"]
+gift_disliked = [&"parsnip"]
+unlock_at = 100
+unlock_item = &"star_seed"

@@ -11,8 +11,10 @@ extends Node2D
 ##   _on_use()         farm_use(J):农田=用工具,小镇/农舍=交互身边物件/NPC
 
 const PlayerScript = preload("res://examples/farm-sim/player.gd")
+const NpcScript = preload("res://examples/farm-sim/npc.gd")
 
 var _player
+var _npcs: Array = []   ## 本区当前在场 NPC 节点(供交互找最近者,P4)
 
 
 # --- 子类覆盖点(默认空实现)---
@@ -36,10 +38,22 @@ func _on_use() -> void:
 	pass
 
 
+## 按 Farm 日程实例化本区此刻在场的 NPC(cell*32 居中摆放)。
+func _spawn_area_npcs() -> void:
+	_npcs = []
+	for e in Farm.npcs_in_area(_area_name(), CoreKit.clock.hour()):
+		var npc = NpcScript.new()
+		npc.setup(e.def, e.cell)
+		npc.position = Vector2(e.cell) * 32.0 + Vector2(16, 16)
+		add_child(npc)
+		_npcs.append(npc)
+
+
 func _ready() -> void:
 	Farm.start()                       # 幂等:首次进农田才建全部持久状态
 	Farm.current_area = _area_name()
 	_build_area()
+	_spawn_area_npcs()                 # 按日程摆放本区此刻在场的 NPC(farm 区通常无 → 空)
 	# 玩家:切区来的用 pending_spawn,否则本区默认出生点
 	_player = PlayerScript.new()
 	_player.setup(Farm.grid)

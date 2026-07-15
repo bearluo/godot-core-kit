@@ -76,6 +76,7 @@ func start() -> void:
 	registry.load_dir(&"item", "res://examples/farm-sim/data/items")
 	registry.load_dir(&"quest", "res://examples/farm-sim/data/quests")
 	registry.load_dir(&"achievement", "res://examples/farm-sim/data/achievements")
+	registry.load_dir(&"npc", "res://examples/farm-sim/data/npcs")   # 第 5 类型(P3)
 	bag = KitInventory.new(20)
 	bag.add(&"turnip_seed", 10, {}, 99)
 	bag.add(&"parsnip_seed", 10, {}, 99)
@@ -125,6 +126,36 @@ func current_player():
 func go_to(area_path: String, spawn: Vector2, transition) -> void:
 	pending_spawn = spawn
 	await CoreKit.scenes.change_scene(area_path, transition)
+
+
+# --- NPC 出现 + 日程(P3)---
+
+## 按当前 hour,该区此刻在场的 NPC:返回 [{def, cell}]。区域场景据此实例化 NPC 摆到 cell。
+func npcs_in_area(area: String, hour: int) -> Array:
+	var result: Array = []
+	if registry == null:
+		return result
+	for nid in registry.ids(&"npc"):
+		var def = registry.get_def(&"npc", nid)
+		if def == null:
+			continue
+		var slot := _npc_slot(def, hour)
+		if slot.is_empty():
+			continue
+		if String(slot.get("area", "")) == area:
+			result.append({"def": def, "cell": Vector2i(int(slot.get("x", 0)), int(slot.get("y", 0)))})
+	return result
+
+
+## 从 schedule 选当前时段项:最后一个 after_hour <= hour 的项(假定 schedule 按 after_hour 升序)。
+## 空 schedule → {}。
+func _npc_slot(def, hour: int) -> Dictionary:
+	var sched: Array = def.schedule
+	var chosen: Dictionary = {}
+	for item in sched:
+		if int(item.get("after_hour", 0)) <= hour:
+			chosen = item
+	return chosen
 
 
 ## 区域名 → 场景路径。
@@ -499,6 +530,11 @@ func run_smoke() -> void:
 	current_area = area0                             # 模拟切回农田(只逻辑,不真换场景)
 	pending_spawn = Vector2.ZERO
 	ok = ok and grid.tile_state(Vector2i(3, 3)) == st33 and st33 == FarmGrid.State.TILLED
+	# NPC 出现 + 日程:白天小镇有 NPC;傍晚(hour>=18)奶奶按日程移到农舍
+	ok = ok and npcs_in_area("town", 6).size() >= 2      # 商人 + 奶奶(白天在镇)
+	ok = ok and npcs_in_area("house", 6).is_empty()      # 白天农舍无人
+	ok = ok and npcs_in_area("house", 20).size() == 1    # 傍晚奶奶在农舍
+	ok = ok and npcs_in_area("town", 20).size() == 1     # 傍晚镇上只剩商人
 	CoreKit.log.info("[Farm][SMOKE] %s(体力回满=%s,存读档=%s,任务=%d/%d,成就=%d/%d,语言=%s)" % [
 		"PASS" if ok else "FAIL", _energy == ENERGY_MAX, loaded,
 		quest_log.done_count(), quest_log.quest_count(),
