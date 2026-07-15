@@ -6,16 +6,18 @@ extends Control
 var _shop
 var _reg
 var _bag
-var _rows: Array = []   ## [{kind:"buy"/"sell", id, price}]
+var _world                 ## World(工具升级购买 + 金币源)
+var _rows: Array = []   ## [{kind:"buy"/"sell"/"upgrade", id, price}]
 var _cursor := 0
 var _list: VBoxContainer
 var _info: Label
 
 
-func bind(shop, reg, bag) -> void:
+func bind(shop, reg, bag, world) -> void:
 	_shop = shop
 	_reg = reg
 	_bag = bag
+	_world = world
 
 
 func _ready() -> void:
@@ -44,6 +46,8 @@ func _build_rows() -> void:
 		var d = _reg.get_def(&"item", id)
 		if d.category == &"produce" and d.sell_price > 0:
 			_rows.append({"kind": "sell", "id": id, "price": int(d.sell_price)})
+	if _world != null and not _world.water_upgraded():   # 工具升级行(仅未升级时出现)
+		_rows.append({"kind": "upgrade", "id": &"", "price": int(_world.WATER_UPGRADE_COST)})
 
 
 func _refresh() -> void:
@@ -52,11 +56,14 @@ func _refresh() -> void:
 		ch.queue_free()
 	for i in range(_rows.size()):
 		var r = _rows[i]
-		var d = _reg.get_def(&"item", r.id)
-		var verb := "买" if r.kind == "buy" else "卖"
 		var mark := "▶ " if i == _cursor else "   "
 		var l := Label.new()
-		l.text = "%s[%s] %s  价%d  (持有%d)" % [mark, verb, d.display_name, int(r.price), _bag.count(r.id)]
+		if r.kind == "upgrade":
+			l.text = "%s[升级] 水壶 3×3 浇水  价%d" % [mark, int(r.price)]
+		else:
+			var d = _reg.get_def(&"item", r.id)
+			var verb := "买" if r.kind == "buy" else "卖"
+			l.text = "%s[%s] %s  价%d  (持有%d)" % [mark, verb, d.display_name, int(r.price), _bag.count(r.id)]
 		_list.add_child(l)
 
 
@@ -78,7 +85,11 @@ func handle_action(action: String) -> void:
 func _do(r) -> void:
 	if r.kind == "buy":
 		_shop.buy(r.id, 1)
-	else:
+	elif r.kind == "sell":
 		var n = _bag.count(r.id)   # _bag 无类型,不用 :=
 		if n > 0:
 			_shop.sell(r.id, n)   # 卖光该产物
+	elif r.kind == "upgrade":
+		if _world.buy_water_upgrade():
+			_build_rows()          # 升级成功 → 移除该行
+			_cursor = mini(_cursor, maxi(0, _rows.size() - 1))
