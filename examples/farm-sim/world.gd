@@ -14,6 +14,8 @@ const ShopScript = preload("res://examples/farm-sim/shop.gd")
 const InventoryPanel = preload("res://examples/farm-sim/inventory_panel.gd")
 const ShopPanel = preload("res://examples/farm-sim/shop_panel.gd")
 const PauseMenu = preload("res://examples/farm-sim/pause_menu.gd")
+const WeatherSystem = preload("res://examples/farm-sim/weather_system.gd")
+const WeatherView = preload("res://examples/farm-sim/weather_view.gd")
 
 const GRID_W := 10
 const GRID_H := 8
@@ -26,6 +28,7 @@ var _grid
 var _view
 var _player
 var _shop
+var _weather                                   ## WeatherSystem(每天掷晴/雨,广播 weather:changed)
 var _selected_crop: StringName = &"turnip"   ## 当前选中种子(cycle_seed 切换)
 var _crop_ids: Array = []                      ## 可选作物 id(字母序)
 var _energy := ENERGY_MAX                      ## 当前体力(工具动作扣,睡觉回满)
@@ -78,6 +81,19 @@ func _ready() -> void:
 	_shop.bind(_registry, _bag, 500)
 	add_child(_shop)
 
+	# 天气系统(复用 weather_system.gd):每天订阅 clock:day_changed,掷晴/雨,广播 weather:changed。
+	# 须在任何 advance_day 之前入树(其 _ready 订阅时钟)。
+	_weather = WeatherSystem.new()
+	_weather.name = "Weather"
+	add_child(_weather)
+	# 雨天视觉覆盖:挂 layer=1 的 CanvasLayer(农田之上、HUD 之下),按屏幕坐标画雨幕
+	var weather_layer := CanvasLayer.new()
+	weather_layer.layer = 1
+	add_child(weather_layer)
+	var weather_view = WeatherView.new()
+	weather_view.bind(_weather)
+	weather_layer.add_child(weather_view)
+
 	# HUD 挂 CoreKit.layers 的 hud 层(先 clear 防编辑器内重入重复挂)
 	CoreKit.layers.clear("hud")
 	var hud = HudScript.new()
@@ -90,8 +106,9 @@ func _ready() -> void:
 	_ui_stack.cancel_action = &""
 	CoreKit.layers.mount(_ui_stack, "window")
 
-	# 逐日推进:接时钟广播,作物生长 + 重绘
-	CoreKit.bus.subscribe(CoreKit.clock.EV_DAY_CHANGED, _on_day)
+	# 逐日推进走事件链 clock:day_changed →(weather 掷天气)→ weather:changed → 本世界长作物。
+	# 订阅天气(而非直接订时钟),保证"先定当天天气、再据加成生长"的顺序(与 dogfood crop.gd 同构)。
+	CoreKit.bus.subscribe(_weather.EV_CHANGED, _on_weather)
 	CoreKit.log.info("[World] 就绪:WASD 走动,J 用工具(耕/种/浇/收),N 进下一天")
 
 	if OS.get_environment("FARM_SMOKE") == "1":
@@ -304,7 +321,15 @@ func _sleep() -> void:
 	CoreKit.log.info("[World] 睡了一觉,体力回满")
 
 
-func _on_day(_snap: Dictionary) -> void:
-	_grid.advance_day()
+## weather:changed(嵌套在 clock:day_changed 内广播)→ 据当天生长加成长作物。
+func _on_weather(payload: Dictionary) -> void:
+	var bonus := int(payload.get("growth_bonus", 0))
+	_grid.advance_day(bonus)
 	_view.queue_redraw()
-	CoreKit.log.info("[World] 新的一天,作物生长")
+	if bonus > 0:
+		CoreKit.log.info("[World] 雨天,作物加速生长 +%d" % bonus)
+
+
+## 当前天气展示名(供 HUD)。
+func weather_name() -> String:
+	return _weather.name_of(_weather.current_kind()) if _weather != null else ""

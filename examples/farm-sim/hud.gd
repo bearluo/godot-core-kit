@@ -6,6 +6,7 @@ var _clock
 var _wallet
 var _world        ## 提供 energy()/energy_max()/selected_crop_name()
 var _date_label: Label
+var _weather_label: Label
 var _gold_label: Label
 var _energy_label: Label
 var _seed_label: Label
@@ -22,10 +23,12 @@ func _ready() -> void:
 	vb.position = Vector2(12, 8)
 	add_child(vb)
 	_date_label = Label.new()
+	_weather_label = Label.new()
 	_gold_label = Label.new()
 	_energy_label = Label.new()
 	_seed_label = Label.new()
 	vb.add_child(_date_label)
+	vb.add_child(_weather_label)
 	vb.add_child(_gold_label)
 	vb.add_child(_energy_label)
 	vb.add_child(_seed_label)
@@ -38,6 +41,7 @@ func _process(_delta: float) -> void:
 	if _wallet != null:
 		_gold_label.text = "金币: %d" % _wallet.gold
 	if _world != null:
+		_weather_label.text = "天气: %s" % _world.weather_name()
 		_energy_label.text = "体力: %d/%d" % [_world.energy(), _world.energy_max()]
 		var ok_season: bool = _world.selected_crop_plantable()
 		_seed_label.text = "选中: %s%s (Q 切换)" % [
