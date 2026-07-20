@@ -20,7 +20,6 @@ config/icon="res://icon.svg"
 
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
 Farm="*res://examples/farm-sim/systems/farm_state.gd"
-_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [dotnet]
 
@@ -28,7 +27,7 @@ project/assembly_name="godot-core-kit (dev)"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot-core-kit/plugin.cfg", "res://addons/godot_ai/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot-core-kit/plugin.cfg")
 
 [input]
 
@@ -92,3 +91,4 @@ toggle_log={
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
