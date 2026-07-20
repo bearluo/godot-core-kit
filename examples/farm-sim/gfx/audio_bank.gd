@@ -4,6 +4,8 @@ extends RefCounted
 ## 生成/播放均不崩。真素材(ogg BGM + wav 音效)留 P5 换,接口 sfx()/bgm() 不变。
 
 const RATE := 22050
+## 循环流尾部补的帧数,供混音器在回绕处插值,详见 _wav()。
+const LOOP_PAD_FRAMES := 8
 
 static var _cache := {}
 
@@ -92,9 +94,17 @@ static func _wav(data: PackedByteArray, loop: bool) -> AudioStreamWAV:
 	w.format = AudioStreamWAV.FORMAT_16_BITS
 	w.mix_rate = RATE
 	w.stereo = false
-	w.data = data
 	if loop:
+		# 混音器在回绕处要读 loop_end 之后的帧做插值。导入器生成的 WAV 自带尾部
+		# padding,这里手工拼的缓冲没有,于是循环第一次回绕就读出 data 末尾——
+		# 桌面上多半只是读到相邻堆数据,Android 上直接 SIGSEGV(SEGV_ACCERR)。
+		# 补一段循环起点的拷贝:既让插值有帧可落,又让跨接点在听感上连续。
+		var padded := data.duplicate()
+		padded.append_array(data.slice(0, LOOP_PAD_FRAMES * 2))
+		w.data = padded
 		w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		w.loop_begin = 0
 		w.loop_end = int(data.size() / 2)
+	else:
+		w.data = data
 	return w
