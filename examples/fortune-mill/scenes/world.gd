@@ -1,14 +1,16 @@
 extends Node
-## world 表现层根(飞镖房 + 刮刮乐房)+ FORTUNE_SMOKE headless 自测入口。
+## world 表现层根(飞镖 + 刮刮乐 + 柏青哥房)+ FORTUNE_SMOKE headless 自测入口。
 ## UI 只读 FortuneMill 模型 + 发命令;订阅 bus 脏标记刷新,不持有权威数值。
+## 柏青哥有真物理表现层(pachinko_board.gd,仅非 smoke 实例化);smoke 走 model 直算。
 
 const SMOKE_MAX_STEPS := 500000
+const PachinkoBoard := preload("res://examples/fortune-mill/scenes/pachinko_board.gd")
 
 # 飞镖房
 var _gold_label: Label
 var _status_label: Label
 var _bribe_button: Button
-var _dart_upgrade_buttons: Dictionary = {}   # StringName(id) -> Button
+var _dart_upgrade_buttons: Dictionary = {}
 var _rate_label: Label
 var _offline_label: Label
 # 刮刮乐房
@@ -18,6 +20,15 @@ var _jackpot_label: Label
 var _scratch_status: Label
 var _lotto_upgrade_buttons: Dictionary = {}
 var _gorgon_button: Button
+# 柏青哥房
+var _tickets_label: Label
+var _pachinko_rate_label: Label
+var _pachinko_status: Label
+var _dice_label: Label
+var _dice_button: Button
+var _pachinko_upgrade_buttons: Dictionary = {}
+var _rimmington_button: Button
+var _pachinko_board: Node2D
 
 
 func _ready() -> void:
@@ -27,24 +38,27 @@ func _ready() -> void:
 	_build_ui()
 	CoreKit.bus.subscribe("fortune:currency_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:money_changed", _on_dirty)
+	CoreKit.bus.subscribe("fortune:tickets_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:upgrade_purchased", _on_dirty)
 	CoreKit.bus.subscribe("fortune:jackpot_hit", _on_jackpot)
+	CoreKit.bus.subscribe("fortune:dice_rolled", _on_dirty)
 	CoreKit.bus.subscribe("fortune:room_cleared", _on_cleared)
 	_refresh()
 	_maybe_show_offline()
 
 
-## --- FORTUNE_SMOKE:自动玩闭环,验证飞镖 $1→100 万过关 + 刮刮乐闭环 + JACKPOT 跨房加成 + Gorgon 过关 ---
+## --- FORTUNE_SMOKE:飞镖过关 + 刮刮乐 JACKPOT 跨房 + 柏青哥 DICE 跨房 + 三守卫过关 ---
 
 func _run_smoke() -> void:
 	var fm = FortuneMill   # autoload;不用 := 以免静态类型退化为 Node
 	var steps := 0
-	# clean-room:autoload 的 _ready 可能已 load_game 载入历史存档(含通关/jackpot 态),
-	# smoke 作为回归 gate 必须从全新态起步,故双房都重置。
+	# clean-room:从全新态起步(autoload 可能已 load 历史存档)。三房都重置。
 	fm.currency.set_amount(1.0)
 	fm.money.set_amount(0.0)
-	fm.darts.from_dict({})   # 重置 levels/cleared/bullseye_unlock + 清 modifier 残留
-	fm.lotto.from_dict({})   # 重置 levels/jackpot/cleared + 清 global_mul 残留
+	fm.tickets.set_amount(0.0)
+	fm.darts.from_dict({})
+	fm.lotto.from_dict({})
+	fm.pachinko.from_dict({})
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 
 	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous ---
@@ -55,7 +69,7 @@ func _run_smoke() -> void:
 		steps += 1
 	var ok: bool = fm.can_bribe() and fm.bribe_guard()
 
-	# --- P1:飞镖自动产出 + 离线结算(过关后 gold 充裕,可买自动投) ---
+	# --- P1:飞镖自动产出 + 离线结算 ---
 	fm.buy_dart_upgrade(&"rattling_gunner")
 	var rate: float = fm.darts.auto_gold_rate()
 	var before_auto: float = fm.currency.get_amount()
@@ -67,49 +81,67 @@ func _run_smoke() -> void:
 	var p1_earn: float = float((rep.get("darts", {}) as Dictionary).get("earned", 0.0))
 	var offline_ok: bool = p1_earn > 0.0 and fm.currency.get_amount() > g_before
 
-	# --- P2:刮刮乐闭环 + JACKPOT 跨房协同 + Gorgon 过关 ---
+	# --- P2:刮刮乐 JACKPOT 跨房 + Gorgon 过关 ---
 	fm.lotto.seed_rng(4242)
-	var darts_rate_pre: float = fm.darts.auto_gold_rate()   # jackpot 前飞镖率(global_mul=1)
+	var darts_rate_pre: float = fm.darts.auto_gold_rate()
 	var lsteps := 0
 	while fm.lotto.jackpot_count() < 1 and lsteps < SMOKE_MAX_STEPS:
 		fm.do_scratch()
 		lsteps += 1
 	var jackpots: int = fm.lotto.jackpot_count()
-	var darts_rate_post: float = fm.darts.auto_gold_rate()  # jackpot 后被 global_mul 放大
+	var darts_rate_post: float = fm.darts.auto_gold_rate()
 	var crossroom_ok: bool = jackpots >= 1 and darts_rate_post > darts_rate_pre
-	# 买自动刮 + 时移攒够 1M money 贿赂 Gorgon
 	fm.money.add(1000.0)
 	fm.buy_lotto_upgrade(&"auto_scratcher")
 	var skip := 0
 	while not fm.can_bribe_gorgon() and skip < 200000:
-		fm.tick(3600.0)   # 每步模拟 1h 自动产出
+		fm.tick(3600.0)
 		skip += 1
 	var gorgon_ok: bool = fm.can_bribe_gorgon() and fm.bribe_gorgon() and fm.lotto.is_cleared()
-	# 双房离线结算(5 货币独立,各房各结)
-	var t2: float = Time.get_unix_time_from_system()
-	var rep2: Dictionary = fm.settle_offline(t2 - 3600.0, t2)
-	var off2_g: float = float((rep2.get("darts", {}) as Dictionary).get("earned", 0.0))
-	var off2_m: float = float((rep2.get("lotto", {}) as Dictionary).get("earned", 0.0))
-	var offline2_ok: bool = off2_g > 0.0 and off2_m > 0.0
 
-	var gold_str := Currency.format(fm.currency.get_amount())
+	# --- P3:柏青哥落球 + DICE 跨房 + Rimmington 过关 ---
+	fm.pachinko.seed_rng(555)
+	var pach_drop: Dictionary = fm.drop_ball()
+	var pach_drop_ok: bool = float(pach_drop.get("tickets", 0.0)) > 0.0
+	var darts_pre_dice: float = fm.darts.auto_gold_rate()
+	var dg := 0
+	while not fm.can_roll_dice() and dg < 200000:
+		fm.drop_ball()
+		dg += 1
+	var dice_rolled: bool = fm.roll_dice()
+	var darts_post_dice: float = fm.darts.auto_gold_rate()
+	var dice_cross_ok: bool = dice_rolled and darts_post_dice > darts_pre_dice
+	fm.tickets.add(1000.0)
+	fm.buy_pachinko_upgrade(&"auto_dropper")
+	var pskip := 0
+	while not fm.can_bribe_rimmington() and pskip < 200000:
+		fm.tick(3600.0)   # tick 内 pachinko.update(dt) 会让 DICE 过期(符合预期)
+		pskip += 1
+	var rimmington_ok: bool = fm.can_bribe_rimmington() and fm.bribe_rimmington() and fm.pachinko.is_cleared()
+	var t3: float = Time.get_unix_time_from_system()
+	var rep3: Dictionary = fm.settle_offline(t3 - 3600.0, t3)
+	var off3_ok: bool = float((rep3.get("pachinko", {}) as Dictionary).get("earned", 0.0)) > 0.0
+
+	var dice_boost := (darts_post_dice / darts_pre_dice) if darts_pre_dice > 0.0 else 0.0
 	var boost := (darts_rate_post / darts_rate_pre) if darts_rate_pre > 0.0 else 0.0
-	CoreKit.saves.delete_slot(fm.SAVE_SLOT)   # smoke 自清理,不留存档污染后续运行
-	if ok and auto_ok and offline_ok and crossroom_ok and gorgon_ok and offline2_ok:
-		print("[Fortune][SMOKE] PASS gold=%s steps=%d auto_rate=%.2f offline_earn=%.0f jackpots=%d darts_boost=%.2fx gorgon=%s money=%s" % [gold_str, steps, rate, p1_earn, jackpots, boost, fm.lotto.is_cleared(), Currency.format(fm.money.get_amount())])
+	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
+	var p012 := ok and auto_ok and offline_ok and crossroom_ok and gorgon_ok
+	var p3 := pach_drop_ok and dice_cross_ok and rimmington_ok and off3_ok
+	if p012 and p3:
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice=%s dice_boost=%.2fx rimmington=%s tickets=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_rolled, dice_boost, fm.pachinko.is_cleared(), Currency.format(fm.tickets.get_amount())])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL ok=%s auto=%s offline=%s crossroom=%s(pre=%.2f post=%.2f) gorgon=%s offline2=%s" % [ok, auto_ok, offline_ok, crossroom_ok, darts_rate_pre, darts_rate_post, gorgon_ok, offline2_ok])
+		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s(%.2f→%.2f) rimmington=%s off3=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, darts_pre_dice, darts_post_dice, rimmington_ok, off3_ok])
 		get_tree().quit(1)
 
 
-## 每轮把每条买得起的飞镖升级各买一级(均衡成长,推动数值爬升)。
+## 每轮把每条买得起的飞镖升级各买一级。
 func _smoke_buy_round(fm) -> void:
 	for id in fm.registry.ids(&"dart_upgrade", true):
 		fm.buy_dart_upgrade(id)
 
 
-## --- 可玩 UI(代码构建,P0/P2 无美术;两列:飞镖房 | 刮刮乐房) ---
+## --- 可玩 UI(代码构建;三列:飞镖 | 刮刮乐 | 柏青哥 + 右侧物理板) ---
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
@@ -117,7 +149,7 @@ func _build_ui() -> void:
 	var cols := HBoxContainer.new()
 	cols.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	cols.position = Vector2(16, 16)
-	cols.add_theme_constant_override("separation", 48)
+	cols.add_theme_constant_override("separation", 40)
 	layer.add_child(cols)
 
 	# 飞镖房列
@@ -165,6 +197,35 @@ func _build_ui() -> void:
 	_gorgon_button.pressed.connect(func() -> void: FortuneMill.bribe_gorgon())
 	lcol.add_child(_gorgon_button)
 
+	# 柏青哥房列
+	var pcol := VBoxContainer.new()
+	cols.add_child(pcol)
+	_add_title(pcol, "▙ 柏青哥房 (tickets / Rimmington)")
+	_tickets_label = Label.new(); pcol.add_child(_tickets_label)
+	_pachinko_status = Label.new(); pcol.add_child(_pachinko_status)
+	_pachinko_rate_label = Label.new(); pcol.add_child(_pachinko_rate_label)
+	_dice_label = Label.new(); pcol.add_child(_dice_label)
+	var drop_btn := Button.new(); drop_btn.text = "落球 (Drop)"
+	drop_btn.pressed.connect(_on_drop_pressed)
+	pcol.add_child(drop_btn)
+	_dice_button = Button.new(); _dice_button.text = "掷骰 (Roll Dice)"
+	_dice_button.pressed.connect(func() -> void: FortuneMill.roll_dice())
+	pcol.add_child(_dice_button)
+	pcol.add_child(HSeparator.new())
+	for id in FortuneMill.registry.ids(&"pachinko_upgrade", true):
+		var btn := Button.new()
+		btn.pressed.connect(func() -> void: FortuneMill.buy_pachinko_upgrade(id))
+		pcol.add_child(btn)
+		_pachinko_upgrade_buttons[id] = btn
+	pcol.add_child(HSeparator.new())
+	_rimmington_button = Button.new(); _rimmington_button.text = "贿赂 Rimmington (需 1M tickets)"
+	_rimmington_button.pressed.connect(func() -> void: FortuneMill.bribe_rimmington())
+	pcol.add_child(_rimmington_button)
+
+	# 柏青哥物理板(真 RigidBody2D 落球;juice)
+	_pachinko_board = PachinkoBoard.new()
+	add_child(_pachinko_board)
+
 
 func _add_title(col: VBoxContainer, text: String) -> void:
 	var l := Label.new()
@@ -183,6 +244,15 @@ func _on_scratch_pressed() -> void:
 		_scratch_status.text = "刮出 +%s money" % earned
 
 
+## 落球:走物理板(真物理落槽回调 pachinko_land);多球数取自 modifier。
+func _on_drop_pressed() -> void:
+	var balls := maxi(1, int(FortuneMill.modifiers.value_for(&"balls_per_drop", 1.0)))
+	if _pachinko_board != null:
+		_pachinko_board.drop(balls)
+	else:
+		FortuneMill.drop_ball()
+
+
 func _on_dirty(_payload) -> void:
 	_refresh()
 
@@ -192,12 +262,16 @@ func _on_jackpot(_count) -> void:
 
 
 func _on_cleared(room) -> void:
-	if str(room) == "lotto":
-		if _scratch_status != null:
-			_scratch_status.text = "★ 已贿赂 Gorgon,刮刮乐房通关! ★"
-	else:
-		if _status_label != null:
-			_status_label.text = "★ 已贿赂 Verminous,飞镖房通关! ★"
+	match str(room):
+		"lotto":
+			if _scratch_status != null:
+				_scratch_status.text = "★ 已贿赂 Gorgon,刮刮乐房通关! ★"
+		"pachinko":
+			if _pachinko_status != null:
+				_pachinko_status.text = "★ 已贿赂 Rimmington,柏青哥房通关! ★"
+		_:
+			if _status_label != null:
+				_status_label.text = "★ 已贿赂 Verminous,飞镖房通关! ★"
 
 
 func _refresh() -> void:
@@ -227,22 +301,43 @@ func _refresh() -> void:
 		lbtn.text = "%s  Lv.%d  (%s money)" % [ldef.title, llvl, Currency.format(lcost)]
 		lbtn.disabled = not FortuneMill.money.can_afford(lcost)
 	_gorgon_button.disabled = not FortuneMill.can_bribe_gorgon()
+	# 柏青哥房
+	_tickets_label.text = "Tickets: %s" % Currency.format(FortuneMill.tickets.get_amount())
+	_pachinko_rate_label.text = "自动: %s tk/s" % Currency.format(FortuneMill.pachinko.auto_ticket_rate())
+	var dm := FortuneMill.pachinko.dice_meter()
+	var dt := FortuneMill.pachinko.dice_threshold()
+	if FortuneMill.pachinko.dice_active():
+		_dice_label.text = "🎲 DICE 生效!全房 ×%.1f (剩 %.0fs)" % [PachinkoRoom.DICE_MUL, FortuneMill.pachinko.dice_seconds_left()]
+	else:
+		_dice_label.text = "骰子蓄力: %.0f / %.0f" % [dm, dt]
+	_dice_button.disabled = not FortuneMill.can_roll_dice()
+	for id in _pachinko_upgrade_buttons:
+		var pdef = FortuneMill.registry.get_def(&"pachinko_upgrade", id)
+		var plvl := FortuneMill.pachinko.level_of(id)
+		var pcost := FortuneMill.pachinko.cost_of(id)
+		var pbtn: Button = _pachinko_upgrade_buttons[id]
+		pbtn.text = "%s  Lv.%d  (%s tk)" % [pdef.title, plvl, Currency.format(pcost)]
+		pbtn.disabled = not FortuneMill.tickets.can_afford(pcost)
+	_rimmington_button.disabled = not FortuneMill.can_bribe_rimmington()
 
 
-## 从模型拉取最近离线结算(per-room),任一房 earned>0 才显示回归横幅(不靠事件,避免错过首帧)。
+## 从模型拉取最近离线结算(per-room),任一房 earned>0 才显示回归横幅。
 func _maybe_show_offline() -> void:
 	if _offline_label == null:
 		return
 	var rep: Dictionary = FortuneMill.offline_report
 	if rep.is_empty():
 		return
+	var parts: Array = []
 	var g := float((rep.get("darts", {}) as Dictionary).get("earned", 0.0))
 	var m := float((rep.get("lotto", {}) as Dictionary).get("earned", 0.0))
-	var parts: Array = []
+	var tk := float((rep.get("pachinko", {}) as Dictionary).get("earned", 0.0))
 	if g > 0.0:
 		parts.append("飞镖 %s gold" % Currency.format(g))
 	if m > 0.0:
 		parts.append("刮刮乐 %s money" % Currency.format(m))
+	if tk > 0.0:
+		parts.append("柏青哥 %s tk" % Currency.format(tk))
 	if parts.is_empty():
 		return
 	var mins := int(float((rep.get("darts", {}) as Dictionary).get("elapsed", 0.0)) / 60.0)

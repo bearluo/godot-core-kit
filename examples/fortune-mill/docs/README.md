@@ -45,3 +45,27 @@ bus 只广播 `fortune:*` 脏标记;货币全走 Currency;存档只存 Dictionar
   `{darts:{...}, lotto:{...}}`。
 - 验收:`FORTUNE_SMOKE` 端到端 `PASS ... jackpots=1 darts_boost=1.50x gorgon=true`
   (jackpot 后飞镖率精确 ×1.5)。测试 `test_fortune_lotto`(含跨房加成证明 + jackpot 持久化)进 kit 门。
+
+## P3 柏青哥 + 寿司(4 房可通关)
+
+### 柏青哥 Pachinko(tickets / 守卫 Rimmington)
+
+落球 → 加权落槽(`PachinkoRoom.SLOT_VALUES/SLOT_WEIGHTS`,plinko 式中间小值常见、边缘大值稀有)→ tickets;
+升级(球值/多球/自动落球/骰子频率)经共享 `KitModifiers`;攒够 1M tickets 贿赂 Rimmington。
+
+- **真物理 vs 数据分离**:经济权威在 `PachinkoRoom`(纯数据,`drop_ball()` 加权 RNG + `auto_ticket_rate()` 期望率,headless 可测)。
+  真 RigidBody2D 落球是**表现层 juice**(`scenes/pachinko_board.gd`,仅非 smoke 实例化):球从 `CoreKit.pool` 取、
+  碰钉子、落进底部 `Area2D` 槽 → 回调 `FortuneMill.pachinko_land(slot)` → `PachinkoRoom.award_slot`(权威入账);
+  落槽 SFX 走 `CoreKit.audio`(程序化 tick);在场球数封顶 + 到底即回收;`_exit_tree` 清池免 RID 泄漏。
+  手动落球走真物理;自动 / 离线 / headless smoke 走 model RNG。
+- **DICE 临时全局乘数(跨房协同 · 临时型)**:落球累积 `_dice_meter`,攒够 `roll_dice` → 往 **`global_mul`**
+  叠一条**临时** mul(源 `pachinko_dice`,`DICE_MUL`),`update(dt)`(`FortuneMill.tick` 每帧调)倒计时到 0
+  自动 `remove_source`。与 JACKPOT 永久 mul **同 target 不同 source_id**,Πmul 乘性叠加,一起放大全房间。
+  DICE 是 live buff,**不持久化**(存档不存,读档不恢复)。
+- **离线三房**:`settle_offline` 各房各用自身产率单独结算,`offline_report={darts,lotto,pachinko}`。
+- 验收:`FORTUNE_SMOKE PASS ... dice=true dice_boost=3.00x rimmington=true`(DICE 期间飞镖率精确 ×3=DICE_MUL)。
+  测试 `test_fortune_pachinko`(含 DICE 施加/过期 + 与 jackpot 乘性叠加 + 跨房)进 kit 门。
+
+### 寿司 Sushi(ribbons / 守卫 Hivemind)—— 待做
+
+制作时长 + `KitInventory` 食材 + 解锁式开关协同(改规则),达成「4 房可通关」。见 P3 plan。

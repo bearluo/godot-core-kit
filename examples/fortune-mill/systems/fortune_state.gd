@@ -6,16 +6,19 @@ extends Node
 const SAVE_SLOT := "fortune"
 const UPGRADES_DIR := "res://examples/fortune-mill/data/dart_upgrades"
 const LOTTO_DIR := "res://examples/fortune-mill/data/lotto_cards"
+const PACHINKO_DIR := "res://examples/fortune-mill/data/pachinko_balls"
 const OFFLINE_CAP_SECONDS := 28800.0   # 封顶 8 小时(spec §5.7)
 const TICK_EVERY_N := 15               # ~4Hz @60fps 的自动产出结算
 const AUTOSAVE_EVERY_N := 300          # ~5s @60fps 的周期自动存
 
 var currency: Currency    # gold(飞镖房)
 var money: Currency       # money(刮刮乐房);5 货币互相独立不可兑换
+var tickets: Currency     # tickets(柏青哥房)
 var modifiers: KitModifiers   # 全房间共享:跨房协同的唯一求值点(global_mul 等)
 var registry: KitDataRegistry
 var darts: DartsRoom
 var lotto: LottoRoom
+var pachinko: PachinkoRoom
 
 ## 最近一次离线结算数据包(空=无);UI 首帧拉取展示回归横幅。
 var offline_report: Dictionary = {}
@@ -28,18 +31,21 @@ var _last_tick_ms: int = 0
 func _ready() -> void:
 	currency = Currency.new(1.0)          # 开局 $1 gold(spec §5.1)
 	money = Currency.new(0.0)             # 刮刮乐房从 0 money 起步(免费刮卡)
+	tickets = Currency.new(0.0)           # 柏青哥房从 0 tickets 起步(免费落球)
 	modifiers = KitModifiers.new()
 	registry = KitDataRegistry.new()
 	var n := registry.load_dir(&"dart_upgrade", UPGRADES_DIR)
 	var nl := registry.load_dir(&"lotto_upgrade", LOTTO_DIR)
+	var np := registry.load_dir(&"pachinko_upgrade", PACHINKO_DIR)
 	darts = DartsRoom.new(currency, modifiers, registry)
-	lotto = LottoRoom.new(money, modifiers, registry)   # 共享 modifiers → 跨房协同
+	lotto = LottoRoom.new(money, modifiers, registry)       # 共享 modifiers → 跨房协同
+	pachinko = PachinkoRoom.new(tickets, modifiers, registry)
 	if CoreKit.saves.has_slot(SAVE_SLOT):
 		load_game()                       # 内部做离线结算
 	_last_tick_ms = Time.get_ticks_msec()
 	_tick_handle = CoreKit.ticker.every_n(_on_tick, TICK_EVERY_N)
 	_autosave_handle = CoreKit.ticker.every_n(save_game, AUTOSAVE_EVERY_N)
-	CoreKit.log.info("[Fortune] ready: %d dart + %d lotto upgrades, gold=%s money=%s" % [n, nl, Currency.format(currency.get_amount()), Currency.format(money.get_amount())])
+	CoreKit.log.info("[Fortune] ready: %d dart + %d lotto + %d pachinko upgrades" % [n, nl, np])
 
 
 ## --- ticker 驱动的自动产出(降频 tick,真实 dt 自算) ---
@@ -59,6 +65,10 @@ func tick(dt: float) -> void:
 	var m := lotto.produce(dt)
 	if m > 0.0:
 		CoreKit.bus.publish("fortune:money_changed", money.get_amount())
+	pachinko.update(dt)   # DICE 倒计时(无产出也要推进过期)
+	var t := pachinko.produce(dt)
+	if t > 0.0:
+		CoreKit.bus.publish("fortune:tickets_changed", tickets.get_amount())
 
 
 ## --- 命令(表现层唯一入口) ---
@@ -121,20 +131,73 @@ func can_bribe_gorgon() -> bool:
 	return lotto.can_bribe()
 
 
+## --- 柏青哥房命令 ---
+
+func drop_ball() -> Dictionary:
+	var r := pachinko.drop_ball()
+	CoreKit.bus.publish("fortune:tickets_changed", tickets.get_amount())
+	return r
+
+
+## 物理球落进槽 slot 的回调(手动落球走真物理表现层时用;走权威 award_slot 入账)。
+func pachinko_land(slot: int) -> float:
+	var t := pachinko.award_slot(slot)
+	CoreKit.bus.publish("fortune:tickets_changed", tickets.get_amount())
+	return t
+
+
+func roll_dice() -> bool:
+	if pachinko.roll_dice():
+		CoreKit.bus.publish("fortune:dice_rolled", pachinko.dice_seconds_left())
+		# DICE 抬 global_mul → 各房显示产率都变,刷全 HUD
+		CoreKit.bus.publish("fortune:currency_changed", currency.get_amount())
+		CoreKit.bus.publish("fortune:money_changed", money.get_amount())
+		return true
+	return false
+
+
+func can_roll_dice() -> bool:
+	return pachinko.dice_ready()
+
+
+func buy_pachinko_upgrade(id: StringName) -> bool:
+	if pachinko.buy_upgrade(id):
+		CoreKit.bus.publish("fortune:upgrade_purchased", String(id))
+		CoreKit.bus.publish("fortune:tickets_changed", tickets.get_amount())
+		return true
+	return false
+
+
+func bribe_rimmington() -> bool:
+	if pachinko.bribe():
+		CoreKit.bus.publish("fortune:room_cleared", "pachinko")
+		save_game()
+		return true
+	return false
+
+
+func can_bribe_rimmington() -> bool:
+	return pachinko.can_bribe()
+
+
 ## --- 离线结算(load 时按墙钟差补各房收益;可注入 now 供 smoke 确定性验证) ---
 ## 5 货币独立 → 每房各用自身产率单独结算。返回 per-room 数据包。
 
 func settle_offline(last_seen: float, now: float) -> Dictionary:
 	var rep_g := KitOffline.settle(last_seen, now, darts.auto_gold_rate(), OFFLINE_CAP_SECONDS)
 	var rep_m := KitOffline.settle(last_seen, now, lotto.auto_money_rate(), OFFLINE_CAP_SECONDS)
-	offline_report = {"darts": rep_g, "lotto": rep_m}
+	var rep_t := KitOffline.settle(last_seen, now, pachinko.auto_ticket_rate(), OFFLINE_CAP_SECONDS)
+	offline_report = {"darts": rep_g, "lotto": rep_m, "pachinko": rep_t}
 	if rep_g.earned > 0.0:
 		currency.add(rep_g.earned)
 		CoreKit.bus.publish("fortune:currency_changed", currency.get_amount())
 	if rep_m.earned > 0.0:
 		money.add(rep_m.earned)
 		CoreKit.bus.publish("fortune:money_changed", money.get_amount())
-	if rep_g.earned > 0.0 or rep_m.earned > 0.0:
+	if rep_t.earned > 0.0:
+		tickets.add(rep_t.earned)
+		CoreKit.bus.publish("fortune:tickets_changed", tickets.get_amount())
+	if rep_g.earned > 0.0 or rep_m.earned > 0.0 or rep_t.earned > 0.0:
 		CoreKit.bus.publish("fortune:offline_settled", offline_report)
 	return offline_report
 
@@ -145,8 +208,10 @@ func to_dict() -> Dictionary:
 	return {
 		"currency": currency.get_amount(),
 		"money": money.get_amount(),
+		"tickets": tickets.get_amount(),
 		"darts": darts.to_dict(),
 		"lotto": lotto.to_dict(),
+		"pachinko": pachinko.to_dict(),
 		"last_seen": Time.get_unix_time_from_system(),
 	}
 
@@ -154,8 +219,10 @@ func to_dict() -> Dictionary:
 func from_dict(d: Dictionary) -> void:
 	currency.set_amount(float(d.get("currency", 1.0)))
 	money.set_amount(float(d.get("money", 0.0)))
+	tickets.set_amount(float(d.get("tickets", 0.0)))
 	darts.from_dict(d.get("darts", {}))
 	lotto.from_dict(d.get("lotto", {}))
+	pachinko.from_dict(d.get("pachinko", {}))
 
 
 func save_game() -> void:
