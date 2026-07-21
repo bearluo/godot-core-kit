@@ -4,6 +4,7 @@ extends Node
 ## autoload 顺序必须在 CoreKit 之后(依赖 CoreKit.saves/.bus/.log/.ticker)。
 
 const SAVE_SLOT := "fortune"
+const SCHEMA_VERSION := 3   # 存档数据版本(SaveMigrator 迁移链目标版本;v1→v2→v3)
 const UPGRADES_DIR := "res://examples/fortune-mill/data/dart_upgrades"
 const LOTTO_DIR := "res://examples/fortune-mill/data/lotto_cards"
 const PACHINKO_DIR := "res://examples/fortune-mill/data/pachinko_balls"
@@ -32,6 +33,7 @@ var gacha: GachaRoom
 var prestige: Prestige     # NG+ 元进度:门槛缩放 + prestige 加成 + Lethal Mode(经共享 modifiers)
 var stats: KitStats            # 统计计数器(累计投镖/最高单次收益/各档靶心首命中…);NG+ 保留不重置
 var achievements: KitAchievements   # 51 条成就引擎:阈值判定 + 去重 + Steam 抽象层;NG+ 保留
+var _migrator: SaveMigrator    # 存档版本迁移链(加载旧档时逐级升到 SCHEMA_VERSION)
 
 ## 最近一次离线结算数据包(空=无);UI 首帧拉取展示回归横幅。
 var offline_report: Dictionary = {}
@@ -70,6 +72,11 @@ func _ready() -> void:
 	achievements = KitAchievements.new()
 	achievements.set_defs(registry.all(&"achievement"))
 	# 预留 Steam 抽象层:上线时 achievements.set_steam_sink(func(id): Steam.setAchievement(String(id)))
+	_migrator = _build_migrator()
+	# i18n 中英:注册 en/zh 目录 → 若未持久化过语言则用默认 zh(表现层接字体回退 + 切换按钮)
+	LocaleCatalog.apply(CoreKit.i18n)
+	if not (CoreKit.i18n.get_locale() in ["en", "zh"]):
+		CoreKit.i18n.set_locale(LocaleCatalog.DEFAULT_LOCALE)
 	if CoreKit.saves.has_slot(SAVE_SLOT):
 		load_game()                       # 内部做离线结算
 	_last_tick_ms = Time.get_ticks_msec()
@@ -473,6 +480,7 @@ func settle_offline(last_seen: float, now: float) -> Dictionary:
 
 func to_dict() -> Dictionary:
 	return {
+		"schema_version": SCHEMA_VERSION,   # 版本章:加载时 SaveMigrator 据此决定是否迁移
 		"currency": currency.get_amount(),
 		"money": money.get_amount(),
 		"tickets": tickets.get_amount(),
@@ -512,9 +520,36 @@ func save_game() -> void:
 
 
 func load_game() -> void:
-	var d := CoreKit.saves.load(SAVE_SLOT)
+	var raw := CoreKit.saves.load(SAVE_SLOT)
+	var res := _migrator.migrate(raw)
+	if not res.ok:
+		# 迁移失败(缺迁移函数/损坏/未来版本)→ 保底新档,不静默覆盖旧文件(下次 save 才写)。
+		CoreKit.log.warn("[Fortune] 存档迁移失败 v%d→v%d(%s),保底新档" % [int(res.from), int(res.to), str(res.reason)])
+		from_dict({})
+		return
+	var d: Dictionary = res.data
 	from_dict(d)
 	settle_offline(float(d.get("last_seen", 0.0)), Time.get_unix_time_from_system())
+
+
+## 构建存档迁移链:注册 v1→v2、v2→v3 两步(均为真实历史键位改名,兼容老档)。
+func _build_migrator() -> SaveMigrator:
+	var m := SaveMigrator.new(SCHEMA_VERSION)
+	# v1→v2:早期存档把飞镖货币键存作 "gold",后统一为 "currency"。
+	m.register(1, func(d: Dictionary) -> Dictionary:
+		if d.has("gold"):
+			d["currency"] = d["gold"]
+			d.erase("gold")
+		return d)
+	# v2→v3:4C 统计键 "throws" 更名为 "dart_throws"(与成就阈值 dart_throws 对齐)。
+	m.register(2, func(d: Dictionary) -> Dictionary:
+		var st = d.get("stats", {})
+		if st is Dictionary and st.has("throws"):
+			st["dart_throws"] = st["throws"]
+			st.erase("throws")
+			d["stats"] = st
+		return d)
+	return m
 
 
 ## 窗口关闭时存一次(退出存)。只挂 WM_CLOSE_REQUEST——不挂 EXIT_TREE,
