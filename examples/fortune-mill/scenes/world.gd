@@ -8,6 +8,8 @@ var _gold_label: Label
 var _status_label: Label
 var _bribe_button: Button
 var _upgrade_buttons: Dictionary = {}   # StringName(id) -> Button
+var _rate_label: Label
+var _offline_label: Label
 
 
 func _ready() -> void:
@@ -19,6 +21,7 @@ func _ready() -> void:
 	CoreKit.bus.subscribe("fortune:upgrade_purchased", _on_dirty)
 	CoreKit.bus.subscribe("fortune:room_cleared", _on_cleared)
 	_refresh()
+	_maybe_show_offline()
 
 
 ## --- FORTUNE_SMOKE:自动玩闭环,验证 $1 → 100 万 → 贿赂过关 ---
@@ -69,6 +72,9 @@ func _build_ui() -> void:
 	_status_label = Label.new()
 	root.add_child(_status_label)
 
+	_rate_label = Label.new()
+	root.add_child(_rate_label)
+
 	var throw_btn := Button.new()
 	throw_btn.text = "投镖 (Throw)"
 	throw_btn.pressed.connect(func(): FortuneMill.do_throw())
@@ -91,6 +97,10 @@ func _build_ui() -> void:
 	_bribe_button.pressed.connect(func(): FortuneMill.bribe_guard())
 	root.add_child(_bribe_button)
 
+	_offline_label = Label.new()
+	_offline_label.visible = false
+	root.add_child(_offline_label)
+
 
 func _on_dirty(_payload) -> void:
 	_refresh()
@@ -104,6 +114,8 @@ func _refresh() -> void:
 	if _gold_label == null:
 		return
 	_gold_label.text = "Gold: %s" % Currency.format(FortuneMill.currency.get_amount())
+	if _rate_label != null:
+		_rate_label.text = "自动: %s gold/s" % Currency.format(FortuneMill.darts.auto_gold_rate())
 	for id in _upgrade_buttons:
 		var def = FortuneMill.registry.get_def(&"dart_upgrade", id)
 		var lvl := FortuneMill.darts.level_of(id)
@@ -112,3 +124,16 @@ func _refresh() -> void:
 		btn.text = "%s  Lv.%d  (%s gold)" % [def.title, lvl, Currency.format(cost)]
 		btn.disabled = not FortuneMill.currency.can_afford(cost)
 	_bribe_button.disabled = not FortuneMill.can_bribe()
+
+
+## 从模型拉取最近离线结算,earned>0 才显示回归横幅(不靠事件,避免错过首帧)。
+func _maybe_show_offline() -> void:
+	if _offline_label == null:
+		return
+	var rep: Dictionary = FortuneMill.offline_report
+	if rep.is_empty() or float(rep.get("earned", 0.0)) <= 0.0:
+		return
+	var mins := int(float(rep.get("elapsed", 0.0)) / 60.0)
+	var capped := " (已封顶)" if bool(rep.get("capped", false)) else ""
+	_offline_label.visible = true
+	_offline_label.text = "欢迎回来!离线 %d 分钟%s,自动攒了 %s gold" % [mins, capped, Currency.format(float(rep.get("earned", 0.0)))]
