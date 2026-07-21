@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PrestigeUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/prestige_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"swift_start"
+title = "Swift Start"
+target = &"throws_per_sec"
+op = &"add"
+effect_per_level = 0.5
+base_cost = 2.0
+growth = 2.5
+max_level = 10

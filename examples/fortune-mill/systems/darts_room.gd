@@ -141,8 +141,13 @@ func _apply_upgrade(def, level: int) -> void:
 	_modifiers.set_modifier(def.target, def.id, def.op, v)
 
 
+## 当前贿赂门槛 = 基础 1M × NG+ 门槛缩放(共享 bribe_cost_mul,prestige 挂 ng_threshold 源)。ng0 → ×1.0(向后兼容)。
+func bribe_threshold() -> float:
+	return BRIBE_COST * _modifiers.value_for(&"bribe_cost_mul", 1.0)
+
+
 func can_bribe() -> bool:
-	return _currency.get_amount() >= BRIBE_COST
+	return _currency.get_amount() >= bribe_threshold()
 
 
 ## 达门槛则过关(P0 不扣货币,过关即本切片终点)。

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PrestigeUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/prestige_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"eternal_fortune"
+title = "Eternal Fortune"
+target = &"global_mul"
+op = &"mul"
+effect_per_level = 0.5
+base_cost = 1.0
+growth = 2.0
+max_level = -1

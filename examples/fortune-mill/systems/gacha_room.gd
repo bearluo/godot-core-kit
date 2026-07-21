@@ -217,8 +217,13 @@ func _apply_upgrade(def, level: int) -> void:
 	_modifiers.set_modifier(def.target, def.id, def.op, v)
 
 
+## 当前贿赂门槛 = 基础 1M × NG+ 门槛缩放(共享 bribe_cost_mul,prestige 挂 ng_threshold 源)。ng0 → ×1.0(向后兼容)。
+func bribe_threshold() -> float:
+	return BRIBE_COST * _modifiers.value_for(&"bribe_cost_mul", 1.0)
+
+
 func can_bribe() -> bool:
-	return _stuffing.get_amount() >= BRIBE_COST
+	return _stuffing.get_amount() >= bribe_threshold()
 
 
 func bribe() -> bool:
@@ -267,7 +272,8 @@ func from_dict(d: Dictionary) -> void:
 		var def = _registry.get_def(&"gacha_upgrade", id)
 		if def != null:
 			_apply_upgrade(def, level)
-	# 收藏柜 + 按持有数重放道具被动层
+	# 收藏柜:先重建空柜(from_dict({}) = 完全重置,清掉旧库存,避免 NG+/Lethal 重置时叠加),有存档再载入
+	_vault = KitInventory.new(VAULT_SLOTS, VAULT_STACK)
 	if d.has("vault"):
 		_vault.from_dict(d["vault"])
 	for iid in item_ids():
