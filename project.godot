@@ -12,7 +12,7 @@ config_version=5
 
 config/name="godot-core-kit (dev)"
 config/description="开发工程：托管并测试 godot-core-kit addon（纯 GDScript 通用基础库）。"
-run/main_scene="res://demo/demo.tscn"
+run/main_scene="res://examples/fortune-mill/scenes/world.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
