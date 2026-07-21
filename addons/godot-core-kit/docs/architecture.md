@@ -42,6 +42,10 @@ addons/godot-core-kit/
   transitions/           class_name 可复用转场资源(KitTransition,off-facade)
   inventory/             class_name 槽位制物品容器(KitInventory,off-facade)
   data/                  class_name 定义数据表(KitDataRegistry,off-facade)
+  offline/               class_name 离线结算器(KitOffline,off-facade)
+  modifiers/             class_name 数值修正器栈(KitModifiers,off-facade)
+  stats/                 class_name 统计计数器(KitStats,off-facade)
+  achievements/          class_name 成就引擎 + AchievementDef schema(KitAchievements,off-facade)
   docs/                  本文档目录
 ```
 
