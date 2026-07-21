@@ -1,5 +1,5 @@
 extends Node
-## world 表现层根(飞镖 + 刮刮乐 + 柏青哥房)+ FORTUNE_SMOKE headless 自测入口。
+## world 表现层根(飞镖 + 刮刮乐 + 柏青哥 + 寿司 + 扭蛋 五房)+ FORTUNE_SMOKE headless 自测入口。
 ## UI 只读 FortuneMill 模型 + 发命令;订阅 bus 脏标记刷新,不持有权威数值。
 ## 柏青哥有真物理表现层(pachinko_board.gd,仅非 smoke 实例化);smoke 走 model 直算。
 
@@ -37,6 +37,13 @@ var _craft_label: Label
 var _sushi_recipe_buttons: Dictionary = {}
 var _sushi_upgrade_buttons: Dictionary = {}
 var _hivemind_button: Button
+# 扭蛋房
+var _stuffing_label: Label
+var _gacha_rate_label: Label
+var _gacha_status: Label
+var _collection_label: Label
+var _gacha_upgrade_buttons: Dictionary = {}
+var _executor_button: Button
 
 
 func _ready() -> void:
@@ -48,10 +55,12 @@ func _ready() -> void:
 	CoreKit.bus.subscribe("fortune:money_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:tickets_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:ribbons_changed", _on_dirty)
+	CoreKit.bus.subscribe("fortune:stuffing_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:upgrade_purchased", _on_dirty)
 	CoreKit.bus.subscribe("fortune:jackpot_hit", _on_jackpot)
 	CoreKit.bus.subscribe("fortune:dice_rolled", _on_dirty)
 	CoreKit.bus.subscribe("fortune:recipe_unlocked", _on_dirty)
+	CoreKit.bus.subscribe("fortune:item_pulled", _on_dirty)
 	CoreKit.bus.subscribe("fortune:room_cleared", _on_cleared)
 	_refresh()
 	_maybe_show_offline()
@@ -67,10 +76,12 @@ func _run_smoke() -> void:
 	fm.money.set_amount(0.0)
 	fm.tickets.set_amount(0.0)
 	fm.ribbons.set_amount(0.0)
+	fm.stuffing.set_amount(0.0)
 	fm.darts.from_dict({})
 	fm.lotto.from_dict({})
 	fm.pachinko.from_dict({})
 	fm.sushi.from_dict({})
+	fm.gacha.from_dict({})
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 
 	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous ---
@@ -161,6 +172,29 @@ func _run_smoke() -> void:
 	var rep4: Dictionary = fm.settle_offline(t4 - 3600.0, t4)
 	var off4_ok: bool = float((rep4.get("sushi", {}) as Dictionary).get("earned", 0.0)) > 0.0
 
+	# --- P4:扭蛋抽卡(dogfood KitInventory 收藏柜)+ 被动收集协同跨房 + Executor 过关 ---
+	fm.gacha.seed_rng(999)
+	var stuffing_before_pull: float = fm.stuffing.get_amount()
+	var pull_r: Dictionary = fm.do_pull()   # 手动抽卡命令:收集道具 + 产 stuffing
+	var pull_ok: bool = float(pull_r.get("stuffing", 0.0)) > 0.0 and fm.stuffing.get_amount() > stuffing_before_pull and fm.gacha.owned(pull_r.get("item", &"")) >= 1
+	# 被动收集协同:收集 5 个 dream_daruma(global_mul ×(1.1)^5)→ 飞镖率同步放大(飞镖此时已有自动投)
+	var darts_pre_gacha: float = fm.darts.auto_gold_rate()
+	fm.gacha.grant_item(&"dream_daruma", 5)
+	var darts_post_gacha: float = fm.darts.auto_gold_rate()
+	var gacha_cross_ok: bool = darts_pre_gacha > 0.0 and absf(darts_post_gacha - darts_pre_gacha * pow(1.1, 5)) < 0.01
+	# 自动抽卡爬到 1M stuffing 贿赂 Executor
+	fm.stuffing.add(2000.0)
+	fm.buy_gacha_upgrade(&"auto_gacha")
+	var gskip := 0
+	while not fm.can_bribe_executor() and gskip < 200000:
+		fm.tick(3600.0)
+		gskip += 1
+	var executor_ok: bool = fm.can_bribe_executor() and fm.bribe_executor() and fm.gacha.is_cleared()
+	var t5: float = Time.get_unix_time_from_system()
+	var rep5: Dictionary = fm.settle_offline(t5 - 3600.0, t5)
+	var off5_ok: bool = float((rep5.get("gacha", {}) as Dictionary).get("earned", 0.0)) > 0.0
+
+	var gacha_boost := (darts_post_gacha / darts_pre_gacha) if darts_pre_gacha > 0.0 else 0.0
 	var switch_boost := (darts_post_switch / darts_pre_switch) if darts_pre_switch > 0.0 else 0.0
 	var dice_boost := (darts_post_dice / darts_pre_dice) if darts_pre_dice > 0.0 else 0.0
 	var boost := (darts_rate_post / darts_rate_pre) if darts_rate_pre > 0.0 else 0.0
@@ -168,11 +202,12 @@ func _run_smoke() -> void:
 	var p012 := ok and auto_ok and offline_ok and crossroom_ok and gorgon_ok
 	var p3 := pach_drop_ok and dice_cross_ok and rimmington_ok and off3_ok
 	var p3s := craft_ok and switch_cross_ok and hivemind_ok and off4_ok
-	if p012 and p3 and p3s:
-		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_rolled, dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), Currency.format(fm.ribbons.get_amount())])
+	var p4 := pull_ok and gacha_cross_ok and executor_ok and off5_ok
+	if p012 and p3 and p3s and p4:
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_rolled, dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), Currency.format(fm.stuffing.get_amount()), Currency.format(fm.ribbons.get_amount())])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s(%.2f→%.2f) hivemind=%s off4=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, darts_pre_switch, darts_post_switch, hivemind_ok, off4_ok])
+		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s(%.2f→%.2f) hivemind=%s off4=%s | pull=%s gacha_cross=%s(%.2f→%.2f) executor=%s off5=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, darts_pre_switch, darts_post_switch, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, darts_pre_gacha, darts_post_gacha, executor_ok, off5_ok])
 		get_tree().quit(1)
 
 
@@ -295,6 +330,28 @@ func _build_ui() -> void:
 	_hivemind_button.pressed.connect(func() -> void: FortuneMill.bribe_hivemind())
 	scol.add_child(_hivemind_button)
 
+	# 扭蛋房列
+	var gcol := VBoxContainer.new()
+	cols.add_child(gcol)
+	_add_title(gcol, "▛ 扭蛋房 (stuffing / Executor)")
+	_stuffing_label = Label.new(); gcol.add_child(_stuffing_label)
+	_gacha_status = Label.new(); gcol.add_child(_gacha_status)
+	_gacha_rate_label = Label.new(); gcol.add_child(_gacha_rate_label)
+	_collection_label = Label.new(); gcol.add_child(_collection_label)
+	var pull_btn := Button.new(); pull_btn.text = "抽扭蛋 (Pull)"
+	pull_btn.pressed.connect(_on_pull_pressed)
+	gcol.add_child(pull_btn)
+	gcol.add_child(HSeparator.new())
+	for id in FortuneMill.registry.ids(&"gacha_upgrade", true):
+		var btn := Button.new()
+		btn.pressed.connect(func() -> void: FortuneMill.buy_gacha_upgrade(id))
+		gcol.add_child(btn)
+		_gacha_upgrade_buttons[id] = btn
+	gcol.add_child(HSeparator.new())
+	_executor_button = Button.new(); _executor_button.text = "贿赂 Executor (需 1M stuffing)"
+	_executor_button.pressed.connect(func() -> void: FortuneMill.bribe_executor())
+	gcol.add_child(_executor_button)
+
 	# 柏青哥物理板(真 RigidBody2D 落球;juice)
 	_pachinko_board = PachinkoBoard.new()
 	add_child(_pachinko_board)
@@ -335,6 +392,15 @@ func _on_recipe_pressed(id: StringName) -> void:
 	_refresh()
 
 
+## 抽扭蛋:走命令 do_pull(收集道具 + 产 stuffing);状态栏报本次抽到的道具与稀有度。
+func _on_pull_pressed() -> void:
+	var r: Dictionary = FortuneMill.do_pull()
+	if _gacha_status == null:
+		return
+	var st := Currency.format(float(r.get("stuffing", 0.0)))
+	_gacha_status.text = "抽到 [%s] %s (+%s stuffing, 持有 %d)" % [str(r.get("rarity", &"")), str(r.get("item", &"")), st, int(r.get("owned", 0))]
+
+
 func _on_dirty(_payload) -> void:
 	_refresh()
 
@@ -354,6 +420,9 @@ func _on_cleared(room) -> void:
 		"sushi":
 			if _sushi_status != null:
 				_sushi_status.text = "★ 已贿赂 Hivemind,寿司房通关! ★"
+		"gacha":
+			if _gacha_status != null:
+				_gacha_status.text = "★ 已贿赂 Executor,扭蛋房通关! ★"
 		_:
 			if _status_label != null:
 				_status_label.text = "★ 已贿赂 Verminous,飞镖房通关! ★"
@@ -431,6 +500,23 @@ func _refresh() -> void:
 		sbtn.text = "%s  Lv.%d  (%s rb)" % [sdef.title, slvl, Currency.format(scost)]
 		sbtn.disabled = not FortuneMill.ribbons.can_afford(scost)
 	_hivemind_button.disabled = not FortuneMill.can_bribe_hivemind()
+	# 扭蛋房
+	_stuffing_label.text = "Stuffing: %s" % Currency.format(FortuneMill.stuffing.get_amount())
+	_gacha_rate_label.text = "自动: %s st/s" % Currency.format(FortuneMill.gacha.auto_stuffing_rate())
+	var coll: Array = []
+	for iid in FortuneMill.gacha.item_ids():
+		var n := FortuneMill.gacha.owned(iid)
+		if n > 0:
+			coll.append("%s×%d" % [str(iid), n])
+	_collection_label.text = "收藏: %s" % (", ".join(coll) if not coll.is_empty() else "(空)")
+	for id in _gacha_upgrade_buttons:
+		var gdef = FortuneMill.registry.get_def(&"gacha_upgrade", id)
+		var glvl := FortuneMill.gacha.level_of(id)
+		var gcost := FortuneMill.gacha.cost_of(id)
+		var gbtn: Button = _gacha_upgrade_buttons[id]
+		gbtn.text = "%s  Lv.%d  (%s st)" % [gdef.title, glvl, Currency.format(gcost)]
+		gbtn.disabled = not FortuneMill.stuffing.can_afford(gcost)
+	_executor_button.disabled = not FortuneMill.can_bribe_executor()
 
 
 ## 从模型拉取最近离线结算(per-room),任一房 earned>0 才显示回归横幅。
@@ -445,6 +531,7 @@ func _maybe_show_offline() -> void:
 	var m := float((rep.get("lotto", {}) as Dictionary).get("earned", 0.0))
 	var tk := float((rep.get("pachinko", {}) as Dictionary).get("earned", 0.0))
 	var rb := float((rep.get("sushi", {}) as Dictionary).get("earned", 0.0))
+	var st := float((rep.get("gacha", {}) as Dictionary).get("earned", 0.0))
 	if g > 0.0:
 		parts.append("飞镖 %s gold" % Currency.format(g))
 	if m > 0.0:
@@ -453,6 +540,8 @@ func _maybe_show_offline() -> void:
 		parts.append("柏青哥 %s tk" % Currency.format(tk))
 	if rb > 0.0:
 		parts.append("寿司 %s rb" % Currency.format(rb))
+	if st > 0.0:
+		parts.append("扭蛋 %s st" % Currency.format(st))
 	if parts.is_empty():
 		return
 	var mins := int(float((rep.get("darts", {}) as Dictionary).get("elapsed", 0.0)) / 60.0)

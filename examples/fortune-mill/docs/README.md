@@ -90,3 +90,37 @@ bus 只广播 `fortune:*` 脏标记;货币全走 Currency;存档只存 Dictionar
 - **离线四房**:`settle_offline` 各房各用自身产率单独结算,`offline_report={darts,lotto,pachinko,sushi}`。
 - 验收:`FORTUNE_SMOKE PASS ... craft=true switch_boost=2.00x hivemind=true`(解锁 dragon 后飞镖率精确 ×2)。
   测试 `test_fortune_sushi`(含 craft 消耗食材+计时完成 / 升级 / auto 率 / 解锁开关跨房 ×2 / 持久化)进 kit 门。达成 P3「4 房可通关」。
+
+## P4 扭蛋 + NG+ + 成就 + migration + i18n(分阶段)
+
+P4 是大阶段,照 P3 分阶段:**4A 扭蛋(本节)→ 4B NG+/NG++ + Lethal Mode → 4C 51 成就 + KitStats → 4D SaveManager migration + i18n 中英**。
+
+### 4A 扭蛋 Gacha(stuffing / 守卫 Executor)——补齐第 4/最后一类协同
+
+投币抽扭蛋 → 按稀有度加权得道具(进 `KitInventory` 收藏柜)+ stuffing;升级(单抽价值/自动抽速/
+自动抽卡机/稀有度权重)经共享 `KitModifiers`;攒够 1M stuffing 贿赂 Executor。三处机制:
+
+- **手动抽卡 + `KitInventory` 收藏柜(dogfood 第 2 处)**:`pull()` 加权 RNG 抽一个道具 →
+  `grant_item` 收进收藏柜(`GachaRoom._vault`)+ 挂被动协同 + 产 stuffing。`grant_item(id,n)` 是
+  pull 与测试共用的确定性入口(道具是收集向,收集 = 加被动 modifier)。
+- **自动抽卡(自动化/离线)**:`auto_stuffing_rate()` 用连续期望率(pullers × PULL_BASE_RATE ×
+  pull_speed × 期望单抽 × global_mul),**不**收集离散道具(保「在线=离线」,同其余房 auto 先例)。
+  `auto_puller` 基 0,买 Auto Gacha 才 >0。
+- **被动收集协同(GACHA 型,第 4/最后一类协同——唯一「收集向」)**:持有道具 → 往各房 target 挂一条
+  **永久** modifier(源 `gacha_<id>`),持有 n 份:`add=value×n` / `mul=(1+value)^n`,越集越强。经共享
+  `KitModifiers` 唯一求值点即时生效于别房(可指向别房产率如 `gold_per_dart`,或 `global_mul` 放大全房)。
+  收藏柜 `_vault` 是权威态(存档),`from_dict` 按持有数重放被动层。
+
+四类协同至此齐活:**JACKPOT** 永久 `mul` on `global_mul`(放大全房);**DICE** 临时 `mul` on
+`global_mul`(限时放大全房);**SUSHI** 永久 `mul` on 别房专属 target(规则开关);**GACHA** 永久
+`add`/`mul` on 各房 target(收集向,越集越强)。五房共享一个 `KitModifiers` 求值点,互不枚举。
+
+- **离线五房**:`settle_offline` 各房各用自身产率单独结算,`offline_report={darts,lotto,pachinko,sushi,gacha}`。
+- 验收:`FORTUNE_SMOKE PASS ... gacha_boost=1.61x executor=true stuffing=1.07M`(收集 5 个 dream_daruma
+  后飞镖率精确 ×(1.1)^5=1.61)。测试 `test_fortune_gacha`(含 pull 收集+产出 / add·mul 被动层堆叠 /
+  价值升级 / 自动率 / 稀有度权重抬期望 / 收集跨房放大飞镖 ×4 / 持久化收藏柜+被动层)进 kit 门。达成 P4「5 房可通关」。
+
+### 4B~4D(待做)
+
+NG+/NG++ 循环(重置货币/升级/守卫、门槛 1M→10M、保留成就/统计/NG+ 专属升级 + Lethal Mode 计时)、
+51 成就 + `KitStats`(反哺 kit)、`SaveManager` 版本迁移链(反哺 kit)、i18n 中英——分阶段续做。
