@@ -146,6 +146,31 @@ P4 是大阶段,照 P3 分阶段:**4A 扭蛋(本节)→ 4B NG+/NG++ + Lethal Mod
 ×10+发点 / NG+ 专属升级 add·mul 加成 / 加成跨房间重置存活 / Lethal 撤加成+门槛回 1M+最佳取 min+期间禁买 /
 持久化 ng_level·points·levels·best + modifier 重放)进 kit 门。
 
-### 4C~4D(待做)
+### 4C 51 成就 + KitStats(`systems/kit_stats.gd` + `systems/kit_achievements.gd`)
 
-51 成就 + `KitStats`(反哺 kit)、`SaveManager` 版本迁移链(反哺 kit)、i18n 中英——分阶段续做。
+51 条成就 + 统计计数器,两个 off-facade 类库孵化于本 example(拟反哺 kit,同 KitOffline/KitModifiers 先例)。
+**数据驱动阈值判定**:每条成就 = `{stat_key, threshold}`,当 `KitStats.get_value(stat_key) >= threshold` 即解锁——
+无需每条写触发代码。三层:
+
+- **`KitStats`(计数器持久化)**:`add`(累加:累计投镖数、抽卡/落球/刮卡次数)、`record_max`(峰值:最高单次收益、
+  最高周目 ng_level)、`set_value`(权威快照:jackpot 累计次数)。读走 `get_value`(阈值判定唯一入口)。纯数据,存档。
+- **`KitAchievements`(成就引擎)**:持有 def 表 + 已解锁集合;`evaluate(stats)` 扫全部 def,解锁「已达阈值且未解锁」者,
+  **返回本次新解锁 id 列表**(供 UI 弹 toast),已解锁的**绝不重触**(去重的核心)。**Steam 抽象层**:`set_steam_sink`
+  注入平台回调(如 `Steam.setAchievement`),新解锁时触发一次;默认空(kit 无引擎绑定)。存档只存已解锁 id 集合。
+- **51 条目录(`systems/achievement_catalog.gd`)**:代码构建 `AchievementDef` → 注册进 `KitDataRegistry` 的
+  `&"achievement"` 类(系统化故代码生成而非 51 个 .tres;真要覆盖/新增往 `data/achievements/` 丢同 id 的 .tres
+  经 `load_dir` 覆盖,drop-in 零改代码)。覆盖:**17 档靶心首命中 + 5 守卫贿赂 + 累计/单次产出里程碑 + 投镖数 +
+  NG+/Lethal + 各房首次动作**。
+
+**统计喂食集中在 `fortune_state` 命令入口**(房间 model 保持纯粹不依赖 stats):`do_throw`→投镖数/累计产出/单次峰值/
+各命中档位(`darts.throw` 现返回 `tiers`);`do_scratch`/`drop_ball`/`roll_dice`/`start_craft`/`do_pull`/贿赂/`ascend`/
+`buy_prestige_upgrade`/`_check_lethal_finish` 各喂对应键,喂完即 `_evaluate_achievements` 求值广播新解锁。
+`_reset_rooms`(NG+/Lethal)**不动 stats/achievements**(spec §185 保留成就/统计)。加载后 `evaluate` 一次自愈补发。
+
+验收:`FORTUNE_SMOKE PASS ... achievements=32/51 throws=657`(全流程解锁 32 条:5 守卫 + NG+ + 各房首次动作 +
+产出里程碑,去重再求值无新解锁)。测试 `test_fortune_stats`(add/record_max/set/get/持久化)、`test_fortune_achievements`
+(阈值判定 / 去重 / 新解锁列表 / Steam sink 每条一次 / 持久化 / 目录 51 条端到端)进 kit 门。
+
+### 4D(待做)
+
+`SaveManager` 版本迁移链(反哺 kit)、i18n 中英——续做。

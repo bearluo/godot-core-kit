@@ -51,6 +51,11 @@ var _lethal_label: Label
 var _ascend_button: Button
 var _lethal_button: Button
 var _prestige_upgrade_buttons: Dictionary = {}
+# 成就
+var _ach_count_label: Label
+var _ach_toast_label: Label
+var _ach_list_label: Label
+var _ach_recent: Array = []   # 最近解锁的 toast 文案(滚动展示)
 
 
 func _ready() -> void:
@@ -74,6 +79,7 @@ func _ready() -> void:
 	CoreKit.bus.subscribe("fortune:lethal_ended", _on_dirty)
 	CoreKit.bus.subscribe("fortune:lethal_finished", _on_lethal_finished)
 	CoreKit.bus.subscribe("fortune:room_cleared", _on_cleared)
+	CoreKit.bus.subscribe("fortune:achievement_unlocked", _on_achievement_unlocked)
 	_refresh()
 	_maybe_show_offline()
 
@@ -95,6 +101,8 @@ func _run_smoke() -> void:
 	fm.sushi.from_dict({})
 	fm.gacha.from_dict({})
 	fm.prestige.from_dict({})
+	fm.stats.from_dict({})           # 统计清零(成就阈值从新档起判)
+	fm.achievements.from_dict({})    # 已解锁成就清空
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 
 	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous ---
@@ -240,6 +248,21 @@ func _run_smoke() -> void:
 	var gmul_after_lethal: float = fm.modifiers.value_for(&"global_mul", 1.0)
 	var lethal_ok: bool = lethal_enter_ok and not fm.prestige.lethal_active() and absf(lethal_best - 8.0) < 0.01 and absf(gmul_after_lethal - gmul_post) < 0.01
 
+	# --- P4 4C:51 成就 + KitStats 统计(玩到此处应解锁大量成就;验去重与阈值判定)---
+	var ach = fm.achievements
+	var must_unlock := [&"guard_darts", &"guard_lotto", &"guard_pachinko", &"guard_sushi", &"guard_gacha",
+		&"ng_1", &"dart_tier_01", &"throws_100", &"gold_1e5", &"payout_1e2",
+		&"jackpot_1", &"pull_1", &"craft_1", &"drop_1", &"dice_1", &"scratch_1", &"recipe_1", &"prestige_1", &"lethal_1"]
+	var ach_all := true
+	for aid in must_unlock:
+		if not ach.is_unlocked(aid):
+			ach_all = false
+	var ach_count: int = ach.count()
+	var ach_total: int = ach.total()
+	var ach_dedup: bool = ach.evaluate(fm.stats).is_empty()   # 去重:同状态再求值应无新解锁
+	var stat_throws: float = fm.stats.get_value(&"dart_throws", 0.0)
+	var ach_ok: bool = ach_all and ach_total == 51 and ach_count >= 25 and ach_dedup and stat_throws >= 100.0
+
 	var gacha_boost := (darts_post_gacha / darts_pre_gacha) if darts_pre_gacha > 0.0 else 0.0
 	var switch_boost := (darts_post_switch / darts_pre_switch) if darts_pre_switch > 0.0 else 0.0
 	var dice_boost := (darts_post_dice / darts_pre_dice) if darts_pre_dice > 0.0 else 0.0
@@ -250,11 +273,12 @@ func _run_smoke() -> void:
 	var p3s := craft_ok and switch_cross_ok and hivemind_ok and off4_ok
 	var p4 := pull_ok and gacha_cross_ok and executor_ok and off5_ok
 	var p4b := ng_ok and reset_ok and prestige_ok and lethal_ok
-	if p012 and p3 and p3s and p4 and p4b:
-		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, Currency.format(stuffing_final), Currency.format(ribbons_final)])
+	var p4c := ach_ok
+	if p012 and p3 and p3s and p4 and p4b and p4c:
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | achievements=%d/%d throws=%d | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, ach_count, ach_total, int(stat_throws), Currency.format(stuffing_final), Currency.format(ribbons_final)])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f)" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best])
+		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f) | ach=%s(all=%s count=%d/%d dedup=%s throws=%d)" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best, ach_ok, ach_all, ach_count, ach_total, ach_dedup, int(stat_throws)])
 		get_tree().quit(1)
 
 
@@ -421,6 +445,15 @@ func _build_ui() -> void:
 	_lethal_button.pressed.connect(_on_lethal_pressed)
 	ncol.add_child(_lethal_button)
 
+	# 成就列(51 条:计数 + 最近解锁 toast + 明细速览)
+	var acol := VBoxContainer.new()
+	cols.add_child(acol)
+	_add_title(acol, "🏆 成就 (51 条)")
+	_ach_count_label = Label.new(); acol.add_child(_ach_count_label)
+	_ach_toast_label = Label.new(); acol.add_child(_ach_toast_label)
+	acol.add_child(HSeparator.new())
+	_ach_list_label = Label.new(); _ach_list_label.text = "最近解锁:"; acol.add_child(_ach_list_label)
+
 	# 柏青哥物理板(真 RigidBody2D 落球;juice)
 	_pachinko_board = PachinkoBoard.new()
 	add_child(_pachinko_board)
@@ -489,6 +522,21 @@ func _on_lethal_finished(t) -> void:
 	if _lethal_label != null:
 		_lethal_label.text = "🏁 Lethal 通关!用时 %.1fs" % float(t)
 	_refresh()
+
+
+## 成就解锁 toast:查 def 标题 → 顶出一条,保留最近 6 条滚动。
+func _on_achievement_unlocked(id) -> void:
+	var def = FortuneMill.registry.get_def(&"achievement", id)
+	var title: String = def.title if def != null else String(id)
+	if _ach_toast_label != null:
+		_ach_toast_label.text = "🎉 解锁:%s" % title
+	_ach_recent.push_front("· %s" % title)
+	if _ach_recent.size() > 6:
+		_ach_recent.resize(6)
+	if _ach_list_label != null:
+		_ach_list_label.text = "最近解锁:\n%s" % "\n".join(_ach_recent)
+	if _ach_count_label != null:
+		_ach_count_label.text = "已解锁: %d / %d" % [FortuneMill.achievements.count(), FortuneMill.achievements.total()]
 
 
 func _on_dirty(_payload) -> void:
@@ -625,6 +673,9 @@ func _refresh() -> void:
 		var prbtn: Button = _prestige_upgrade_buttons[id]
 		prbtn.text = "%s  Lv.%d  (%s pts)" % [predef.title, prlvl, Currency.format(prcost)]
 		prbtn.disabled = not FortuneMill.prestige.can_buy(id)
+	# 成就
+	if _ach_count_label != null:
+		_ach_count_label.text = "已解锁: %d / %d" % [FortuneMill.achievements.count(), FortuneMill.achievements.total()]
 
 
 ## 从模型拉取最近离线结算(per-room),任一房 earned>0 才显示回归横幅。
