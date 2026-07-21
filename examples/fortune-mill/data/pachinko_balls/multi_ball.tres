@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PachinkoUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/pachinko_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"multi_ball"
+title = "Multi Ball"
+kind = &"multi"
+target = &"balls_per_drop"
+op = &"add"
+effect_per_level = 1.0
+base_cost = 250.0
+growth = 1.8
+max_level = 9

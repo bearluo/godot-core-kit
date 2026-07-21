@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PachinkoUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/pachinko_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"loaded_dice"
+title = "Loaded Dice"
+kind = &"unlock"
+target = &"dice_frequency"
+op = &"add"
+effect_per_level = 1.0
+base_cost = 500.0
+growth = 2.0
+max_level = 10
