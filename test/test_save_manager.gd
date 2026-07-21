@@ -69,6 +69,7 @@ func _initialize() -> void:
 	failures += _test_resource_guard()
 	failures += _test_encode_error()
 	failures += _test_disk_roundtrip()
+	failures += _test_migration()
 
 	if failures == 0:
 		print("test_save_manager: ALL PASS")
@@ -499,4 +500,130 @@ func _test_resource_guard() -> int:
 		failures += 1
 
 	sm.free()
+	return failures
+
+
+## ============================================================
+## T5(0.22.0):版本迁移链 —— set_data_version + register_migration + load 自动迁移。
+## 直接实例化 SaveManager;CoreKit autoload 此刻已注册(失败路径的 CoreKit.log.warn 可用)。
+## ============================================================
+func _test_migration() -> int:
+	var failures := 0
+	var sm = SaveManagerScript.new()
+
+	# 1. 默认 data_version = 1
+	if sm.data_version() != 1:
+		print("FAIL migration: 默认 data_version 应为 1,得到 %d" % sm.data_version())
+		failures += 1
+
+	# 配置当前版本 3 + 两步迁移(v1→v2 gold→coins、v2→v3 补 level)
+	sm.set_data_version(3)
+	sm.register_migration(1, func(d: Dictionary) -> Dictionary:
+		d["coins"] = d.get("gold", 0)
+		d.erase("gold")
+		return d)
+	sm.register_migration(2, func(d: Dictionary) -> Dictionary:
+		d["level"] = 1
+		return d)
+
+	# 2. _run_migrations:v1 payload 迁到 v3(链完整 + emit migrated(1,3))
+	var got := {"from": -1, "to": -1}
+	var on_mig := func(_s: String, f: int, t: int) -> void:
+		got["from"] = f
+		got["to"] = t
+	sm.migrated.connect(on_mig)
+	var r1: Dictionary = sm._run_migrations("__mig__", 1, {"gold": 50})
+	if not (r1["ok"] and r1["data"].get("coins") == 50 and not r1["data"].has("gold") and r1["data"].get("level") == 1):
+		print("FAIL migration: v1→v3 链应完整,得到 %s" % [r1])
+		failures += 1
+	if got["from"] != 1 or got["to"] != 3:
+		print("FAIL migration: 应 emit migrated(1,3),得到 %s" % [got])
+		failures += 1
+	sm.migrated.disconnect(on_mig)
+
+	# 3. 缺中间步(2→3 未注册)→ migration_missing:2
+	var sm2 = SaveManagerScript.new()
+	sm2.set_data_version(3)
+	sm2.register_migration(1, func(d: Dictionary) -> Dictionary:
+		return d)
+	var r2: Dictionary = sm2._run_migrations("__mig__", 1, {})
+	if not ((not r2["ok"]) and r2["reason"] == "migration_missing:2"):
+		print("FAIL migration: 缺 2→3 应 migration_missing:2,得到 %s" % [r2])
+		failures += 1
+
+	# 4. 迁移函数返回非字典 → migration_error:1
+	var sm3 = SaveManagerScript.new()
+	sm3.set_data_version(2)
+	sm3.register_migration(1, func(_d: Dictionary):
+		return 42)
+	var r3: Dictionary = sm3._run_migrations("__mig__", 1, {})
+	if not ((not r3["ok"]) and r3["reason"] == "migration_error:1"):
+		print("FAIL migration: 迁移返回非字典应 migration_error:1,得到 %s" % [r3])
+		failures += 1
+
+	# 5. 未来版本(stored > current)→ future_version(不降级)
+	var r4: Dictionary = sm._run_migrations("__mig__", 99, {})
+	if not ((not r4["ok"]) and r4["reason"] == "future_version"):
+		print("FAIL migration: 未来版本应 future_version,得到 %s" % [r4])
+		failures += 1
+
+	# 6. 端到端:手写一个 v1 信封落盘 → load 自动迁移到 v3(coins/level)
+	var slot := "__test_migration__"
+	var path: String = sm._slot_path(slot)
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	DirAccess.make_dir_recursive_absolute(SaveManagerScript.SAVE_DIR)
+	var v1_bytes = JsonSaveSerializerScript.new().encode({"_version": 1, "data": {"gold": 777}})
+	var wf := FileAccess.open(path, FileAccess.WRITE)
+	wf.store_buffer(v1_bytes)
+	wf.close()
+	var loaded_data: Dictionary = sm.load(slot)
+	if not (loaded_data.get("coins") == 777 and not loaded_data.has("gold") and loaded_data.get("level") == 1):
+		print("FAIL migration: load v1 存档应自动迁到 v3,得到 %s" % [loaded_data])
+		failures += 1
+	DirAccess.remove_absolute(path)
+
+	# 7. 迁移失败(未来版本存档)→ load 返回 {} + emit migration_failed/load_failed(保底新档)
+	var reasons := {"mig": "", "load": ""}
+	var on_mf := func(_s: String, reason: String) -> void: reasons["mig"] = reason
+	var on_lf := func(_s: String, reason: String) -> void: reasons["load"] = reason
+	sm.migration_failed.connect(on_mf)
+	sm.load_failed.connect(on_lf)
+	var fut_bytes = JsonSaveSerializerScript.new().encode({"_version": 99, "data": {"x": 1}})
+	var wf2 := FileAccess.open(path, FileAccess.WRITE)
+	wf2.store_buffer(fut_bytes)
+	wf2.close()
+	var fut_load: Dictionary = sm.load(slot)
+	sm.migration_failed.disconnect(on_mf)
+	sm.load_failed.disconnect(on_lf)
+	if fut_load != {} or reasons["mig"] != "future_version" or reasons["load"] != "future_version":
+		print("FAIL migration: 未来版本存档 load 应返回 {} 并 emit migration_failed/load_failed,得到 %s / %s" % [fut_load, reasons])
+		failures += 1
+	DirAccess.remove_absolute(path)
+
+	# 8. 向后兼容:默认 data_version=1 + 无迁移 + v1 存档 → 原样加载(不失败)
+	var sm4 = SaveManagerScript.new()
+	var slot4 := "__test_mig_compat__"
+	var path4: String = sm4._slot_path(slot4)
+	if FileAccess.file_exists(path4):
+		DirAccess.remove_absolute(path4)
+	sm4.save(slot4, {"hp": 10})
+	var compat: Dictionary = sm4.load(slot4)
+	if compat.get("hp") != 10:
+		print("FAIL migration: 默认版本 v1 存档应原样加载,得到 %s" % [compat])
+		failures += 1
+	DirAccess.remove_absolute(path4)
+
+	# 9. set_data_version 非法值(<1)被拒
+	var sm5 = SaveManagerScript.new()
+	sm5.set_data_version(0)
+	if sm5.data_version() != 1:
+		print("FAIL migration: set_data_version(0) 应被拒,仍为 1")
+		failures += 1
+
+	sm.free()
+	sm2.free()
+	sm3.free()
+	sm4.free()
+	sm5.free()
 	return failures

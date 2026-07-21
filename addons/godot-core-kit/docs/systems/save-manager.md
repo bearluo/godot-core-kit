@@ -6,7 +6,7 @@
 
 把任意 Dictionary 状态以具名"存档位"(slot)形式,经可插拔 `SaveSerializer`(默认 `JsonSaveSerializer`,`.json`)序列化、原子写(temp+rename)落盘到 `user://saves/<slot>.<ext>`,`{_version, data}` 信封包裹。桌面与 Web 导出行为一致(`user://` 在 HTML5 由 IndexedDB 支持,`FileAccess`/`DirAccess`/`JSON` 全平台同步 API,无需 await)。纯 GDScript、无第三方依赖。
 
-范围之外(YAGNI):无自动收集存档的 registry、无加密/校验和(可由自定义 serializer 承载)、无迁移引擎(仅保留版本号字段)、无自动存档调度、无存档位元数据(缩略图/时长)。
+范围之外(YAGNI):无自动收集存档的 registry、无加密/校验和(可由自定义 serializer 承载)、无自动存档调度、无存档位元数据(缩略图/时长)。
 
 ## 公开 API
 
@@ -16,8 +16,12 @@ signal save_failed(slot: String, reason: String)
 signal loaded(slot: String)
 signal load_failed(slot: String, reason: String)
 signal slot_deleted(slot: String)
+# 加载时存档版本低于当前、迁移链成功升级后广播。
+signal migrated(slot: String, from_version: int, to_version: int)
+# 迁移失败(缺迁移函数/迁移返回非字典/未来版本)广播;load 同时返回 {} 并 emit load_failed。
+signal migration_failed(slot: String, reason: String)
 
-const SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 1   # 默认数据版本(向后兼容基线)
 
 # 写入 slot,若已存在则覆盖。成功 true;失败 false 并 emit save_failed(slot, reason)。
 func save(slot: String, data: Dictionary) -> bool
@@ -36,11 +40,18 @@ func list_slots() -> Array[String]
 
 # 替换序列化策略(默认 JsonSaveSerializer)。null 忽略并 push_error;换后影响后续 save/load。
 func set_serializer(s: SaveSerializer) -> void
+
+# 声明当前数据版本(save 盖此版本;load 时低版本存档迁移到此)。须 ≥ 1,非法忽略。默认 1。
+func set_data_version(v: int) -> void
+func data_version() -> int
+
+# 注册一步迁移:from_version 的 data → from_version+1 的 data。from_version 须 ≥ 1;重复覆盖。
+func register_migration(from_version: int, migrator: Callable) -> void
 ```
 
 ## 依赖
 
-零跨子系统依赖,除 `CoreKit.log`(仅用于版本不匹配警告)外不依赖其它子系统。
+零跨子系统依赖,除 `CoreKit.log`(版本迁移/不匹配告警)外不依赖其它子系统。
 
 ## 用法示例
 
@@ -67,6 +78,19 @@ CoreKit.saves.save_failed.connect(func(slot, reason): CoreKit.log.error("存档�
 
 `save()` 先写临时文件 `<slot>.<ext>.tmp`,`close` 后再 `rename` 到目标(`_atomic_replace`)。写入过程崩溃只会留下不完整的 `.tmp`(扩展名 `.tmp`,不被 `list_slots` 计入),目标文件永不出现"写一半"的中间态。桌面平台 `DirAccess.rename_absolute` 原子覆盖已存在目标;个别平台 rename 不覆盖时回退"先删目标再 rename"。Web(IndexedDB)上 rename 非严格原子,但 tmp 始终是完整文件,仍消除了目标被写一半的窗口。rename(含回退)失败 -> `save_failed(slot, "rename_error")`、清理 tmp、返回 false。
 
+## 版本迁移(v1→v2→v3 顺序链)
+
+长期运营的游戏一次数值/结构改版就可能读不动老档。信封的 `_version` 记录写档时的数据版本;`set_data_version(v)` 声明当前版本,`register_migration(from, fn)` 注册 `v(n)→v(n+1)` 的迁移函数(签名 `func(data: Dictionary) -> Dictionary`)。`load()` 时若存档版本低于当前,按序跑迁移链逐级升级到当前版本,成功 `emit migrated(slot, from, to)` 并返回迁移后数据。
+
+    CoreKit.saves.set_data_version(3)
+    CoreKit.saves.register_migration(1, func(d):   # v1→v2:字段更名
+        d["coins"] = d.get("gold", 0); d.erase("gold"); return d)
+    CoreKit.saves.register_migration(2, func(d):   # v2→v3:补默认字段
+        d["level"] = d.get("level", 1); return d)
+    var data := CoreKit.saves.load("hero1")        # v1 老档自动升到 v3
+
+失败即弃档(保底新档,不静默覆盖旧文件):缺某级迁移函数 → `migration_missing:N`;迁移函数返回非字典 → `migration_error:N`;存档版本高于当前(未来版本,不降级)→ `future_version`。三者都 `emit migration_failed(slot, reason)` + `load_failed(slot, reason)` 并返回 `{}`,由调用方决定新开档或提示。默认 `data_version=1` 且未注册迁移时,行为与旧版逐字节一致(向后兼容)。
+
 ## 资源引用安全约定
 
 SaveManager 只吃纯数据(JSON-native 类型)。`save()` 落盘前递归扫描 `data`,凡含 `Object`/`Resource`/`Node`/`Callable`/`Signal`/`RID` 即拒写并 `save_failed(slot, "unserializable")`、返回 false、不落盘。
@@ -79,6 +103,6 @@ SaveManager 只吃纯数据(JSON-native 类型)。`save()` 落盘前递归扫描
 
 - **命名坑**:`load()` 在本脚本体内会遮蔽 GDScript 内置全局函数 `load(path)`(与 `CoreKit.log` 遮蔽全局 `log()` 同理);脚本内部从不需要调用全局 `load()`,外部通过 `CoreKit.saves.load(...)` 调用不受影响。
 - **存档位名称白名单清洗**:只保留 `[A-Za-z0-9_-]`,清洗后为空(原始输入为空/纯空白/全部字符非法)一律拒绝(视为失败),不回退到某个默认存档位。
-- **版本号仅记录、不迁移**:`_version` 与当前 `SCHEMA_VERSION` 不一致时按原样加载并 `CoreKit.log.warn`,v1 无迁移逻辑。
+- **版本迁移**:`_version` 低于当前数据版本时按注册的迁移链逐级升级(见「版本迁移」节);迁移失败 `load_failed`/`migration_failed` + 返回 `{}`(保底新档)。默认未配置迁移时 `data_version=1`,与旧版逐字节兼容。
 - **JSON int→float**:与 Settings 同理,数据经 JSON 落盘往返后 int 会变 float,取整用 `int(...)`。
 - 原子写:`save()` 走 temp+rename,写入中断只留不完整的 `.tmp`(不被 `list_slots` 计入),目标不出现写一半态。损坏内容(序列化器 `decode` 返回 `{}` 或信封校验不过)一律触发 `load_failed(slot, "corrupt")`,不删除原文件。

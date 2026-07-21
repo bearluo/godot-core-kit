@@ -6,13 +6,20 @@ extends Node
 ## 原子写(temp+rename)落盘到 user://saves/<slot>.<ext>,{_version, data} 信封包裹。
 ## 桌面与 Web 导出行为一致(user:// 在 HTML5 由 IndexedDB 支持,FileAccess/
 ## DirAccess/JSON 全平台同步 API,无需 await)。纯 GDScript、无第三方依赖;
-## 除 CoreKit.log(仅用于版本不匹配警告)外不依赖其它子系统。
+## 除 CoreKit.log(版本迁移/不匹配告警)外不依赖其它子系统。
 ##
 ## 用法:CoreKit.saves.save("hero1", {"hp": 100})
 ##       var data := CoreKit.saves.load("hero1")
 ##
-## v1 范围之外(YAGNI):无自动收集存档的 registry、无加密、无迁移引擎
-## (仅保留版本号字段)、无自动存档调度、无存档位元数据(缩略图/时长)。
+## 版本迁移:游戏改版会重构存档结构,老档不能直接读。信封的 _version 记录写档时的
+## 数据版本;set_data_version(v) 声明当前版本,register_migration(from, fn) 注册
+## v(n)→v(n+1) 的迁移函数。load() 时若存档版本低于当前,按序跑迁移链逐级升级;缺迁移
+## 函数 / 迁移函数返回非字典 / 存档版本高于当前(未来版本)→ load_failed + migration_failed,
+## 返回 {}(由调用方保底新档,不静默覆盖旧文件)。默认 data_version=1 且无迁移注册时,
+## 行为与旧版逐字节一致(向后兼容)。
+##
+## v1 范围之外(YAGNI):无自动收集存档的 registry、无加密、无自动存档调度、
+## 无存档位元数据(缩略图/时长)。
 ##
 ## 资源引用安全约定:落盘数据只存 resource_path 引用而非整个 Resource,
 ## 避开 load 时 ResourceLoader 重建任意资源带来的代码注入面。
@@ -26,12 +33,21 @@ signal save_failed(slot: String, reason: String)
 signal loaded(slot: String)
 signal load_failed(slot: String, reason: String)
 signal slot_deleted(slot: String)
+## 加载时存档版本低于当前、迁移链成功升级后广播(slot, 存档原版本, 当前版本)。
+signal migrated(slot: String, from_version: int, to_version: int)
+## 迁移失败(缺迁移函数 / 迁移函数返回非字典 / 未来版本)广播;load 同时返回 {} 并 emit load_failed。
+signal migration_failed(slot: String, reason: String)
 
 const SAVE_DIR := "user://saves"
+## 默认数据版本(向后兼容基线)。未调 set_data_version 的游戏,存档恒盖此版本。
 const SCHEMA_VERSION := 1
 
 ## 当前序列化策略(默认 JSON,逐字节兼容旧 .json 存档)。经 set_serializer 替换。
 var _serializer: SaveSerializer = JsonSaveSerializer.new()
+## 当前数据版本(save 盖此版本;load 时低于它的存档走迁移链)。默认 = SCHEMA_VERSION。
+var _data_version: int = SCHEMA_VERSION
+## from_version(int) -> Callable(data: Dictionary) -> Dictionary 迁移函数注册表。
+var _migrations: Dictionary = {}
 
 
 ## 替换序列化策略。null 忽略并 push_error;换后影响后续 save/load(不改动已落盘文件)。
@@ -40,6 +56,29 @@ func set_serializer(s: SaveSerializer) -> void:
 		push_error("SaveManager.set_serializer: 拒绝 null")
 		return
 	_serializer = s
+
+
+## 声明当前数据版本(save 时盖此版本;load 时低于它的存档会被迁移到此版本)。
+## 须 ≥ 1;非法值忽略并 push_error。默认 1(向后兼容)。
+func set_data_version(v: int) -> void:
+	if v < 1:
+		push_error("SaveManager.set_data_version: 版本须 ≥ 1,忽略 %d" % v)
+		return
+	_data_version = v
+
+
+## 当前数据版本。
+func data_version() -> int:
+	return _data_version
+
+
+## 注册一步迁移:把 from_version 的 data 升级为 from_version+1 的 data 并返回。
+## from_version 须 ≥ 1;重复注册覆盖。迁移函数签名 func(data: Dictionary) -> Dictionary。
+func register_migration(from_version: int, migrator: Callable) -> void:
+	if from_version < 1:
+		push_error("SaveManager.register_migration: from_version 须 ≥ 1,忽略 %d" % from_version)
+		return
+	_migrations[from_version] = migrator
 
 
 ## 把 data 写入 slot,若该存档位已存在则覆盖。
@@ -54,7 +93,7 @@ func save(slot: String, data: Dictionary) -> bool:
 		save_failed.emit(slot, "unserializable")
 		return false
 
-	var envelope := {"_version": SCHEMA_VERSION, "data": data}
+	var envelope := {"_version": _data_version, "data": data}
 	var bytes := _serializer.encode(envelope)
 	if bytes.is_empty():
 		save_failed.emit(slot, "encode_error")
@@ -105,11 +144,18 @@ func load(slot: String) -> Dictionary:
 		load_failed.emit(safe_slot, "corrupt")
 		return {}
 
-	if int(envelope["_version"]) != SCHEMA_VERSION:
-		CoreKit.log.warn("SaveManager: slot '%s' 版本 %s 与当前 SCHEMA_VERSION %d 不一致,v1 无迁移逻辑,按原样加载" % [safe_slot, str(envelope["_version"]), SCHEMA_VERSION])
+	var stored_version := int(envelope["_version"])
+	var payload: Dictionary = envelope["data"]
+	if stored_version != _data_version:
+		var res := _run_migrations(safe_slot, stored_version, payload)
+		if not res["ok"]:
+			migration_failed.emit(safe_slot, res["reason"])
+			load_failed.emit(safe_slot, res["reason"])
+			return {}
+		payload = res["data"]
 
 	loaded.emit(safe_slot)
-	return envelope["data"]
+	return payload
 
 
 ## 存档位对应的文件是否存在。
@@ -180,6 +226,31 @@ func _sanitize_slot_name(slot: String) -> String:
 ## 纯路径拼接;不做清洗——调用方需先自行清洗。扩展名由当前序列化器决定。
 func _slot_path(slot: String) -> String:
 	return "%s/%s.%s" % [SAVE_DIR, slot, _serializer.extension()]
+
+
+## 把 payload 从 stored_version 迁移到 _data_version。返回 {ok, data, reason}。
+## stored > current → 未来版本(不降级)future_version;缺迁移函数 → migration_missing:N;
+## 迁移函数返回非字典 → migration_error:N。成功 emit migrated(slot, from, to)。
+## 迁移函数就地/返回改数据均可(Dictionary 引用语义);失败时不保证 payload 未被前几步改动
+## ——调用方失败即弃档(保底新档),故不影响正确性。
+func _run_migrations(slot: String, stored_version: int, payload: Dictionary) -> Dictionary:
+	if stored_version > _data_version:
+		CoreKit.log.warn("SaveManager: slot '%s' 版本 %d 高于当前 %d(未来版本),拒绝加载" % [slot, stored_version, _data_version])
+		return {"ok": false, "data": payload, "reason": "future_version"}
+	var cur = payload
+	var v := stored_version
+	while v < _data_version:
+		if not _migrations.has(v):
+			CoreKit.log.warn("SaveManager: slot '%s' 缺 v%d→v%d 迁移函数,拒绝加载" % [slot, v, v + 1])
+			return {"ok": false, "data": payload, "reason": "migration_missing:%d" % v}
+		var out = _migrations[v].call(cur)
+		if not (out is Dictionary):
+			CoreKit.log.warn("SaveManager: slot '%s' v%d→v%d 迁移返回非字典,拒绝加载" % [slot, v, v + 1])
+			return {"ok": false, "data": payload, "reason": "migration_error:%d" % v}
+		cur = out
+		v += 1
+	migrated.emit(slot, stored_version, _data_version)
+	return {"ok": true, "data": cur, "reason": ""}
 
 
 ## 信封结构校验(承接旧 _decode 的 has/类型检查):有 _version/data 键、_version 为标量、
