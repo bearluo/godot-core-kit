@@ -5,6 +5,8 @@ P0 阶段只有飞镖房。目录:
 - `defs/` —— 升级定义 Resource schema
 - `systems/` —— 纯数据层(Currency/KitModifiers/DartsRoom/FortuneMill autoload)
 - `scenes/` —— world 场景 + 表现层
+- `gfx/` —— 表现层美术/手感(art_bank 程序化接缝 + fx 手感层,P5)
+- `assets/` —— 真素材投放口(drop-in;默认空,见 `assets/README.md`)
 - `data/dart_upgrades/` —— 升级 .tres
 - `test/test_fortune_*.gd` —— headless 断言(进 kit 门 run_all)
 
@@ -171,6 +173,40 @@ P4 是大阶段,照 P3 分阶段:**4A 扭蛋(本节)→ 4B NG+/NG++ + Lethal Mod
 产出里程碑,去重再求值无新解锁)。测试 `test_fortune_stats`(add/record_max/set/get/持久化)、`test_fortune_achievements`
 (阈值判定 / 去重 / 新解锁列表 / Steam sink 每条一次 / 持久化 / 目录 51 条端到端)进 kit 门。
 
-### 4D(待做)
+### 4D 存档版本迁移 + i18n 中英
 
-`SaveManager` 版本迁移链(反哺 kit)、i18n 中英——续做。
+两个 example-local 孵化类:
+
+- **`systems/save_migrator.gd`(`SaveMigrator`,拟反哺)**:存档 `data` 自带 `schema_version` 版本章,
+  `register(from, fn)` 注册 v(n)→v(n+1) 迁移函数,`migrate(data)` 按序跑链。缺失版本章视为 v1(兼容历史老档);
+  缺步 / 非字典 / 未来版本 → `ok=false`,由 `load_game` 保底新档(不静默覆盖老档)。`fortune_state`
+  `SCHEMA_VERSION=3` + 两步真实历史键改名(`gold`→`currency`、stats.`throws`→`dart_throws`)。
+  **机制已反哺进 kit `SaveManager` 信封 `_version`**(v0.22.0):游戏侧改用
+  `CoreKit.saves.set_data_version`/`register_migration` 后即可删本类(见仓库根记忆的 P4 收尾清单)。
+- **`systems/locale_catalog.gd`(`LocaleCatalog`,游戏专有不反哺)**:代码建 en/zh `Translation` 经
+  `CoreKit.i18n`(kit LocaleManager)注册;world 托管 `Theme` + zh CJK `SystemFont` 字体回退(零素材,走 OS 字体族)
+  + 语言切换按钮 + 7 列标题/6 主操作按钮走 `t()` → `locale_changed` 重刷。缺翻译告警由 kit `t()` 负责。
+
+验收:`FORTUNE_SMOKE PASS ... migration=v1→v3 i18n=Throw/投镖`。测试 `test_fortune_migration`(迁移链 / 缺版本章默认 v1 /
+未来版本安全失败)、`test_fortune_i18n`(注册两语言 / 运行时切换文案不同 / 缺翻译回退 / 字体回退)进 kit 门。
+
+## P5 抛光(真素材 drop-in / 手感)
+
+### 5A 程序化美术接缝 + 赌场皮肤 + fx 手感(`gfx/`)
+
+incremental 原本是纯灰底标签+按钮,5A 给可玩路径加视觉与手感(headless smoke 不受影响——smoke 在 `_build_ui` 前返回):
+
+- **`gfx/art_bank.gd`(`FortuneArtBank`,「美术接缝」)**:UI 图标统一经 `texture_for(key)` 取。
+  **先真素材后程序化**——查 `ResourceLoader.exists(assets/<key>.png)`,命中 `load` 真素材,缺失才按房间调色板
+  确定性生成 `ImageTexture`(径向渐变筹码)兜底,结果缓存。仓库默认零素材全走程序化;把 png 丢进 `assets/`
+  (文件名 = key)即**零改代码顶替**(见 `assets/README.md`)。纯 `Image` 运算 headless 可测,故进 kit 门。
+- **赌场皮肤 `Theme`**:毛毡绿背景 + 深底金字按钮(normal/hover/pressed/disabled 分级)+ 七房各按
+  art_bank 强调色描边的 `PanelContainer` + 标题栏 art_bank 图标。皮肤 theme 复用 i18n 的 `bind_theme`
+  通道(切语言仍换 `default_font`,皮肤样式共存不冲突)。
+- **`gfx/fx.gd`(`FortuneFx`,手感层)**:浮字冒泡 `popup`(投镖/刮卡/抽卡的货币增量上浮渐隐)+ 全屏闪光
+  `flash`(JACKPOT 金闪 / 过关房间色庆祝)+ 按钮按下脉冲 `pulse`。全走 `Tween` 播完自清理,纯表现不持权威数值。
+  增量由命令前后差算(不依赖 model 返回),故不需改数据层。
+
+验收:`FORTUNE_SMOKE PASS ... art=32x32/procedural`(headless 生成 + 房间辨识 + 无真素材走程序化兜底)。
+测试 `test_fortune_art_bank`(每房 key 出图/尺寸 / 缓存同实例 / 房间中心色不同 / asset_path 接缝 / 无素材=procedural /
+未登记 key 兜底)进 kit 门(共 36 测)。fx/皮肤为纯表现,由非 smoke world 90 帧无报错兜底。

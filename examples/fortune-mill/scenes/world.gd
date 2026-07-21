@@ -5,6 +5,18 @@ extends Node
 
 const SMOKE_MAX_STEPS := 500000
 const PachinkoBoard := preload("res://examples/fortune-mill/scenes/pachinko_board.gd")
+const FortuneArtBank := preload("res://examples/fortune-mill/gfx/art_bank.gd")
+const FortuneFx := preload("res://examples/fortune-mill/gfx/fx.gd")
+## i18n 标题 key → art_bank 房间调色板 key(图标 + 面板边框上色)。
+const TITLE_TO_ROOM := {
+	"fortune.room_darts": &"darts",
+	"fortune.room_lotto": &"lotto",
+	"fortune.room_pachinko": &"pachinko",
+	"fortune.room_sushi": &"sushi",
+	"fortune.room_gacha": &"gacha",
+	"fortune.room_meta": &"meta",
+	"fortune.room_ach": &"ach",
+}
 
 # 飞镖房
 var _gold_label: Label
@@ -60,6 +72,9 @@ var _ach_recent: Array = []   # 最近解锁的 toast 文案(滚动展示)
 var _lang_button: Button
 var _i18n_labels: Dictionary = {}   # key(String) -> Label(标题栏,随语言刷新)
 var _i18n_buttons: Dictionary = {}  # key(String) -> Button(主操作按钮,随语言刷新)
+# 手感/美术(P5 5A;仅可玩路径实例化)
+var _art: FortuneArtBank
+var _fx: FortuneFx
 
 
 func _ready() -> void:
@@ -288,6 +303,13 @@ func _run_smoke() -> void:
 	var i18n_missing: String = CoreKit.i18n.t(&"fortune.__nonexistent__")
 	var i18n_ok: bool = i18n_en == "Throw" and i18n_zh == "投镖" and i18n_missing == "fortune.__nonexistent__"
 
+	# --- P5 5A:程序化美术接缝(headless 生成 + 房间辨识 + 无真素材走程序化兜底)---
+	var ab = FortuneArtBank.new()
+	var art_tex = ab.texture_for(&"darts", 32)
+	var art_darts = art_tex.get_image().get_pixel(16, 16) if art_tex != null else Color.BLACK
+	var art_sushi = ab.texture_for(&"sushi", 32).get_image().get_pixel(16, 16)
+	var art_ok: bool = art_tex != null and art_tex.get_width() == 32 and not art_darts.is_equal_approx(art_sushi) and ab.source_for(&"darts") == "procedural"
+
 	var gacha_boost := (darts_post_gacha / darts_pre_gacha) if darts_pre_gacha > 0.0 else 0.0
 	var switch_boost := (darts_post_switch / darts_pre_switch) if darts_pre_switch > 0.0 else 0.0
 	var dice_boost := (darts_post_dice / darts_pre_dice) if darts_pre_dice > 0.0 else 0.0
@@ -300,11 +322,12 @@ func _run_smoke() -> void:
 	var p4b := ng_ok and reset_ok and prestige_ok and lethal_ok
 	var p4c := ach_ok
 	var p4d := migration_ok and i18n_ok
-	if p012 and p3 and p3s and p4 and p4b and p4c and p4d:
-		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | achievements=%d/%d throws=%d | migration=v%d→v%d i18n=%s/%s | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, ach_count, ach_total, int(stat_throws), int(mig.from), int(mig.to), i18n_en, i18n_zh, Currency.format(stuffing_final), Currency.format(ribbons_final)])
+	var p5a := art_ok
+	if p012 and p3 and p3s and p4 and p4b and p4c and p4d and p5a:
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | achievements=%d/%d throws=%d | migration=v%d→v%d i18n=%s/%s | art=%dx%d/%s | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, ach_count, ach_total, int(stat_throws), int(mig.from), int(mig.to), i18n_en, i18n_zh, art_tex.get_width(), art_tex.get_height(), ab.source_for(&"darts"), Currency.format(stuffing_final), Currency.format(ribbons_final)])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f) | ach=%s(all=%s count=%d/%d dedup=%s throws=%d) | migration=%s i18n=%s(en=%s zh=%s missing=%s)" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best, ach_ok, ach_all, ach_count, ach_total, ach_dedup, int(stat_throws), migration_ok, i18n_ok, i18n_en, i18n_zh, i18n_missing])
+		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f) | ach=%s(all=%s count=%d/%d dedup=%s throws=%d) | migration=%s i18n=%s(en=%s zh=%s missing=%s) | p5a=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best, ach_ok, ach_all, ach_count, ach_total, ach_dedup, int(stat_throws), migration_ok, i18n_ok, i18n_en, i18n_zh, i18n_missing, art_ok])
 		get_tree().quit(1)
 
 
@@ -317,16 +340,20 @@ func _smoke_buy_round(fm) -> void:
 ## --- 可玩 UI(代码构建;三列:飞镖 | 刮刮乐 | 柏青哥 + 右侧物理板) ---
 
 func _build_ui() -> void:
+	_art = FortuneArtBank.new()
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	# i18n:托管 Theme + zh CJK 系统字体回退(零素材,SystemFont 走 OS 字体族);切语言即换 theme.default_font
-	var theme := Theme.new()
-	var zh_font := SystemFont.new()
-	zh_font.font_names = PackedStringArray(["Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", "sans-serif"])
-	CoreKit.i18n.register_locale_font("zh", zh_font)
+	# 赌场毛毡背景(铺满,置于所有 UI 之下,不拦鼠标)
+	var felt := ColorRect.new()
+	felt.color = Color("0e3b2e")
+	felt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	felt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(felt)
+	# i18n:托管赌场皮肤 Theme(按钮/标签样式)+ zh CJK 系统字体回退;切语言即换 theme.default_font
+	var theme := _build_theme()
 	CoreKit.i18n.bind_theme(theme)   # 当前 locale 若已注册字体则立即应用一次
 	var root := VBoxContainer.new()
-	root.theme = theme               # 主题下发全部子控件 → 字体随 locale 切换
+	root.theme = theme               # 主题下发全部子控件 → 字体 + 皮肤随 locale 切换
 	root.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	root.position = Vector2(16, 16)
 	layer.add_child(root)
@@ -340,13 +367,12 @@ func _build_ui() -> void:
 	root.add_child(cols)
 
 	# 飞镖房列
-	var dcol := VBoxContainer.new()
-	cols.add_child(dcol)
+	var dcol := _room_panel(cols, "fortune.room_darts")
 	_add_title(dcol, "fortune.room_darts")
 	_gold_label = Label.new(); dcol.add_child(_gold_label)
 	_status_label = Label.new(); dcol.add_child(_status_label)
 	_rate_label = Label.new(); dcol.add_child(_rate_label)
-	dcol.add_child(_i18n_button("fortune.throw", func() -> void: FortuneMill.do_throw()))
+	dcol.add_child(_i18n_button("fortune.throw", _throw_pressed))
 	dcol.add_child(HSeparator.new())
 	for id in FortuneMill.registry.ids(&"dart_upgrade", true):
 		var btn := Button.new()
@@ -361,8 +387,7 @@ func _build_ui() -> void:
 	dcol.add_child(_offline_label)
 
 	# 刮刮乐房列
-	var lcol := VBoxContainer.new()
-	cols.add_child(lcol)
+	var lcol := _room_panel(cols, "fortune.room_lotto")
 	_add_title(lcol, "fortune.room_lotto")
 	_money_label = Label.new(); lcol.add_child(_money_label)
 	_scratch_status = Label.new(); lcol.add_child(_scratch_status)
@@ -381,8 +406,7 @@ func _build_ui() -> void:
 	lcol.add_child(_gorgon_button)
 
 	# 柏青哥房列
-	var pcol := VBoxContainer.new()
-	cols.add_child(pcol)
+	var pcol := _room_panel(cols, "fortune.room_pachinko")
 	_add_title(pcol, "fortune.room_pachinko")
 	_tickets_label = Label.new(); pcol.add_child(_tickets_label)
 	_pachinko_status = Label.new(); pcol.add_child(_pachinko_status)
@@ -404,8 +428,7 @@ func _build_ui() -> void:
 	pcol.add_child(_rimmington_button)
 
 	# 寿司房列
-	var scol := VBoxContainer.new()
-	cols.add_child(scol)
+	var scol := _room_panel(cols, "fortune.room_sushi")
 	_add_title(scol, "fortune.room_sushi")
 	_ribbons_label = Label.new(); scol.add_child(_ribbons_label)
 	_sushi_status = Label.new(); scol.add_child(_sushi_status)
@@ -434,8 +457,7 @@ func _build_ui() -> void:
 	scol.add_child(_hivemind_button)
 
 	# 扭蛋房列
-	var gcol := VBoxContainer.new()
-	cols.add_child(gcol)
+	var gcol := _room_panel(cols, "fortune.room_gacha")
 	_add_title(gcol, "fortune.room_gacha")
 	_stuffing_label = Label.new(); gcol.add_child(_stuffing_label)
 	_gacha_status = Label.new(); gcol.add_child(_gacha_status)
@@ -454,8 +476,7 @@ func _build_ui() -> void:
 	gcol.add_child(_executor_button)
 
 	# 元进度列 (NG+)
-	var ncol := VBoxContainer.new()
-	cols.add_child(ncol)
+	var ncol := _room_panel(cols, "fortune.room_meta")
 	_add_title(ncol, "fortune.room_meta")
 	_ng_label = Label.new(); ncol.add_child(_ng_label)
 	_prestige_points_label = Label.new(); ncol.add_child(_prestige_points_label)
@@ -475,8 +496,7 @@ func _build_ui() -> void:
 	ncol.add_child(_lethal_button)
 
 	# 成就列(51 条:计数 + 最近解锁 toast + 明细速览)
-	var acol := VBoxContainer.new()
-	cols.add_child(acol)
+	var acol := _room_panel(cols, "fortune.room_ach")
 	_add_title(acol, "fortune.room_ach")
 	_ach_count_label = Label.new(); acol.add_child(_ach_count_label)
 	_ach_toast_label = Label.new(); acol.add_child(_ach_toast_label)
@@ -487,13 +507,91 @@ func _build_ui() -> void:
 	_pachinko_board = PachinkoBoard.new()
 	add_child(_pachinko_board)
 
+	# 手感层(浮字冒泡 / 全屏闪光 / 按钮脉冲)
+	_fx = FortuneFx.new()
+	add_child(_fx)
 
-## 标题栏:文案走 i18n key,注册进 _i18n_labels 供切语言时刷新。
+
+## 标题栏:房间图标(art_bank)+ 文案(走 i18n key,注册进 _i18n_labels 供切语言时刷新)。
 func _add_title(col: VBoxContainer, key: String) -> void:
+	var row := HBoxContainer.new()
+	var room: StringName = TITLE_TO_ROOM.get(key, &"")
+	var icon := TextureRect.new()
+	icon.texture = _art.texture_for(room, 24)
+	icon.custom_minimum_size = Vector2(24, 24)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(icon)
 	var l := Label.new()
 	l.text = CoreKit.i18n.t(key)
-	col.add_child(l)
+	row.add_child(l)
+	col.add_child(row)
 	_i18n_labels[key] = l
+
+
+## 赌场皮肤 Theme:深底金字按钮(normal/hover/pressed/disabled 分级)+ 浅色标签 + zh 字体回退。
+func _build_theme() -> Theme:
+	var theme := Theme.new()
+	var zh_font := SystemFont.new()   # 零素材,SystemFont 走 OS 字体族
+	zh_font.font_names = PackedStringArray(["Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", "sans-serif"])
+	CoreKit.i18n.register_locale_font("zh", zh_font)
+	theme.set_stylebox("normal", "Button", _flat(Color("1c2a24"), Color("caa24a"), 1))
+	theme.set_stylebox("hover", "Button", _flat(Color("26382f"), Color("e6c260"), 1))
+	theme.set_stylebox("pressed", "Button", _flat(Color("13201a"), Color("caa24a"), 1))
+	theme.set_stylebox("disabled", "Button", _flat(Color("161d1a"), Color("3a463f"), 1))
+	theme.set_color("font_color", "Button", Color("f0e0b0"))
+	theme.set_color("font_hover_color", "Button", Color("fff0c0"))
+	theme.set_color("font_pressed_color", "Button", Color("caa24a"))
+	theme.set_color("font_disabled_color", "Button", Color("6a726b"))
+	theme.set_color("font_color", "Label", Color("e8e8e0"))
+	return theme
+
+
+## 圆角描边 StyleBoxFlat 工厂(赌场皮肤共用)。
+func _flat(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(bw)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 8.0
+	sb.content_margin_right = 8.0
+	sb.content_margin_top = 4.0
+	sb.content_margin_bottom = 4.0
+	return sb
+
+
+## 房间列:PanelContainer(强调色边框 + 深底)包一层 VBox,返回内层 VBox 供填充。
+func _room_panel(parent: HBoxContainer, title_key: String) -> VBoxContainer:
+	var room: StringName = TITLE_TO_ROOM.get(title_key, &"")
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _flat(Color("13251d"), _art.color_for(room), 2))
+	parent.add_child(panel)
+	var col := VBoxContainer.new()
+	panel.add_child(col)
+	return col
+
+
+## 投镖:发命令 + 冒本次 gold 增量浮字 + 按钮脉冲(增量由前后差算,不依赖返回值)。
+func _throw_pressed() -> void:
+	var before := FortuneMill.currency.get_amount()
+	FortuneMill.do_throw()
+	var d := FortuneMill.currency.get_amount() - before
+	if d > 0.0:
+		_pop_at(_gold_label, "+%s" % Currency.format(d), _art.color_for(&"darts"))
+	_pulse_button("fortune.throw")
+
+
+## 在锚点控件右侧冒一条浮字(纯表现;fx 未就绪/控件未入树时静默跳过)。
+func _pop_at(anchor: Control, text: String, color: Color) -> void:
+	if _fx == null or anchor == null or not anchor.is_inside_tree():
+		return
+	_fx.popup(text, anchor.global_position + Vector2(anchor.size.x + 6.0, -4.0), color)
+
+
+## 主操作按钮按下脉冲(纯表现)。
+func _pulse_button(key: String) -> void:
+	if _fx != null and _i18n_buttons.has(key):
+		_fx.pulse(_i18n_buttons[key])
 
 
 ## 主操作按钮:文案走 i18n key,注册进 _i18n_buttons 供切语言时刷新。
@@ -528,9 +626,13 @@ func _apply_locale_texts() -> void:
 
 func _on_scratch_pressed() -> void:
 	var r: Dictionary = FortuneMill.do_scratch()
+	var money_won := float(r.get("money", 0.0))
+	if money_won > 0.0:
+		_pop_at(_money_label, "+%s" % Currency.format(money_won), _art.color_for(&"lotto"))
+	_pulse_button("fortune.scratch")
 	if _scratch_status == null:
 		return
-	var earned := Currency.format(float(r.get("money", 0.0)))
+	var earned := Currency.format(money_won)
 	if r.get("jackpot", false):
 		_scratch_status.text = "★ JACKPOT! +%s money ★" % earned
 	else:
@@ -558,9 +660,13 @@ func _on_recipe_pressed(id: StringName) -> void:
 ## 抽扭蛋:走命令 do_pull(收集道具 + 产 stuffing);状态栏报本次抽到的道具与稀有度。
 func _on_pull_pressed() -> void:
 	var r: Dictionary = FortuneMill.do_pull()
+	var st_won := float(r.get("stuffing", 0.0))
+	if st_won > 0.0:
+		_pop_at(_stuffing_label, "+%s" % Currency.format(st_won), _art.color_for(&"gacha"))
+	_pulse_button("fortune.pull")
 	if _gacha_status == null:
 		return
-	var st := Currency.format(float(r.get("stuffing", 0.0)))
+	var st := Currency.format(st_won)
 	_gacha_status.text = "抽到 [%s] %s (+%s stuffing, 持有 %d)" % [str(r.get("rarity", &"")), str(r.get("item", &"")), st, int(r.get("owned", 0))]
 
 
@@ -605,10 +711,21 @@ func _on_dirty(_payload) -> void:
 
 
 func _on_jackpot(_count) -> void:
+	if _fx != null:
+		_fx.flash(Color(0.95, 0.78, 0.25, 0.45))   # 金色 JACKPOT 闪
 	_refresh()
 
 
 func _on_cleared(room) -> void:
+	if _fx != null and _art != null:
+		var room_key: StringName = &"darts"
+		match str(room):
+			"lotto": room_key = &"lotto"
+			"pachinko": room_key = &"pachinko"
+			"sushi": room_key = &"sushi"
+			"gacha": room_key = &"gacha"
+		var c: Color = _art.color_for(room_key)
+		_fx.flash(Color(c.r, c.g, c.b, 0.4))   # 房间强调色过关庆祝闪
 	match str(room):
 		"lotto":
 			if _scratch_status != null:
