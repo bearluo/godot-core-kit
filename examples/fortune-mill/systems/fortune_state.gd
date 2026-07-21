@@ -11,6 +11,7 @@ const SUSHI_RECIPES_DIR := "res://examples/fortune-mill/data/sushi_recipes"
 const SUSHI_UPGRADES_DIR := "res://examples/fortune-mill/data/sushi_upgrades"
 const GACHA_ITEMS_DIR := "res://examples/fortune-mill/data/gacha_items"
 const GACHA_UPGRADES_DIR := "res://examples/fortune-mill/data/gacha_upgrades"
+const PRESTIGE_UPGRADES_DIR := "res://examples/fortune-mill/data/prestige_upgrades"
 const OFFLINE_CAP_SECONDS := 28800.0   # 封顶 8 小时(spec §5.7)
 const TICK_EVERY_N := 15               # ~4Hz @60fps 的自动产出结算
 const AUTOSAVE_EVERY_N := 300          # ~5s @60fps 的周期自动存
@@ -27,6 +28,7 @@ var lotto: LottoRoom
 var pachinko: PachinkoRoom
 var sushi: SushiRoom
 var gacha: GachaRoom
+var prestige: Prestige     # NG+ 元进度:门槛缩放 + prestige 加成 + Lethal Mode(经共享 modifiers)
 
 ## 最近一次离线结算数据包(空=无);UI 首帧拉取展示回归横幅。
 var offline_report: Dictionary = {}
@@ -51,17 +53,19 @@ func _ready() -> void:
 	var ns := registry.load_dir(&"sushi_upgrade", SUSHI_UPGRADES_DIR)
 	var ngi := registry.load_dir(&"gacha_item", GACHA_ITEMS_DIR)
 	var ngu := registry.load_dir(&"gacha_upgrade", GACHA_UPGRADES_DIR)
+	var npu := registry.load_dir(&"prestige_upgrade", PRESTIGE_UPGRADES_DIR)
 	darts = DartsRoom.new(currency, modifiers, registry)
 	lotto = LottoRoom.new(money, modifiers, registry)       # 共享 modifiers → 跨房协同
 	pachinko = PachinkoRoom.new(tickets, modifiers, registry)
 	sushi = SushiRoom.new(ribbons, modifiers, registry)     # 解锁高级配方 → 往别房注册永久开关
 	gacha = GachaRoom.new(stuffing, modifiers, registry)    # 收集道具 → 往各房挂永久被动 add/mul
+	prestige = Prestige.new(modifiers, registry)            # NG+ 门槛缩放 + prestige 加成(经共享 modifiers)
 	if CoreKit.saves.has_slot(SAVE_SLOT):
 		load_game()                       # 内部做离线结算
 	_last_tick_ms = Time.get_ticks_msec()
 	_tick_handle = CoreKit.ticker.every_n(_on_tick, TICK_EVERY_N)
 	_autosave_handle = CoreKit.ticker.every_n(save_game, AUTOSAVE_EVERY_N)
-	CoreKit.log.info("[Fortune] ready: %d dart + %d lotto + %d pachinko + %d recipe + %d sushi + %d gacha item + %d gacha upgrades" % [n, nl, np, nr, ns, ngi, ngu])
+	CoreKit.log.info("[Fortune] ready: %d dart + %d lotto + %d pachinko + %d recipe + %d sushi + %d gacha item + %d gacha upgrades + %d prestige" % [n, nl, np, nr, ns, ngi, ngu, npu])
 
 
 ## --- ticker 驱动的自动产出(降频 tick,真实 dt 自算) ---
@@ -92,6 +96,7 @@ func tick(dt: float) -> void:
 	var gp := gacha.produce(dt)  # 自动抽卡连续产出
 	if gp > 0.0:
 		CoreKit.bus.publish("fortune:stuffing_changed", stuffing.get_amount())
+	prestige.tick_lethal(dt)     # Lethal Mode 计时(仅进行中累加)
 
 
 ## --- 命令(表现层唯一入口) ---
@@ -113,6 +118,7 @@ func buy_dart_upgrade(id: StringName) -> bool:
 func bribe_guard() -> bool:
 	if darts.bribe():
 		CoreKit.bus.publish("fortune:room_cleared", "darts")
+		_check_lethal_finish()
 		save_game()
 		return true
 	return false
@@ -145,6 +151,7 @@ func buy_lotto_upgrade(id: StringName) -> bool:
 func bribe_gorgon() -> bool:
 	if lotto.bribe():
 		CoreKit.bus.publish("fortune:room_cleared", "lotto")
+		_check_lethal_finish()
 		save_game()
 		return true
 	return false
@@ -194,6 +201,7 @@ func buy_pachinko_upgrade(id: StringName) -> bool:
 func bribe_rimmington() -> bool:
 	if pachinko.bribe():
 		CoreKit.bus.publish("fortune:room_cleared", "pachinko")
+		_check_lethal_finish()
 		save_game()
 		return true
 	return false
@@ -244,6 +252,7 @@ func buy_sushi_upgrade(id: StringName) -> bool:
 func bribe_hivemind() -> bool:
 	if sushi.bribe():
 		CoreKit.bus.publish("fortune:room_cleared", "sushi")
+		_check_lethal_finish()
 		save_game()
 		return true
 	return false
@@ -279,6 +288,7 @@ func buy_gacha_upgrade(id: StringName) -> bool:
 func bribe_executor() -> bool:
 	if gacha.bribe():
 		CoreKit.bus.publish("fortune:room_cleared", "gacha")
+		_check_lethal_finish()
 		save_game()
 		return true
 	return false
@@ -286,6 +296,95 @@ func bribe_executor() -> bool:
 
 func can_bribe_executor() -> bool:
 	return gacha.can_bribe()
+
+
+## --- NG+ 元进度命令(ascend 进周目 / prestige 升级 / Lethal Mode) ---
+
+## 5 房是否全通关(ascend 与 Lethal 完成的判定)。
+func is_run_complete() -> bool:
+	return darts.is_cleared() and lotto.is_cleared() and pachinko.is_cleared() and sushi.is_cleared() and gacha.is_cleared()
+
+
+func can_ascend() -> bool:
+	return is_run_complete() and not prestige.lethal_active()
+
+
+## 进下一周目:确认 5 房通关 → prestige.ascend(门槛 ×10 + 发点)→ 重置 5 房(保留 prestige 加成 +
+## 部分稀有扭蛋道具)→ 存档。返回本次数据包(空 = 拒绝,未通关或 Lethal 中)。
+func ascend() -> Dictionary:
+	if not can_ascend():
+		return {}
+	var info := prestige.ascend()
+	_reset_rooms()
+	CoreKit.bus.publish("fortune:ascended", info)
+	_publish_all_currencies()
+	save_game()
+	return info
+
+
+func buy_prestige_upgrade(id: StringName) -> bool:
+	if prestige.buy_upgrade(id):
+		CoreKit.bus.publish("fortune:prestige_bought", String(id))
+		_publish_all_currencies()   # prestige 加成(如 global_mul)即时改各房产率显示
+		return true
+	return false
+
+
+## 开一局 Lethal Mode:重置 5 房 + 无 NG+ 加成(prestige 撤除、门槛回 1M)+ 计时。已在 Lethal 中 → false。
+func start_lethal() -> bool:
+	if not prestige.start_lethal():
+		return false
+	_reset_rooms()
+	CoreKit.bus.publish("fortune:lethal_started", true)
+	_publish_all_currencies()
+	return true
+
+
+## 中途放弃 Lethal(不记时间),恢复 prestige 加成与门槛。
+func abort_lethal() -> void:
+	prestige.abort_lethal()
+	CoreKit.bus.publish("fortune:lethal_ended", prestige.lethal_best())
+	_publish_all_currencies()
+
+
+## Lethal 中每次贿赂后调:若 5 房全通关则记录最佳时间并退出 Lethal。
+func _check_lethal_finish() -> void:
+	if prestige.lethal_active() and is_run_complete():
+		var t := prestige.finish_lethal()
+		CoreKit.bus.publish("fortune:lethal_finished", t)
+		_publish_all_currencies()   # 退出 Lethal 恢复 prestige 加成 → 刷各房产率
+
+
+## 重置 5 房到新周目起点:货币归零(飞镖回 $1)、升级/守卫清空。
+## 保留:部分稀有扭蛋道具(epic 稀有度)——重置后按持有数重新收集(其被动层随之重建)。
+func _reset_rooms() -> void:
+	var kept: Dictionary = {}   # 快照要保留的 epic 扭蛋道具(id -> 持有数)
+	for iid in gacha.item_ids():
+		var idef = registry.get_def(&"gacha_item", iid)
+		if idef != null and idef.rarity == &"epic":
+			var n := gacha.owned(iid)
+			if n > 0:
+				kept[iid] = n
+	currency.set_amount(1.0)    # 飞镖回开局 $1
+	money.set_amount(0.0)
+	tickets.set_amount(0.0)
+	ribbons.set_amount(0.0)
+	stuffing.set_amount(0.0)
+	darts.from_dict({})         # 升级/守卫清空,派生 modifier 归零
+	lotto.from_dict({})         # 含清掉 JACKPOT 永久 global_mul(spec:累积不重置,除 NG+)
+	pachinko.from_dict({})
+	sushi.from_dict({})
+	gacha.from_dict({})         # 收藏柜清空、被动层撤除
+	for iid in kept:
+		gacha.grant_item(iid, int(kept[iid]))   # 重新收集保留的 epic 道具 → 被动层重建
+
+
+func _publish_all_currencies() -> void:
+	CoreKit.bus.publish("fortune:currency_changed", currency.get_amount())
+	CoreKit.bus.publish("fortune:money_changed", money.get_amount())
+	CoreKit.bus.publish("fortune:tickets_changed", tickets.get_amount())
+	CoreKit.bus.publish("fortune:ribbons_changed", ribbons.get_amount())
+	CoreKit.bus.publish("fortune:stuffing_changed", stuffing.get_amount())
 
 
 ## --- 离线结算(load 时按墙钟差补各房收益;可注入 now 供 smoke 确定性验证) ---
@@ -332,6 +431,7 @@ func to_dict() -> Dictionary:
 		"pachinko": pachinko.to_dict(),
 		"sushi": sushi.to_dict(),
 		"gacha": gacha.to_dict(),
+		"prestige": prestige.to_dict(),
 		"last_seen": Time.get_unix_time_from_system(),
 	}
 
@@ -347,6 +447,7 @@ func from_dict(d: Dictionary) -> void:
 	pachinko.from_dict(d.get("pachinko", {}))
 	sushi.from_dict(d.get("sushi", {}))
 	gacha.from_dict(d.get("gacha", {}))
+	prestige.from_dict(d.get("prestige", {}))   # 重建门槛因子 + prestige 加成(须在各房 from_dict 之后无强序依赖,源相互独立)
 
 
 func save_game() -> void:

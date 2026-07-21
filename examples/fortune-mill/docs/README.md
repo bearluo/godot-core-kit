@@ -120,7 +120,32 @@ P4 是大阶段,照 P3 分阶段:**4A 扭蛋(本节)→ 4B NG+/NG++ + Lethal Mod
   后飞镖率精确 ×(1.1)^5=1.61)。测试 `test_fortune_gacha`(含 pull 收集+产出 / add·mul 被动层堆叠 /
   价值升级 / 自动率 / 稀有度权重抬期望 / 收集跨房放大飞镖 ×4 / 持久化收藏柜+被动层)进 kit 门。达成 P4「5 房可通关」。
 
-### 4B~4D(待做)
+### 4B NG+ 元进度 + Lethal Mode(`systems/prestige.gd`)
 
-NG+/NG++ 循环(重置货币/升级/守卫、门槛 1M→10M、保留成就/统计/NG+ 专属升级 + Lethal Mode 计时)、
+通关 5 房 → `ascend` 进下一周目。**门槛缩放走共享 `KitModifiers` 的新 target `bribe_cost_mul`**——各房
+`bribe_threshold() = 1M × value_for(bribe_cost_mul, 1.0)`,prestige 在其上挂唯一门槛源 `ng_threshold`(mul)
+= `10^ng_level`;ng0 → ×1.0(完全向后兼容,各房 `can_bribe` 现读它)。契合「5 房共享一个求值点」的架构,
+门槛是派生值不入存档。三处机制:
+
+- **ascend(进周目)**:确认 5 房通关 → `Prestige.ascend`(发 `ng_level+1` 点 + 门槛 ×10)→ `_reset_rooms`
+  重置 5 房(货币归零/升级清空/守卫重新拦路,含 `lotto.from_dict({})` 清掉 JACKPOT 永久 global_mul——
+  spec「累积不重置,除 NG+」)。**保留**:成就/统计(4C 做)、prestige 升级、**部分稀有扭蛋道具**(epic 稀有度,
+  重置后按持有数重新收集,被动层随之重建)。
+- **NG+ 专属升级线(prestige 味)**:`data/prestige_upgrades/*.tres`(Eternal Fortune=global_mul、Golden
+  Hands=gold_per_dart、Swift Start=throws_per_sec),**只在 ng≥1 可买**,花 prestige 点,往 def.target 挂
+  **跨周目存活**的源 `prestige_<id>`——`_reset_rooms` 只清各房自身源、不动 prestige 源,故加成穿越重置。
+- **Lethal Mode(可选速通)**:`start_lethal` → **无 NG+ 加成**(撤 prestige 源 + 门槛回 1M)+ 计时;5 房全
+  通关时 `_check_lethal_finish`→`finish_lethal` 记最佳秒数(取 min)、退出即恢复加成与门槛;期间禁买 prestige。
+
+**顺带修一个 `GachaRoom.from_dict` 潜在 bug**:空档(`from_dict({})`)未清收藏柜 `_vault`,导致 NG+/Lethal 重置时
+「快照 epic → 重置 → 重新 grant」在旧库存上**叠加**(dream_daruma 6→12→…global_mul 暴涨)。改为 from_dict 先重建
+空柜再按存档载入(空档 = 完全重置)。
+
+验收:`FORTUNE_SMOKE PASS ... ng=1 thr=10.00M prestige_gmul=1.50x lethal_best=8.0s`(ascend 门槛 ×10、prestige
+永久 global_mul ×1.5、Lethal 撤加成+门槛回 1M+计时+跑完记时)。测试 `test_fortune_prestige`(门槛缩放 / ascend
+×10+发点 / NG+ 专属升级 add·mul 加成 / 加成跨房间重置存活 / Lethal 撤加成+门槛回 1M+最佳取 min+期间禁买 /
+持久化 ng_level·points·levels·best + modifier 重放)进 kit 门。
+
+### 4C~4D(待做)
+
 51 成就 + `KitStats`(反哺 kit)、`SaveManager` 版本迁移链(反哺 kit)、i18n 中英——分阶段续做。

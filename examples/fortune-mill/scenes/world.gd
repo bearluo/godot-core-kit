@@ -1,5 +1,5 @@
 extends Node
-## world 表现层根(飞镖 + 刮刮乐 + 柏青哥 + 寿司 + 扭蛋 五房)+ FORTUNE_SMOKE headless 自测入口。
+## world 表现层根(飞镖 + 刮刮乐 + 柏青哥 + 寿司 + 扭蛋 五房 + 元进度 NG+)+ FORTUNE_SMOKE headless 自测入口。
 ## UI 只读 FortuneMill 模型 + 发命令;订阅 bus 脏标记刷新,不持有权威数值。
 ## 柏青哥有真物理表现层(pachinko_board.gd,仅非 smoke 实例化);smoke 走 model 直算。
 
@@ -44,6 +44,13 @@ var _gacha_status: Label
 var _collection_label: Label
 var _gacha_upgrade_buttons: Dictionary = {}
 var _executor_button: Button
+# 元进度 (NG+)
+var _ng_label: Label
+var _prestige_points_label: Label
+var _lethal_label: Label
+var _ascend_button: Button
+var _lethal_button: Button
+var _prestige_upgrade_buttons: Dictionary = {}
 
 
 func _ready() -> void:
@@ -61,6 +68,11 @@ func _ready() -> void:
 	CoreKit.bus.subscribe("fortune:dice_rolled", _on_dirty)
 	CoreKit.bus.subscribe("fortune:recipe_unlocked", _on_dirty)
 	CoreKit.bus.subscribe("fortune:item_pulled", _on_dirty)
+	CoreKit.bus.subscribe("fortune:ascended", _on_ascended)
+	CoreKit.bus.subscribe("fortune:prestige_bought", _on_dirty)
+	CoreKit.bus.subscribe("fortune:lethal_started", _on_dirty)
+	CoreKit.bus.subscribe("fortune:lethal_ended", _on_dirty)
+	CoreKit.bus.subscribe("fortune:lethal_finished", _on_lethal_finished)
 	CoreKit.bus.subscribe("fortune:room_cleared", _on_cleared)
 	_refresh()
 	_maybe_show_offline()
@@ -82,6 +94,7 @@ func _run_smoke() -> void:
 	fm.pachinko.from_dict({})
 	fm.sushi.from_dict({})
 	fm.gacha.from_dict({})
+	fm.prestige.from_dict({})
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 
 	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous ---
@@ -194,6 +207,39 @@ func _run_smoke() -> void:
 	var rep5: Dictionary = fm.settle_offline(t5 - 3600.0, t5)
 	var off5_ok: bool = float((rep5.get("gacha", {}) as Dictionary).get("earned", 0.0)) > 0.0
 
+	# --- P4 4B:NG+ 元进度(ascend 门槛 ×10 + prestige 永久加成 + Lethal Mode 计时)---
+	# 此刻 5 房均已 cleared → 可 ascend。ascend 前记 stuffing/ribbons 供 PASS 行展示。
+	var stuffing_final: float = fm.stuffing.get_amount()
+	var ribbons_final: float = fm.ribbons.get_amount()
+	var run_complete_pre: bool = fm.is_run_complete()
+	var thr_pre: float = fm.darts.bribe_threshold()          # ng0 → 1M
+	var asc: Dictionary = fm.ascend()
+	var ng_level: int = int(asc.get("ng_level", 0))
+	var thr_post: float = fm.darts.bribe_threshold()         # ng1 → 10M
+	var ng_ok: bool = run_complete_pre and ng_level == 1 and absf(thr_post - thr_pre * 10.0) < 1.0
+	# ascend 重置:5 房货币归零 + 守卫重新拦路
+	var reset_ok: bool = fm.currency.get_amount() <= 1.0 and fm.money.get_amount() == 0.0 and not fm.darts.is_cleared() and not fm.gacha.is_cleared()
+	# prestige 专属升级(NG+ 才能买):ascend 发 1 点 → 买 eternal_fortune → 永久 global_mul ×1.5
+	var gmul_pre: float = fm.modifiers.value_for(&"global_mul", 1.0)
+	var prestige_bought: bool = fm.buy_prestige_upgrade(&"eternal_fortune")
+	var gmul_post: float = fm.modifiers.value_for(&"global_mul", 1.0)
+	var prestige_ok: bool = prestige_bought and absf(gmul_post - gmul_pre * 1.5) < 0.01
+	var prestige_gmul := (gmul_post / gmul_pre) if gmul_pre > 0.0 else 0.0
+	# Lethal Mode:开速通 → 无 NG+ 加成(global_mul 回落 + 门槛回 1M)+ 计时;注资通 5 房 → 记最佳时间 + 恢复加成
+	var lethal_started: bool = fm.start_lethal()
+	var gmul_in_lethal: float = fm.modifiers.value_for(&"global_mul", 1.0)
+	var thr_in_lethal: float = fm.darts.bribe_threshold()
+	fm.prestige.tick_lethal(8.0)
+	var lethal_enter_ok: bool = lethal_started and gmul_in_lethal < gmul_post and absf(thr_in_lethal - 1_000_000.0) < 1.0 and fm.prestige.lethal_elapsed() > 0.0
+	fm.currency.add(1_000_000.0); fm.bribe_guard()
+	fm.money.add(1_000_000.0); fm.bribe_gorgon()
+	fm.tickets.add(1_000_000.0); fm.bribe_rimmington()
+	fm.ribbons.add(1_000_000.0); fm.bribe_hivemind()
+	fm.stuffing.add(1_000_000.0); fm.bribe_executor()        # 第 5 房触发 _check_lethal_finish 记时
+	var lethal_best: float = fm.prestige.lethal_best()
+	var gmul_after_lethal: float = fm.modifiers.value_for(&"global_mul", 1.0)
+	var lethal_ok: bool = lethal_enter_ok and not fm.prestige.lethal_active() and absf(lethal_best - 8.0) < 0.01 and absf(gmul_after_lethal - gmul_post) < 0.01
+
 	var gacha_boost := (darts_post_gacha / darts_pre_gacha) if darts_pre_gacha > 0.0 else 0.0
 	var switch_boost := (darts_post_switch / darts_pre_switch) if darts_pre_switch > 0.0 else 0.0
 	var dice_boost := (darts_post_dice / darts_pre_dice) if darts_pre_dice > 0.0 else 0.0
@@ -203,11 +249,12 @@ func _run_smoke() -> void:
 	var p3 := pach_drop_ok and dice_cross_ok and rimmington_ok and off3_ok
 	var p3s := craft_ok and switch_cross_ok and hivemind_ok and off4_ok
 	var p4 := pull_ok and gacha_cross_ok and executor_ok and off5_ok
-	if p012 and p3 and p3s and p4:
-		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_rolled, dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), Currency.format(fm.stuffing.get_amount()), Currency.format(fm.ribbons.get_amount())])
+	var p4b := ng_ok and reset_ok and prestige_ok and lethal_ok
+	if p012 and p3 and p3s and p4 and p4b:
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, Currency.format(stuffing_final), Currency.format(ribbons_final)])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s(%.2f→%.2f) hivemind=%s off4=%s | pull=%s gacha_cross=%s(%.2f→%.2f) executor=%s off5=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, darts_pre_switch, darts_post_switch, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, darts_pre_gacha, darts_post_gacha, executor_ok, off5_ok])
+		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f)" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best])
 		get_tree().quit(1)
 
 
@@ -352,6 +399,28 @@ func _build_ui() -> void:
 	_executor_button.pressed.connect(func() -> void: FortuneMill.bribe_executor())
 	gcol.add_child(_executor_button)
 
+	# 元进度列 (NG+)
+	var ncol := VBoxContainer.new()
+	cols.add_child(ncol)
+	_add_title(ncol, "★ 元进度 (NG+ / Lethal)")
+	_ng_label = Label.new(); ncol.add_child(_ng_label)
+	_prestige_points_label = Label.new(); ncol.add_child(_prestige_points_label)
+	_lethal_label = Label.new(); ncol.add_child(_lethal_label)
+	ncol.add_child(HSeparator.new())
+	_ascend_button = Button.new(); _ascend_button.text = "进下一周目 (Ascend)"
+	_ascend_button.pressed.connect(func() -> void: FortuneMill.ascend())
+	ncol.add_child(_ascend_button)
+	ncol.add_child(HSeparator.new())
+	for id in FortuneMill.prestige.upgrade_ids():
+		var btn := Button.new()
+		btn.pressed.connect(func() -> void: FortuneMill.buy_prestige_upgrade(id))
+		ncol.add_child(btn)
+		_prestige_upgrade_buttons[id] = btn
+	ncol.add_child(HSeparator.new())
+	_lethal_button = Button.new()
+	_lethal_button.pressed.connect(_on_lethal_pressed)
+	ncol.add_child(_lethal_button)
+
 	# 柏青哥物理板(真 RigidBody2D 落球;juice)
 	_pachinko_board = PachinkoBoard.new()
 	add_child(_pachinko_board)
@@ -399,6 +468,27 @@ func _on_pull_pressed() -> void:
 		return
 	var st := Currency.format(float(r.get("stuffing", 0.0)))
 	_gacha_status.text = "抽到 [%s] %s (+%s stuffing, 持有 %d)" % [str(r.get("rarity", &"")), str(r.get("item", &"")), st, int(r.get("owned", 0))]
+
+
+## Lethal 按钮:进行中 → 放弃;否则开一局速通。
+func _on_lethal_pressed() -> void:
+	if FortuneMill.prestige.lethal_active():
+		FortuneMill.abort_lethal()
+	else:
+		FortuneMill.start_lethal()
+	_refresh()
+
+
+func _on_ascended(info) -> void:
+	if _ng_label != null:
+		_ng_label.text = "★ 进入 NG+%d!5 房重置,门槛 ×10 ★" % int((info as Dictionary).get("ng_level", 0))
+	_refresh()
+
+
+func _on_lethal_finished(t) -> void:
+	if _lethal_label != null:
+		_lethal_label.text = "🏁 Lethal 通关!用时 %.1fs" % float(t)
+	_refresh()
 
 
 func _on_dirty(_payload) -> void:
@@ -517,6 +607,24 @@ func _refresh() -> void:
 		gbtn.text = "%s  Lv.%d  (%s st)" % [gdef.title, glvl, Currency.format(gcost)]
 		gbtn.disabled = not FortuneMill.stuffing.can_afford(gcost)
 	_executor_button.disabled = not FortuneMill.can_bribe_executor()
+	# 元进度 (NG+)
+	_ng_label.text = "周目: NG+%d   门槛 ×%.0f" % [FortuneMill.prestige.ng_level(), FortuneMill.prestige.threshold_factor()]
+	_prestige_points_label.text = "Prestige 点: %s" % Currency.format(FortuneMill.prestige.points())
+	if FortuneMill.prestige.lethal_active():
+		_lethal_label.text = "☠ LETHAL %.1fs (无 NG+ 加成)" % FortuneMill.prestige.lethal_elapsed()
+		_lethal_button.text = "放弃 Lethal (Abort)"
+	else:
+		var best := FortuneMill.prestige.lethal_best()
+		_lethal_label.text = "Lethal 最佳: %s" % (("%.1fs" % best) if best >= 0.0 else "—")
+		_lethal_button.text = "开始 Lethal 速通"
+	_ascend_button.disabled = not FortuneMill.can_ascend()
+	for id in _prestige_upgrade_buttons:
+		var predef = FortuneMill.registry.get_def(&"prestige_upgrade", id)
+		var prlvl := FortuneMill.prestige.level_of(id)
+		var prcost := FortuneMill.prestige.cost_of(id)
+		var prbtn: Button = _prestige_upgrade_buttons[id]
+		prbtn.text = "%s  Lv.%d  (%s pts)" % [predef.title, prlvl, Currency.format(prcost)]
+		prbtn.disabled = not FortuneMill.prestige.can_buy(id)
 
 
 ## 从模型拉取最近离线结算(per-room),任一房 earned>0 才显示回归横幅。
