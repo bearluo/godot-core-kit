@@ -129,6 +129,11 @@ func to_dict() -> Dictionary:
 
 
 func from_dict(d: Dictionary) -> void:
+	# 先摘除本 room 此前已施加的所有 modifier(派生态从零重算,不叠加残留)
+	for old_id in _levels:
+		var old_def = _registry.get_def(&"dart_upgrade", old_id)
+		if old_def != null and old_def.kind != &"unlock":
+			_modifiers.remove_source(old_def.target, old_id)
 	_levels.clear()
 	_bullseye_unlock = 0
 	_cleared = bool(d.get("cleared", false))

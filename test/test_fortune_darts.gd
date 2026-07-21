@@ -107,6 +107,34 @@ func _initialize() -> void:
 	if absf(mods10b.value_for(&"gold_per_dart", DartsRoom.DART_BASE) - 2.0) > 0.0001:
 		print("FAIL 10b: from_dict 应重建 modifier(gold_per_dart=2.0)"); failures += 1
 
+	# 11. top>1 时加权命中恒落在 [1, max_tier],不越界(历史 Android 越界读教训)
+	var t11 = _make_room(reg)
+	var room11 = t11[0]; var cur11 = t11[1]
+	cur11.add(100000.0)
+	room11.buy_upgrade(&"unlock")   # _bullseye_unlock 1 -> max_tier 2
+	room11.buy_upgrade(&"unlock")   # _bullseye_unlock 2 -> max_tier 3
+	var top11 = room11.max_tier()
+	if top11 < 2:
+		print("FAIL 11a: 前置 max_tier 应 >=2,实际 %d" % top11); failures += 1
+	for _n in 300:
+		var tier = room11._roll_tier()
+		if tier < 1 or tier > top11 or tier - 1 >= DartsRoom.BULLSEYE.size():
+			print("FAIL 11b: _roll_tier 越界 tier=%d (max %d)" % [tier, top11]); failures += 1
+			break
+
+	# 12. from_dict 完整重算:复用同一实例加载不含某升级的旧存档,应清除其残留 modifier
+	var t12 = _make_room(reg)
+	var room12 = t12[0]; var cur12 = t12[1]; var mods12 = t12[2]
+	cur12.add(100.0)
+	room12.buy_upgrade(&"sharper")   # sharper level1 -> gold_per_dart +1 -> 2.0
+	if absf(mods12.value_for(&"gold_per_dart", DartsRoom.DART_BASE) - 2.0) > 0.0001:
+		print("FAIL 12a: 前置 sharper 后应 2.0"); failures += 1
+	room12.from_dict({"levels": {}, "cleared": false})   # 加载空快照(复用同一 room/mods)
+	if room12.level_of(&"sharper") != 0:
+		print("FAIL 12b: from_dict 空存档后 sharper 应 0 级"); failures += 1
+	if absf(mods12.value_for(&"gold_per_dart", DartsRoom.DART_BASE) - DartsRoom.DART_BASE) > 0.0001:
+		print("FAIL 12c: from_dict 应清残留,gold_per_dart 回 base %s,实际 %s" % [DartsRoom.DART_BASE, mods12.value_for(&"gold_per_dart", DartsRoom.DART_BASE)]); failures += 1
+
 	if failures == 0:
 		print("test_fortune_darts: ALL PASS")
 		quit(0)
