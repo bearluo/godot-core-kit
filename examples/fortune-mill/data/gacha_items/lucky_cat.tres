@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GachaItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/gacha_item_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"lucky_cat"
+title = "Lucky Cat"
+rarity = &"common"
+weight = 60.0
+stuffing_value = 2.0
+target = &"global_mul"
+op = &"mul"
+value_per_copy = 0.02

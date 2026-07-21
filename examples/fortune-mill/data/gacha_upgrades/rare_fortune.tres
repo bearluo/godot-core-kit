@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="GachaUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/gacha_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"rare_fortune"
+title = "Rare Fortune"
+kind = &"unlock"
+target = &"stuffing_per_pull"
+op = &"mul"
+effect_per_level = 1.0
+base_cost = 500.0
+growth = 2.0
+max_level = 10

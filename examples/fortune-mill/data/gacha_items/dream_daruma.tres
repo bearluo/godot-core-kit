@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GachaItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/gacha_item_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"dream_daruma"
+title = "Dream Daruma"
+rarity = &"epic"
+weight = 2.0
+stuffing_value = 60.0
+target = &"global_mul"
+op = &"mul"
+value_per_copy = 0.1

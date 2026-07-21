@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GachaItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/gacha_item_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"golden_dart"
+title = "Golden Dart"
+rarity = &"rare"
+weight = 10.0
+stuffing_value = 12.0
+target = &"gold_per_dart"
+op = &"add"
+value_per_copy = 1.0
