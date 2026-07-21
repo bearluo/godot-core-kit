@@ -49,6 +49,7 @@
 | [kit-inventory](inventory/kit-inventory.md) | `class_name KitInventory` | 槽位制物品容器(自动堆叠/溢出/拖拽合并,游戏多实例) |
 | [kit-data-registry](data/kit-data-registry.md) | `class_name KitDataRegistry` | 定义数据表:type→{id→def} 存 Resource,register + load_dir |
 | [kit-offline](offline/kit-offline.md) | `class_name KitOffline` | 离线结算器:墙钟差×产率、封顶 8h、时间回拨按 0 防作弊(放置游戏读档补收益) |
+| [kit-modifiers](modifiers/kit-modifiers.md) | `class_name KitModifiers` | 数值修正器栈:(base+Σadd)×Πmul 分层聚合、每条带 source_id、脏标缓存、breakdown 明细(incremental 产出心脏) |
 
 ## 约定
 
