@@ -52,6 +52,7 @@ func throw() -> Dictionary:
 	var total := 0.0
 	for _i in darts:
 		total += per_dart * BULLSEYE[_roll_tier() - 1]
+	total *= _modifiers.value_for(&"global_mul", 1.0)   # 跨房协同(JACKPOT 等),默认 1.0
 	_currency.add(total)
 	return {"gold": total, "darts": darts}
 
@@ -85,7 +86,8 @@ func auto_gold_rate() -> float:
 		return 0.0
 	var darts := maxi(1, int(_modifiers.value_for(&"darts_per_throw", 1.0)))
 	var per_dart := _modifiers.value_for(&"gold_per_dart", DART_BASE)
-	return tps * float(darts) * per_dart * _expected_bullseye()
+	var gmul := _modifiers.value_for(&"global_mul", 1.0)   # 跨房协同(JACKPOT 等),默认 1.0
+	return tps * float(darts) * per_dart * _expected_bullseye() * gmul
 
 
 ## 当前可命中档位(1..max_tier)的靶心倍率期望;权重 1/tier^2,与 _roll_tier 同分布。

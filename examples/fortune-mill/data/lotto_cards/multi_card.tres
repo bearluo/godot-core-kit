@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="LottoUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/lotto_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"multi_card"
+title = "Multi Card"
+kind = &"multi"
+target = &"cards_per_scratch"
+op = &"add"
+effect_per_level = 1.0
+base_cost = 200.0
+growth = 1.8
+max_level = 9
