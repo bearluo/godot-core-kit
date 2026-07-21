@@ -76,6 +76,41 @@ func _roll_tier() -> int:
 	return top
 
 
+## 自动产出的期望 gold/秒(确定性:throws/s × 多镖 × 单镖聚合值 × 靶心期望倍率)。
+## throws_per_sec 基值 0,买 Rattling Gunner 才 >0。在线 produce 与离线结算同用此率,
+## 故「离线 1h ≈ 在线 1h」。手动 throw() 仍走 RNG(有起伏),自动化走期望值(平滑)。
+func auto_gold_rate() -> float:
+	var tps := _modifiers.value_for(&"throws_per_sec", 0.0)
+	if tps <= 0.0:
+		return 0.0
+	var darts := maxi(1, int(_modifiers.value_for(&"darts_per_throw", 1.0)))
+	var per_dart := _modifiers.value_for(&"gold_per_dart", DART_BASE)
+	return tps * float(darts) * per_dart * _expected_bullseye()
+
+
+## 当前可命中档位(1..max_tier)的靶心倍率期望;权重 1/tier^2,与 _roll_tier 同分布。
+func _expected_bullseye() -> float:
+	var top := max_tier()
+	var sum := 0.0
+	var wsum := 0.0
+	for tier in range(1, top + 1):
+		var w := 1.0 / float(tier * tier)
+		wsum += w
+		sum += w * BULLSEYE[tier - 1]
+	return sum / wsum
+
+
+## 自动化产出 dt 秒的 gold(确定性,按 auto_gold_rate)。返回本次新增 gold。
+func produce(dt: float) -> float:
+	if dt <= 0.0:
+		return 0.0
+	var g := auto_gold_rate() * dt
+	if g <= 0.0:
+		return 0.0
+	_currency.add(g)
+	return g
+
+
 ## 买一级升级。买不起 / 已满级 / 无此 def → false。
 func buy_upgrade(id: StringName) -> bool:
 	var def = _registry.get_def(&"dart_upgrade", id)

@@ -135,6 +135,43 @@ func _initialize() -> void:
 	if absf(mods12.value_for(&"gold_per_dart", DartsRoom.DART_BASE) - DartsRoom.DART_BASE) > 0.0001:
 		print("FAIL 12c: from_dict 应清残留,gold_per_dart 回 base %s,实际 %s" % [DartsRoom.DART_BASE, mods12.value_for(&"gold_per_dart", DartsRoom.DART_BASE)]); failures += 1
 
+	# 13. auto_gold_rate:无自动投升级(throws_per_sec 基值 0)→ 0;produce 不加 gold
+	var t13 = _make_room(reg)
+	var room13 = t13[0]; var cur13 = t13[1]
+	if absf(room13.auto_gold_rate()) > 0.0001:
+		print("FAIL 13a: 无自动化产率应 0,实际 %s" % room13.auto_gold_rate()); failures += 1
+	var g13 = cur13.get_amount()
+	room13.produce(5.0)
+	if absf(cur13.get_amount() - g13) > 0.0001:
+		print("FAIL 13b: 无自动化 produce 不应加 gold"); failures += 1
+
+	# 14. auto_gold_rate 确定性公式:注入 throws_per_sec=2。top=1 → E[bullseye]=1.5;
+	#     darts=1;per_dart=DART_BASE=1.0 → rate=2×1×1×1.5=3.0(确定性,无 RNG)
+	var t14 = _make_room(reg)
+	var room14 = t14[0]; var cur14 = t14[1]; var mods14 = t14[2]
+	mods14.set_modifier(&"throws_per_sec", &"test_auto", &"add", 2.0)
+	if absf(room14.auto_gold_rate() - 3.0) > 0.0001:
+		print("FAIL 14a: rate 应 2×1×1×1.5=3.0,实际 %s" % room14.auto_gold_rate()); failures += 1
+	var made14 = room14.produce(4.0)   # 3×4=12
+	if absf(made14 - 12.0) > 0.0001:
+		print("FAIL 14b: produce(4s) 应 12,实际 %s" % made14); failures += 1
+	if absf(cur14.get_amount() - 12.0) > 0.0001:
+		print("FAIL 14c: produce 应入账 12,实际 %s" % cur14.get_amount()); failures += 1
+	if absf(room14.produce(0.0)) > 0.0001:
+		print("FAIL 14d: produce(0) 应 0"); failures += 1
+
+	# 15. 买 Rattling Gunner 自动投升级 → throws_per_sec 抬到 >0,rate 随之 >0
+	var reg15 = KitDataRegistry.new()
+	reg15.register(&"dart_upgrade", &"rattling", _def(&"rattling", &"automation", &"throws_per_sec", &"add", 0.5, 500.0, 1.9, 25))
+	var t15 = _make_room(reg15)
+	var room15 = t15[0]; var cur15 = t15[1]
+	cur15.add(1000.0)
+	if not room15.buy_upgrade(&"rattling") or room15.level_of(&"rattling") != 1:
+		print("FAIL 15a: 买 rattling 应成功 level1"); failures += 1
+	# L1: throws_per_sec +0.5;top=1,per_dart=1,darts=1 → rate=0.5×1×1×1.5=0.75
+	if absf(room15.auto_gold_rate() - 0.75) > 0.0001:
+		print("FAIL 15b: rattling L1 rate 应 0.75,实际 %s" % room15.auto_gold_rate()); failures += 1
+
 	if failures == 0:
 		print("test_fortune_darts: ALL PASS")
 		quit(0)

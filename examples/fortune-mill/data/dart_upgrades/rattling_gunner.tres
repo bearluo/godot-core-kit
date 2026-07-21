@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="DartUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/dart_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"rattling_gunner"
+title = "Rattling Gunner"
+kind = &"automation"
+target = &"throws_per_sec"
+op = &"add"
+effect_per_level = 0.5
+base_cost = 500.0
+growth = 1.9
+max_level = 25
