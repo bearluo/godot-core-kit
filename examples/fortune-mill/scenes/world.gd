@@ -26,6 +26,11 @@ func _ready() -> void:
 func _run_smoke() -> void:
 	var fm = FortuneMill   # autoload;不用 := 以免静态类型退化为 Node
 	var steps := 0
+	# clean-room:autoload 的 _ready 可能已 load_game 载入历史存档(含通关态),
+	# smoke 作为回归 gate 必须从全新态起步,否则载入通关档会 steps=0 直接假 PASS。
+	fm.currency.set_amount(1.0)
+	fm.darts.from_dict({})   # 重置 levels/cleared/bullseye_unlock + 清 modifier 残留
+	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 	while not fm.can_bribe() and steps < SMOKE_MAX_STEPS:
 		fm.do_throw()
 		if steps % 20 == 0:
