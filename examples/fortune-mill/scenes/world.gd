@@ -29,6 +29,14 @@ var _dice_button: Button
 var _pachinko_upgrade_buttons: Dictionary = {}
 var _rimmington_button: Button
 var _pachinko_board: Node2D
+# 寿司房
+var _ribbons_label: Label
+var _sushi_rate_label: Label
+var _sushi_status: Label
+var _craft_label: Label
+var _sushi_recipe_buttons: Dictionary = {}
+var _sushi_upgrade_buttons: Dictionary = {}
+var _hivemind_button: Button
 
 
 func _ready() -> void:
@@ -39,9 +47,11 @@ func _ready() -> void:
 	CoreKit.bus.subscribe("fortune:currency_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:money_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:tickets_changed", _on_dirty)
+	CoreKit.bus.subscribe("fortune:ribbons_changed", _on_dirty)
 	CoreKit.bus.subscribe("fortune:upgrade_purchased", _on_dirty)
 	CoreKit.bus.subscribe("fortune:jackpot_hit", _on_jackpot)
 	CoreKit.bus.subscribe("fortune:dice_rolled", _on_dirty)
+	CoreKit.bus.subscribe("fortune:recipe_unlocked", _on_dirty)
 	CoreKit.bus.subscribe("fortune:room_cleared", _on_cleared)
 	_refresh()
 	_maybe_show_offline()
@@ -56,9 +66,11 @@ func _run_smoke() -> void:
 	fm.currency.set_amount(1.0)
 	fm.money.set_amount(0.0)
 	fm.tickets.set_amount(0.0)
+	fm.ribbons.set_amount(0.0)
 	fm.darts.from_dict({})
 	fm.lotto.from_dict({})
 	fm.pachinko.from_dict({})
+	fm.sushi.from_dict({})
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 
 	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous ---
@@ -122,16 +134,45 @@ func _run_smoke() -> void:
 	var rep3: Dictionary = fm.settle_offline(t3 - 3600.0, t3)
 	var off3_ok: bool = float((rep3.get("pachinko", {}) as Dictionary).get("earned", 0.0)) > 0.0
 
+	# --- P3:寿司制作(dogfood KitInventory)+ 解锁式开关跨房 + Hivemind 过关 ---
+	fm.restock_sushi(&"rice", 20)
+	fm.select_sushi_recipe(&"cucumber_roll")
+	var rib_before_craft: float = fm.ribbons.get_amount()
+	var rice_before: int = fm.sushi.ingredient_count(&"rice")
+	var craft_started: bool = fm.start_craft()
+	fm.tick(10.0)   # 推进 ≥ craft_time,tick 内 sushi.update 完成一份寿司
+	var craft_ok: bool = craft_started and fm.ribbons.get_amount() > rib_before_craft and fm.sushi.ingredient_count(&"rice") < rice_before
+	# 解锁式开关协同:解锁 dragon_roll → 飞镖投速 ×2(飞镖此时已有自动投,throws_per_sec>0)
+	var darts_pre_switch: float = fm.darts.auto_gold_rate()
+	fm.ribbons.add(6000.0)
+	var recipe_unlocked: bool = fm.unlock_sushi_recipe(&"dragon_roll")
+	var darts_post_switch: float = fm.darts.auto_gold_rate()
+	var switch_cross_ok: bool = recipe_unlocked and darts_pre_switch > 0.0 and absf(darts_post_switch - darts_pre_switch * 2.0) < 0.01
+	# 自动厨师爬到 1M ribbons 贿赂 Hivemind
+	fm.select_sushi_recipe(&"dragon_roll")
+	fm.ribbons.add(2000.0)
+	fm.buy_sushi_upgrade(&"auto_chef")
+	var sskip := 0
+	while not fm.can_bribe_hivemind() and sskip < 200000:
+		fm.tick(3600.0)
+		sskip += 1
+	var hivemind_ok: bool = fm.can_bribe_hivemind() and fm.bribe_hivemind() and fm.sushi.is_cleared()
+	var t4: float = Time.get_unix_time_from_system()
+	var rep4: Dictionary = fm.settle_offline(t4 - 3600.0, t4)
+	var off4_ok: bool = float((rep4.get("sushi", {}) as Dictionary).get("earned", 0.0)) > 0.0
+
+	var switch_boost := (darts_post_switch / darts_pre_switch) if darts_pre_switch > 0.0 else 0.0
 	var dice_boost := (darts_post_dice / darts_pre_dice) if darts_pre_dice > 0.0 else 0.0
 	var boost := (darts_rate_post / darts_rate_pre) if darts_rate_pre > 0.0 else 0.0
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 	var p012 := ok and auto_ok and offline_ok and crossroom_ok and gorgon_ok
 	var p3 := pach_drop_ok and dice_cross_ok and rimmington_ok and off3_ok
-	if p012 and p3:
-		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice=%s dice_boost=%.2fx rimmington=%s tickets=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_rolled, dice_boost, fm.pachinko.is_cleared(), Currency.format(fm.tickets.get_amount())])
+	var p3s := craft_ok and switch_cross_ok and hivemind_ok and off4_ok
+	if p012 and p3 and p3s:
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_rolled, dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), Currency.format(fm.ribbons.get_amount())])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s(%.2f→%.2f) rimmington=%s off3=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, darts_pre_dice, darts_post_dice, rimmington_ok, off3_ok])
+		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s(%.2f→%.2f) hivemind=%s off4=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, darts_pre_switch, darts_post_switch, hivemind_ok, off4_ok])
 		get_tree().quit(1)
 
 
@@ -222,6 +263,38 @@ func _build_ui() -> void:
 	_rimmington_button.pressed.connect(func() -> void: FortuneMill.bribe_rimmington())
 	pcol.add_child(_rimmington_button)
 
+	# 寿司房列
+	var scol := VBoxContainer.new()
+	cols.add_child(scol)
+	_add_title(scol, "▜ 寿司房 (ribbons / Hivemind)")
+	_ribbons_label = Label.new(); scol.add_child(_ribbons_label)
+	_sushi_status = Label.new(); scol.add_child(_sushi_status)
+	_sushi_rate_label = Label.new(); scol.add_child(_sushi_rate_label)
+	_craft_label = Label.new(); scol.add_child(_craft_label)
+	var restock_btn := Button.new(); restock_btn.text = "备料 (Restock ×10)"
+	restock_btn.pressed.connect(func() -> void: FortuneMill.restock_sushi_all(10))
+	scol.add_child(restock_btn)
+	var craft_btn := Button.new(); craft_btn.text = "开始制作 (Craft)"
+	craft_btn.pressed.connect(func() -> void: FortuneMill.start_craft())
+	scol.add_child(craft_btn)
+	scol.add_child(HSeparator.new())
+	# 配方(选中已解锁 / 花 ribbons 解锁)
+	for id in FortuneMill.registry.ids(&"sushi_recipe", true):
+		var btn := Button.new()
+		btn.pressed.connect(func() -> void: _on_recipe_pressed(id))
+		scol.add_child(btn)
+		_sushi_recipe_buttons[id] = btn
+	scol.add_child(HSeparator.new())
+	for id in FortuneMill.registry.ids(&"sushi_upgrade", true):
+		var btn := Button.new()
+		btn.pressed.connect(func() -> void: FortuneMill.buy_sushi_upgrade(id))
+		scol.add_child(btn)
+		_sushi_upgrade_buttons[id] = btn
+	scol.add_child(HSeparator.new())
+	_hivemind_button = Button.new(); _hivemind_button.text = "贿赂 Hivemind (需 1M ribbons)"
+	_hivemind_button.pressed.connect(func() -> void: FortuneMill.bribe_hivemind())
+	scol.add_child(_hivemind_button)
+
 	# 柏青哥物理板(真 RigidBody2D 落球;juice)
 	_pachinko_board = PachinkoBoard.new()
 	add_child(_pachinko_board)
@@ -253,6 +326,15 @@ func _on_drop_pressed() -> void:
 		FortuneMill.drop_ball()
 
 
+## 配方按钮:已解锁 → 选中它;未解锁 → 花 ribbons 解锁(解锁高级配方触发跨房规则开关)。
+func _on_recipe_pressed(id: StringName) -> void:
+	if FortuneMill.sushi.is_unlocked(id):
+		FortuneMill.select_sushi_recipe(id)
+	else:
+		FortuneMill.unlock_sushi_recipe(id)
+	_refresh()
+
+
 func _on_dirty(_payload) -> void:
 	_refresh()
 
@@ -269,6 +351,9 @@ func _on_cleared(room) -> void:
 		"pachinko":
 			if _pachinko_status != null:
 				_pachinko_status.text = "★ 已贿赂 Rimmington,柏青哥房通关! ★"
+		"sushi":
+			if _sushi_status != null:
+				_sushi_status.text = "★ 已贿赂 Hivemind,寿司房通关! ★"
 		_:
 			if _status_label != null:
 				_status_label.text = "★ 已贿赂 Verminous,飞镖房通关! ★"
@@ -319,6 +404,33 @@ func _refresh() -> void:
 		pbtn.text = "%s  Lv.%d  (%s tk)" % [pdef.title, plvl, Currency.format(pcost)]
 		pbtn.disabled = not FortuneMill.tickets.can_afford(pcost)
 	_rimmington_button.disabled = not FortuneMill.can_bribe_rimmington()
+	# 寿司房
+	_ribbons_label.text = "Ribbons: %s" % Currency.format(FortuneMill.ribbons.get_amount())
+	_sushi_rate_label.text = "自动: %s rb/s" % Currency.format(FortuneMill.sushi.auto_ribbon_rate())
+	if FortuneMill.sushi.is_crafting():
+		var tgt := FortuneMill.sushi.craft_target()
+		var prog := FortuneMill.sushi.craft_progress()
+		_craft_label.text = "制作中 %s: %.0f%%" % [FortuneMill.sushi.active_recipe(), 100.0 * prog / maxf(0.001, tgt)]
+	else:
+		_craft_label.text = "当前配方: %s" % FortuneMill.sushi.active_recipe()
+	for id in _sushi_recipe_buttons:
+		var rdef = FortuneMill.registry.get_def(&"sushi_recipe", id)
+		var rbtn: Button = _sushi_recipe_buttons[id]
+		if FortuneMill.sushi.is_unlocked(id):
+			var sel := "▶ " if FortuneMill.sushi.active_recipe() == id else ""
+			rbtn.text = "%s%s (%.0fs, 库存 %d)" % [sel, rdef.title, rdef.craft_time, FortuneMill.sushi.ingredient_count(rdef.ingredient)]
+			rbtn.disabled = false
+		else:
+			rbtn.text = "🔒 %s (解锁 %s rb)" % [rdef.title, Currency.format(FortuneMill.sushi.unlock_cost(id))]
+			rbtn.disabled = not FortuneMill.sushi.can_unlock(id)
+	for id in _sushi_upgrade_buttons:
+		var sdef = FortuneMill.registry.get_def(&"sushi_upgrade", id)
+		var slvl := FortuneMill.sushi.level_of(id)
+		var scost := FortuneMill.sushi.cost_of(id)
+		var sbtn: Button = _sushi_upgrade_buttons[id]
+		sbtn.text = "%s  Lv.%d  (%s rb)" % [sdef.title, slvl, Currency.format(scost)]
+		sbtn.disabled = not FortuneMill.ribbons.can_afford(scost)
+	_hivemind_button.disabled = not FortuneMill.can_bribe_hivemind()
 
 
 ## 从模型拉取最近离线结算(per-room),任一房 earned>0 才显示回归横幅。
@@ -332,12 +444,15 @@ func _maybe_show_offline() -> void:
 	var g := float((rep.get("darts", {}) as Dictionary).get("earned", 0.0))
 	var m := float((rep.get("lotto", {}) as Dictionary).get("earned", 0.0))
 	var tk := float((rep.get("pachinko", {}) as Dictionary).get("earned", 0.0))
+	var rb := float((rep.get("sushi", {}) as Dictionary).get("earned", 0.0))
 	if g > 0.0:
 		parts.append("飞镖 %s gold" % Currency.format(g))
 	if m > 0.0:
 		parts.append("刮刮乐 %s money" % Currency.format(m))
 	if tk > 0.0:
 		parts.append("柏青哥 %s tk" % Currency.format(tk))
+	if rb > 0.0:
+		parts.append("寿司 %s rb" % Currency.format(rb))
 	if parts.is_empty():
 		return
 	var mins := int(float((rep.get("darts", {}) as Dictionary).get("elapsed", 0.0)) / 60.0)

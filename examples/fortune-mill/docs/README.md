@@ -66,6 +66,27 @@ bus 只广播 `fortune:*` 脏标记;货币全走 Currency;存档只存 Dictionar
 - 验收:`FORTUNE_SMOKE PASS ... dice=true dice_boost=3.00x rimmington=true`(DICE 期间飞镖率精确 ×3=DICE_MUL)。
   测试 `test_fortune_pachinko`(含 DICE 施加/过期 + 与 jackpot 乘性叠加 + 跨房)进 kit 门。
 
-### 寿司 Sushi(ribbons / 守卫 Hivemind)—— 待做
+### 寿司 Sushi(ribbons / 守卫 Hivemind)
 
-制作时长 + `KitInventory` 食材 + 解锁式开关协同(改规则),达成「4 房可通关」。见 P3 plan。
+选配方 → 等制作时长 → 出寿司得 ribbons;升级(ribbon 价值/制作速度/自动厨师)经共享 `KitModifiers`;
+攒够 1M ribbons 贿赂 Hivemind。三处机制:
+
+- **制作时长 + `KitInventory` 食材(dogfood)**:食材柜是真 `KitInventory`(`SushiRoom._pantry`)。
+  `select_recipe` → `start_craft`(`_pantry.has/remove` 扣食材,够才开工)→ `update(dt)` 按 `craft_speed`
+  聚合推进计时 → 到 `craft_time` 完成 `_award_sushi` 入账。手动制作是 live 态,**不持久化**(食材柜持久,
+  进行中的 craft 读档从空灶起,同 DICE 精神)。
+- **自动厨师(自动化/离线)**:`auto_ribbon_rate()` 用连续期望率(`chefs × 单份价值 / 有效制作时长 × global_mul`),
+  **不**模拟离散制作/食材消耗,保「在线=离线」(同其余房 auto 先例)。`auto_chef` 基 0,买 Auto Chef 才 >0。
+- **解锁式开关协同(SUSHI 型 · 三类协同唯一「规则开关」)**:高级配方(`SushiRecipeDef.switch_target`
+  非空,如 `dragon_roll`)解锁 → 往**别房** target 注册一条**永久** modifier(源 `sushi_<id>`),
+  如 `throws_per_sec ×2`「飞镖自动投速翻倍」。经共享 `KitModifiers` 唯一求值点即时生效于别房;
+  `_unlocked` 是权威态(存档),`from_dict` 重放开关。与 JACKPOT/DICE 不同:SUSHI 改的是**规则**
+  (给一个 add-型 target 挂 mul 开关),落在各房自己的产率 target 上、不走 `global_mul`。
+
+三类协同对照:**JACKPOT** 永久 `mul` on `global_mul`(放大全房);**DICE** 临时 `mul` on `global_mul`
+(限时放大全房);**SUSHI** 永久 `mul` on 别房专属 target(规则开关,如投速)。四房共享一个 `KitModifiers`
+求值点,互不枚举。
+
+- **离线四房**:`settle_offline` 各房各用自身产率单独结算,`offline_report={darts,lotto,pachinko,sushi}`。
+- 验收:`FORTUNE_SMOKE PASS ... craft=true switch_boost=2.00x hivemind=true`(解锁 dragon 后飞镖率精确 ×2)。
+  测试 `test_fortune_sushi`(含 craft 消耗食材+计时完成 / 升级 / auto 率 / 解锁开关跨房 ×2 / 持久化)进 kit 门。达成 P3「4 房可通关」。
