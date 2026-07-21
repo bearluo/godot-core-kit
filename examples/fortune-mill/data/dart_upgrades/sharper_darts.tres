@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="DartUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/dart_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"sharper_darts"
+title = "Sharper Darts"
+kind = &"value"
+target = &"gold_per_dart"
+op = &"add"
+effect_per_level = 1.0
+base_cost = 10.0
+growth = 1.15
+max_level = -1

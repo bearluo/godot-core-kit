@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="DartUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/dart_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"double_dart"
+title = "Double Dart"
+kind = &"multi"
+target = &"darts_per_throw"
+op = &"add"
+effect_per_level = 1.0
+base_cost = 100.0
+growth = 2.5
+max_level = 9

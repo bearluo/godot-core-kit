@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="DartUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/dart_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"steady_hand"
+title = "Steady Hand"
+kind = &"value"
+target = &"gold_per_dart"
+op = &"mul"
+effect_per_level = 0.25
+base_cost = 40.0
+growth = 1.25
+max_level = -1
