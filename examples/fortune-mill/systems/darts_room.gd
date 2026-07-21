@@ -45,16 +45,20 @@ func cost_of(id: StringName) -> float:
 	return float(def.base_cost) * pow(float(def.growth), level_of(id))
 
 
-## 投一次(含多镖)。每镖:gold_per_dart 聚合值 × 命中靶心倍率。返回 {gold, darts}。
+## 投一次(含多镖)。每镖:gold_per_dart 聚合值 × 命中靶心倍率。
+## 返回 {gold, darts, tiers}——tiers 为本次各镖命中的档位(1-based),供上层统计各档首命中。
 func throw() -> Dictionary:
 	var darts := maxi(1, int(_modifiers.value_for(&"darts_per_throw", 1.0)))
 	var per_dart := _modifiers.value_for(&"gold_per_dart", DART_BASE)
 	var total := 0.0
+	var tiers: Array = []
 	for _i in darts:
-		total += per_dart * BULLSEYE[_roll_tier() - 1]
+		var tier := _roll_tier()
+		tiers.append(tier)
+		total += per_dart * BULLSEYE[tier - 1]
 	total *= _modifiers.value_for(&"global_mul", 1.0)   # 跨房协同(JACKPOT 等),默认 1.0
 	_currency.add(total)
-	return {"gold": total, "darts": darts}
+	return {"gold": total, "darts": darts, "tiers": tiers}
 
 
 ## 加权随机命中档(1..max_tier);低档常见、高档稀有(权重 1/tier^2)。
