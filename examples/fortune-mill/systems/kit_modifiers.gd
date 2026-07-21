@@ -30,6 +30,33 @@ func value_for(target: StringName, base: float) -> float:
 	return (base + float(agg["add"])) * float(agg["mul"])
 
 
+## 明细查询(定型):产出由哪些来源构成。返回
+## {base, add, mul, result, sources:[{source_id, op, value}]}。UI 展示「产出来自...」。
+## 未知 op(如保留的 exp)仍列进 sources,但不参与 add/mul 聚合。
+func breakdown(target: StringName, base: float) -> Dictionary:
+	_ensure(target)
+	var agg: Dictionary = _cache[target]
+	var list: Array = []
+	if _mods.has(target):
+		for sid in (_mods[target] as Dictionary):
+			var mod: Dictionary = _mods[target][sid]
+			list.append({"source_id": sid, "op": mod["op"], "value": float(mod["value"])})
+	return {
+		"base": base,
+		"add": float(agg["add"]),
+		"mul": float(agg["mul"]),
+		"result": (base + float(agg["add"])) * float(agg["mul"]),
+		"sources": list,
+	}
+
+
+## 某 target 上已注册的所有 source_id(顺序不保证)。
+func sources(target: StringName) -> Array:
+	if not _mods.has(target):
+		return []
+	return (_mods[target] as Dictionary).keys()
+
+
 func clear(target: StringName = &"") -> void:
 	if String(target).is_empty():
 		_mods.clear()

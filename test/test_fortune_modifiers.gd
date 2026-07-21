@@ -46,10 +46,36 @@ func _initialize() -> void:
 	if v1 != v2:
 		print("FAIL 8: 连续 value_for 应一致"); failures += 1
 
-	# 9. clear(target)
+	# --- 定型(P2):明细查询 breakdown / sources + exp 保留 ---
+	# 此刻 gold: a=add 8, b=mul 2 → (10+8)*2 = 36
+
+	# 10. breakdown 明细:base/add/mul/result 与 value_for 一致,sources 列出各源
+	var bd: Dictionary = m.breakdown(&"gold", 10.0)
+	if bd.get("base") != 10.0 or bd.get("add") != 8.0 or bd.get("mul") != 2.0:
+		print("FAIL 10: breakdown base/add/mul 应 10/8/2,实际 %s" % bd); failures += 1
+	if not is_equal_approx(float(bd.get("result", 0.0)), m.value_for(&"gold", 10.0)):
+		print("FAIL 10: breakdown.result 应等于 value_for,实际 %s" % bd); failures += 1
+	if (bd.get("sources", []) as Array).size() != 2:
+		print("FAIL 10: breakdown.sources 应含 2 条,实际 %s" % bd.get("sources")); failures += 1
+
+	# 11. sources(target) 返回该 target 的所有 source_id
+	var srcs: Array = m.sources(&"gold")
+	if srcs.size() != 2 or not srcs.has(&"a") or not srcs.has(&"b"):
+		print("FAIL 11: sources 应为 [a,b],实际 %s" % [srcs]); failures += 1
+
+	# 12. exp 保留(未知 op):不参与求值(被忽略),但仍登记进 sources
+	m.set_modifier(&"gold", &"e", &"exp", 3.0)
+	if m.value_for(&"gold", 10.0) != 36.0:
+		print("FAIL 12: exp 保留应被忽略,value_for 仍 36,实际 %s" % m.value_for(&"gold", 10.0)); failures += 1
+	if m.sources(&"gold").size() != 3:
+		print("FAIL 12: exp 登记后 sources 应 3 条"); failures += 1
+
+	# 13. clear(target)
 	m.clear(&"gold")
 	if m.value_for(&"gold", 10.0) != 10.0:
-		print("FAIL 9: clear 后应返 base"); failures += 1
+		print("FAIL 13: clear 后应返 base"); failures += 1
+	if not m.sources(&"gold").is_empty():
+		print("FAIL 13: clear 后 sources 应空"); failures += 1
 
 	if failures == 0:
 		print("test_fortune_modifiers: ALL PASS")
