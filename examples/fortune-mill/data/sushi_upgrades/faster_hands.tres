@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SushiUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/sushi_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"faster_hands"
+title = "Faster Hands"
+kind = &"speed"
+target = &"craft_speed"
+op = &"mul"
+effect_per_level = 0.5
+base_cost = 60.0
+growth = 1.4
+max_level = -1

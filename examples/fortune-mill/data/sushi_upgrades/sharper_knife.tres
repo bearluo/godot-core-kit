@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SushiUpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/sushi_upgrade_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"sharper_knife"
+title = "Sharper Knife"
+kind = &"value"
+target = &"ribbons_per_sushi"
+op = &"mul"
+effect_per_level = 0.4
+base_cost = 30.0
+growth = 1.35
+max_level = -1

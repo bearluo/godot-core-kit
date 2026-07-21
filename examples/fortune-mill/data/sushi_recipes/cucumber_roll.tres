@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="SushiRecipeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://examples/fortune-mill/defs/sushi_recipe_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"cucumber_roll"
+title = "Cucumber Roll"
+craft_time = 3.0
+ribbon_value = 5.0
+ingredient = &"rice"
+ingredient_count = 2
+unlocked_by_default = true
+unlock_cost = 0.0
+switch_target = &""
+switch_op = &"mul"
+switch_value = 1.0
