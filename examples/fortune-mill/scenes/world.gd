@@ -39,14 +39,24 @@ func _run_smoke() -> void:
 		if steps % 20 == 0:
 			_smoke_buy_round(fm)
 		steps += 1
-	var gold_str := Currency.format(fm.currency.get_amount())
 	var ok: bool = fm.can_bribe() and fm.bribe_guard()
+	# --- P1 回归:自动化产出 + 离线结算(过关后 gold 充裕,可买自动投) ---
+	fm.buy_dart_upgrade(&"rattling_gunner")            # 确保 ≥1 级(已满级则 no-op,产率仍 >0)
+	var rate: float = fm.darts.auto_gold_rate()
+	var before_auto: float = fm.currency.get_amount()
+	fm.tick(1.0)                                       # 模拟 1 秒自动产出
+	var auto_ok: bool = rate > 0.0 and fm.currency.get_amount() > before_auto
+	var t_now: float = Time.get_unix_time_from_system()
+	var g_before: float = fm.currency.get_amount()
+	var rep: Dictionary = fm.settle_offline(t_now - 3600.0, t_now)   # 模拟关游戏 1 小时
+	var offline_ok: bool = float(rep.get("earned", 0.0)) > 0.0 and fm.currency.get_amount() > g_before
+	var gold_str := Currency.format(fm.currency.get_amount())
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)   # smoke 自清理,不留存档污染后续运行
-	if ok:
-		print("[Fortune][SMOKE] PASS gold=%s steps=%d cleared=%s" % [gold_str, steps, fm.darts.is_cleared()])
+	if ok and auto_ok and offline_ok:
+		print("[Fortune][SMOKE] PASS gold=%s steps=%d cleared=%s auto_rate=%.2f offline_earn=%.0f" % [gold_str, steps, fm.darts.is_cleared(), rate, float(rep.get("earned", 0.0))])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL gold=%s steps=%d" % [gold_str, steps])
+		print("[Fortune][SMOKE] FAIL gold=%s steps=%d ok=%s auto_ok=%s offline_ok=%s" % [gold_str, steps, ok, auto_ok, offline_ok])
 		get_tree().quit(1)
 
 
