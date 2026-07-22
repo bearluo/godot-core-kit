@@ -4,7 +4,7 @@ extends Node
 ## autoload 顺序必须在 CoreKit 之后(依赖 CoreKit.saves/.bus/.log/.ticker)。
 
 const SAVE_SLOT := "fortune"
-const SCHEMA_VERSION := 3   # 存档数据版本(SaveMigrator 迁移链目标版本;v1→v2→v3)
+const SCHEMA_VERSION := 4   # 存档数据版本(SaveMigrator 迁移链目标版本;v1→v2→v3→v4)
 const UPGRADES_DIR := "res://examples/fortune-mill/data/dart_upgrades"
 const LOTTO_DIR := "res://examples/fortune-mill/data/lotto_cards"
 const PACHINKO_DIR := "res://examples/fortune-mill/data/pachinko_balls"
@@ -96,6 +96,7 @@ func _on_tick() -> void:
 
 
 func tick(dt: float) -> void:
+	darts.update(dt)   # 命运转盘相位推进(view 只读渲染;结算读它)
 	var g := darts.produce(dt)
 	if g > 0.0:
 		stats.add(&"total_gold", g)   # 自动产出也计入累计产出里程碑
@@ -127,21 +128,22 @@ func _evaluate_achievements() -> void:
 		CoreKit.bus.publish("fortune:achievement_unlocked", id)
 
 
-## 记一次投镖的统计:累计投镖数、累计/单次最大产出、各命中档位计数。
+## 记一次投镖统计:累计投镖数、累计/单次最大产出、各命中奖区计数。
 func _track_throw(r: Dictionary) -> void:
 	var gold := float(r.get("gold", 0.0))
-	stats.add(&"dart_throws", float(int(r.get("darts", 1))))
+	var hits: Array = r.get("hits", [])
+	stats.add(&"dart_throws", float(hits.size()))
 	stats.add(&"total_gold", gold)
 	stats.record_max(&"max_payout", gold)
-	for tier in r.get("tiers", []):
-		stats.add(StringName("dart_tier_%d" % int(tier)), 1.0)
+	for h in hits:
+		stats.add(StringName("dart_seg_%s" % String(h.get("seg", &"none"))), 1.0)
 	_evaluate_achievements()
 
 
 ## --- 命令(表现层唯一入口) ---
 
-func do_throw() -> Dictionary:
-	var r := darts.throw()
+func do_throw(aim: float, power: float) -> Dictionary:
+	var r := darts.throw(aim, power)
 	CoreKit.bus.publish("fortune:currency_changed", currency.get_amount())
 	_track_throw(r)
 	return r
@@ -547,6 +549,25 @@ func _build_migrator() -> SaveMigrator:
 		if st is Dictionary and st.has("throws"):
 			st["dart_throws"] = st["throws"]
 			st.erase("throws")
+			d["stats"] = st
+		return d)
+	# v3→v4:飞镖房重构命运转盘——升级 id 改名(bullseye_training→widen_zone、rattling_gunner→hire_ai)
+	# + 统计键 dart_tier_* → dart_seg_*(旧靶心档统计废弃,不再映射,新档从 0 计)。
+	m.register(3, func(d: Dictionary) -> Dictionary:
+		var darts_d = d.get("darts", {})
+		if darts_d is Dictionary and darts_d.has("levels"):
+			var lv: Dictionary = darts_d["levels"]
+			if lv.has("bullseye_training"):
+				lv["widen_zone"] = lv["bullseye_training"]; lv.erase("bullseye_training")
+			if lv.has("rattling_gunner"):
+				lv["hire_ai"] = lv["rattling_gunner"]; lv.erase("rattling_gunner")
+			darts_d["levels"] = lv
+			d["darts"] = darts_d
+		var st = d.get("stats", {})
+		if st is Dictionary:
+			for k in st.keys():
+				if String(k).begins_with("dart_tier_"):
+					st.erase(k)   # 旧靶心档统计废弃
 			d["stats"] = st
 		return d)
 	return m

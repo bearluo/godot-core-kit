@@ -1,7 +1,7 @@
 class_name AchievementCatalog
 extends RefCounted
 ## 本作 51 条成就的定义目录:代码构建 AchievementDef → 注册进 KitDataRegistry 的 &"achievement" 类。
-## 为何代码生成而非 51 个 .tres:成就高度系统化(17 靶心档 + 5 守卫 + 一批里程碑),
+## 为何代码生成而非 51 个 .tres:成就高度系统化(17 转盘奖区 + 5 守卫 + 一批里程碑),
 ## 逐条建 def 比逐个手搓 .tres 可读得多;真要覆盖/新增某条,往 data/achievements/ 丢同 id 的
 ## .tres 经 registry.load_dir(&"achievement", ...) 覆盖即可(drop-in,零改代码)。
 ##
@@ -9,9 +9,6 @@ extends RefCounted
 ## 统计键(stat_key)由 [[fortune_state]] 在命令入口喂食;判定与去重见 [[kit_achievements]]。
 
 const TYPE := &"achievement"
-
-## 飞镖 17 档靶心倍率(镜像 DartsRoom.BULLSEYE,仅用于成就标题展示)。
-const BULLSEYE := [1.5, 2.0, 3.0, 5.0, 8.0, 12.0, 20.0, 30.0, 50.0, 80.0, 125.0, 200.0, 300.0, 500.0, 800.0, 1200.0, 2500.0]
 
 ## 5 房 → 守卫名(贿赂成就用)。
 const GUARDS := [
@@ -42,13 +39,32 @@ static func _mk(id: StringName, title: String, desc: String, stat_key: StringNam
 static func _defs() -> Array:
 	var out: Array = []
 
-	# --- 17 档靶心首命中(dart_tier_<n> >= 1)---
-	for i in range(1, 18):
+	# --- 17 转盘奖区成就(dart_seg_<name> 计数;命中不同难度扇区累计到阈值即解锁)---
+	# 每条 [id 后缀, 扇区名, 阈值, 标题, 描述]。stat_key = dart_seg_<扇区名>,由 _track_throw 喂食。
+	var seg_ach := [
+		["jackpot_1",   &"jackpot", 1.0,   "命运头奖",   "首次扎中 JACKPOT 奖区(×500)"],
+		["jackpot_10",  &"jackpot", 10.0,  "轮盘之宠",   "累计扎中 JACKPOT 10 次"],
+		["jackpot_50",  &"jackpot", 50.0,  "头奖收割",   "累计扎中 JACKPOT 50 次"],
+		["jackpot_200", &"jackpot", 200.0, "命运主宰",   "累计扎中 JACKPOT 200 次"],
+		["x100_1",      &"x100",    1.0,   "百倍风暴",   "首次扎中 ×100 奖区"],
+		["x100_10",     &"x100",    10.0,  "百倍常客",   "累计扎中 ×100 奖区 10 次"],
+		["x100_100",    &"x100",    100.0, "百倍成瘾",   "累计扎中 ×100 奖区 100 次"],
+		["x20a_1",      &"x20a",    1.0,   "廿倍!",      "首次扎中上侧 ×20 奖区"],
+		["x20a_50",     &"x20a",    50.0,  "廿倍熟手",   "累计扎中上侧 ×20 奖区 50 次"],
+		["x20b_1",      &"x20b",    1.0,   "廿倍·再来",  "首次扎中下侧 ×20 奖区"],
+		["x20b_50",     &"x20b",    50.0,  "廿倍双修",   "累计扎中下侧 ×20 奖区 50 次"],
+		["x5_1",        &"x5",      1.0,   "五倍奖区",   "首次扎中 ×5 奖区"],
+		["x5_200",      &"x5",      200.0, "稳扎稳打",   "累计扎中 ×5 奖区 200 次"],
+		["x2a_1",       &"x2a",     1.0,   "翻倍入账",   "首次扎中上侧 ×2 奖区"],
+		["x2b_1",       &"x2b",     1.0,   "翻倍·彼岸",  "首次扎中下侧 ×2 奖区"],
+		["vermin_1",    &"vermin",  1.0,   "喂了硕鼠",   "飞镖扎进 vermin 没收区(白扔一镖)"],
+		["vermin_25",   &"vermin",  25.0,  "散财童子",   "累计 25 次扎进 vermin 没收区"],
+	]
+	for e in seg_ach:
 		out.append(_mk(
-			StringName("dart_tier_%02d" % i),
-			"靶心 T%d (×%s)" % [i, str(BULLSEYE[i - 1])],
-			"首次命中第 %d 档靶心" % i,
-			StringName("dart_tier_%d" % i), 1.0, &"bullseye"))
+			StringName("seg_%s" % e[0]),
+			e[3], e[4],
+			StringName("dart_seg_%s" % String(e[1])), float(e[2]), &"wheel"))
 
 	# --- 5 守卫贿赂(guard_<room> >= 1)---
 	for g in GUARDS:

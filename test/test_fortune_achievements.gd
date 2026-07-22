@@ -86,9 +86,9 @@ func _initialize() -> void:
 	var g = reg.get_def(&"achievement", &"guard_darts")
 	if g == null or g.stat_key != &"guard_darts" or absf(g.threshold - 1.0) > 0.0001:
 		print("FAIL 11: guard_darts 定义错"); failures += 1
-	var t17 = reg.get_def(&"achievement", &"dart_tier_17")
-	if t17 == null or t17.stat_key != &"dart_tier_17":
-		print("FAIL 12: dart_tier_17 定义错"); failures += 1
+	var wseg = reg.get_def(&"achievement", &"seg_jackpot_1")
+	if wseg == null or wseg.stat_key != &"dart_seg_jackpot":
+		print("FAIL 12: seg_jackpot_1 定义错(转盘奖区成就)"); failures += 1
 	var gm = reg.get_def(&"achievement", &"gold_1e5")
 	if gm == null or gm.stat_key != &"total_gold" or absf(gm.threshold - 100_000.0) > 0.5:
 		print("FAIL 13: gold_1e5 阈值应 100k"); failures += 1

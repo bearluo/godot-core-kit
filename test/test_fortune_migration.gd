@@ -58,6 +58,34 @@ func _initialize() -> void:
 	if m.version_of({}) != 1 or m.version_of({"schema_version": 5}) != 5:
 		print("FAIL 7: version_of 判定错"); failures += 1
 
+	# 8. Fortune v3→v4:飞镖房重构命运转盘——升级 id 改名 + 旧靶心档统计清除
+	#    (等价链:复刻 FortuneMill._build_migrator 的 v3→v4 步,验证该数据变换)
+	var m4 = SaveMigrator.new(4)
+	m4.register(3, func(d: Dictionary) -> Dictionary:
+		var darts_d = d.get("darts", {})
+		if darts_d is Dictionary and darts_d.has("levels"):
+			var lv: Dictionary = darts_d["levels"]
+			if lv.has("bullseye_training"):
+				lv["widen_zone"] = lv["bullseye_training"]; lv.erase("bullseye_training")
+			if lv.has("rattling_gunner"):
+				lv["hire_ai"] = lv["rattling_gunner"]; lv.erase("rattling_gunner")
+			darts_d["levels"] = lv
+			d["darts"] = darts_d
+		var st = d.get("stats", {})
+		if st is Dictionary:
+			for k in st.keys():
+				if String(k).begins_with("dart_tier_"):
+					st.erase(k)
+			d["stats"] = st
+		return d)
+	var r7 = m4.migrate({"schema_version": 3, "darts": {"levels": {"bullseye_training": 2, "rattling_gunner": 3}}, "stats": {"dart_tier_5": 9, "dart_throws": 100}})
+	var lv7: Dictionary = r7.data.get("darts", {}).get("levels", {})
+	var st7: Dictionary = r7.data.get("stats", {})
+	if not (r7.ok and int(r7.to) == 4 and int(lv7.get("widen_zone", 0)) == 2 and int(lv7.get("hire_ai", 0)) == 3 \
+			and not lv7.has("bullseye_training") and not lv7.has("rattling_gunner") \
+			and not st7.has("dart_tier_5") and int(st7.get("dart_throws", 0)) == 100):
+		print("FAIL 8: v3→v4 应改名升级 id + 清 dart_tier_*,得到 %s" % [r7]); failures += 1
+
 	if failures == 0:
 		print("test_fortune_migration: ALL PASS")
 		quit(0)
