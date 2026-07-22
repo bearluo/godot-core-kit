@@ -4,12 +4,12 @@
 
 [resource]
 script = ExtResource("1")
-id = &"bullseye_training"
-title = "Bullseye Training"
-kind = &"unlock"
-target = &"gold_per_dart"
+id = &"widen_zone"
+title = "Widen Jackpot"
+kind = &"zone"
+target = &"win_zone"
 op = &"add"
-effect_per_level = 1.0
+effect_per_level = 6.0
 base_cost = 50.0
 growth = 1.8
 max_level = 16

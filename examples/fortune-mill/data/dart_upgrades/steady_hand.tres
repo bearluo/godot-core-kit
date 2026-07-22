@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = &"steady_hand"
 title = "Steady Hand"
-kind = &"value"
-target = &"gold_per_dart"
-op = &"mul"
-effect_per_level = 0.25
+kind = &"aid"
+target = &"aim_steady"
+op = &"add"
+effect_per_level = 1.0
 base_cost = 40.0
 growth = 1.25
-max_level = -1
+max_level = 8

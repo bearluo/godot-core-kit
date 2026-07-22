@@ -5,9 +5,9 @@ extends Resource
 
 @export var id: StringName
 @export var title: String = ""
-## 分类(UI 分组 + DartsRoom 特判):value(产出) / unlock(解锁靶心档) / multi(多镖)
+## 分类(UI 分组 + DartsRoom 特判):value(镖值) / aid(操作辅助 aim_steady) / multi(扇形多镖) / zone(扩大中奖区 win_zone) / automation(雇 AI:throws_per_sec+ai_skill)
 @export var kind: StringName = &"value"
-## modifier target(kind==unlock 时忽略):gold_per_dart / darts_per_throw
+## modifier target:gold_per_dart / darts_per_throw / aim_steady / win_zone;automation 特判驱动 throws_per_sec + ai_skill
 @export var target: StringName = &"gold_per_dart"
 ## 修正算子:add(每级 +effect×level) / mul(每级 ×(1+effect)^level)
 @export var op: StringName = &"add"
