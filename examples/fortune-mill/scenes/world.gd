@@ -26,6 +26,11 @@ var _bribe_button: Button
 var _dart_upgrade_buttons: Dictionary = {}
 var _rate_label: Label
 var _offline_label: Label
+# 命运转盘横版真交互(仅非 smoke 构建;model 权威在 DartsRoom,view 只读 wheel_angle 渲染)
+var _wheel_view: Control
+var _darts_input: FortuneDartsInput
+var _throw_fsm: KitStateMachine
+var _power_bar: ProgressBar
 # 刮刮乐房
 var _money_label: Label
 var _lotto_rate_label: Label
@@ -127,16 +132,17 @@ func _run_smoke() -> void:
 	fm.achievements.from_dict({})    # 已解锁成就清空
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 
-	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous ---
+	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous(命运转盘:对准 jackpot 甜点确定性投)---
+	fm.darts.wheel_angle = FortuneWheelLayout.jackpot_center()   # 盘定格于 jackpot 中心 → 甜点镖必中头奖
 	while not fm.can_bribe() and steps < SMOKE_MAX_STEPS:
-		fm.do_throw()
+		fm.do_throw(0.5, FortuneWheelLayout.POWER_SWEET)
 		if steps % 20 == 0:
 			_smoke_buy_round(fm)
 		steps += 1
 	var ok: bool = fm.can_bribe() and fm.bribe_guard()
 
 	# --- P1:飞镖自动产出 + 离线结算 ---
-	fm.buy_dart_upgrade(&"rattling_gunner")
+	fm.buy_dart_upgrade(&"hire_ai")
 	var rate: float = fm.darts.auto_gold_rate()
 	var before_auto: float = fm.currency.get_amount()
 	fm.tick(1.0)
@@ -273,7 +279,7 @@ func _run_smoke() -> void:
 	# --- P4 4C:51 成就 + KitStats 统计(玩到此处应解锁大量成就;验去重与阈值判定)---
 	var ach = fm.achievements
 	var must_unlock := [&"guard_darts", &"guard_lotto", &"guard_pachinko", &"guard_sushi", &"guard_gacha",
-		&"ng_1", &"dart_tier_01", &"throws_100", &"gold_1e5", &"payout_1e2",
+		&"ng_1", &"seg_jackpot_1", &"throws_100", &"gold_1e5", &"payout_1e2",
 		&"jackpot_1", &"pull_1", &"craft_1", &"drop_1", &"dice_1", &"scratch_1", &"recipe_1", &"prestige_1", &"lethal_1"]
 	var ach_all := true
 	for aid in must_unlock:
@@ -289,7 +295,7 @@ func _run_smoke() -> void:
 	# 迁移:造一条 v1 老档(键 "gold" + stats.throws)→ 逐级升到 v3(currency + stats.dart_throws)
 	var v1_save := {"schema_version": 1, "gold": 12345.0, "stats": {"throws": 42.0}}
 	var mig: Dictionary = fm._migrator.migrate(v1_save)
-	var mig_chain_ok: bool = mig.ok and int(mig.to) == 3 and mig.data.has("currency") and not mig.data.has("gold") \
+	var mig_chain_ok: bool = mig.ok and int(mig.to) == 4 and mig.data.has("currency") and not mig.data.has("gold") \
 		and absf(float(mig.data["currency"]) - 12345.0) < 0.01 \
 		and (mig.data["stats"] as Dictionary).has("dart_throws") and not (mig.data["stats"] as Dictionary).has("throws")
 	# 无版本章的历史档默认 v1 并迁到 v3;未来版本安全失败(保底新档)
@@ -375,13 +381,37 @@ func _build_ui() -> void:
 	cols.add_theme_constant_override("separation", 40)
 	root.add_child(cols)
 
-	# 飞镖房列
+	# 飞镖房列(命运转盘横版真交互:自绘转盘随 model.wheel_angle 旋转 + 蓄力条 + 双端投掷态机)
 	var dcol := _room_panel(cols, "fortune.room_darts")
 	_add_title(dcol, "fortune.room_darts")
 	_gold_label = Label.new(); dcol.add_child(_gold_label)
 	_status_label = Label.new(); dcol.add_child(_status_label)
 	_rate_label = Label.new(); dcol.add_child(_rate_label)
-	dcol.add_child(_i18n_button("fortune.throw", _throw_pressed))
+	# 转盘视图(Control 自绘扇区;_process 每帧读 model.wheel_angle 旋转、win_zone 画加宽命中带)
+	var wv := _WheelView.new()
+	wv.custom_minimum_size = Vector2(220, 220)
+	wv.palette = _wheel_palette()
+	_wheel_view = wv
+	dcol.add_child(_wheel_view)
+	# 力度条(蓄力三角摆动;松手定格 → 决定落点径向)
+	_power_bar = ProgressBar.new()
+	_power_bar.min_value = 0.0; _power_bar.max_value = 1.0; _power_bar.show_percentage = false
+	_power_bar.custom_minimum_size = Vector2(0, 14)
+	dcol.add_child(_power_bar)
+	# 双端输入适配 + KitStateMachine 投掷态机(首个 fortune-mill dogfood)
+	_darts_input = FortuneDartsInput.new()
+	add_child(_darts_input)
+	_apply_input_mode()
+	_darts_input.thrown.connect(_on_dart_thrown)
+	_darts_input.power_changed.connect(_on_power_changed)
+	_build_throw_fsm()
+	# Throw 按钮:按住蓄力(button_down)、松开投掷(button_up);aim 蓄力中由鼠标 y 定
+	var throw_btn := Button.new()
+	throw_btn.text = CoreKit.i18n.t("fortune.throw")
+	throw_btn.button_down.connect(_on_throw_down)
+	throw_btn.button_up.connect(_on_throw_up)
+	_i18n_buttons["fortune.throw"] = throw_btn
+	dcol.add_child(throw_btn)
 	dcol.add_child(HSeparator.new())
 	for id in FortuneMill.registry.ids(&"dart_upgrade", true):
 		var btn := Button.new()
@@ -583,15 +613,108 @@ func _room_panel(parent: HBoxContainer, title_key: String) -> VBoxContainer:
 	return col
 
 
-## 投镖:发命令 + 冒本次 gold 增量浮字 + 按钮脉冲(增量由前后差算,不依赖返回值)。
-func _throw_pressed() -> void:
-	var before := FortuneMill.currency.get_amount()
-	FortuneMill.do_throw()
-	var d := FortuneMill.currency.get_amount() - before
-	if d > 0.0:
-		_pop_at(_gold_label, "+%s" % Currency.format(d), _art.color_for(&"darts"))
+## 输入模式:CoreKit.settings 的 darts_input 覆盖优先,否则平台判定(适配器本身不依赖 settings)。
+func _apply_input_mode() -> void:
+	var forced = CoreKit.settings.get_value("darts_input", "")
+	if forced == "desktop" or forced == "touch":
+		_darts_input.set_mode(StringName(forced))
+	else:
+		_darts_input.set_mode(_darts_input.detect_mode())
+
+
+## 搭投掷态机(dogfood KitStateMachine):Idle→(桌面 Charge / 触屏 Aim)→Resolve→Idle。
+## 子节点名即态名;状态薄,真正结算走 model,态机负责视图态协调 + 触屏事件路由。
+func _build_throw_fsm() -> void:
+	_throw_fsm = KitStateMachine.new()
+	for sname in ["Idle", "Aim", "Charge", "Resolve"]:
+		var st := _ThrowState.new()
+		st.name = sname
+		st.host = self
+		_throw_fsm.add_child(st)
+	add_child(_throw_fsm)   # _ready 注册子态并进入首态 Idle
+
+
+## 桌面按下:开始蓄力 + 转 Charge(触屏不走按钮,由态机 handle_input 接拉弓)。
+func _on_throw_down() -> void:
+	if _darts_input == null or _darts_input.current_mode() != &"desktop":
+		return
+	_darts_input.begin_charge()
+	if _throw_fsm != null:
+		_throw_fsm.transition_to("Charge")
+
+
+## 桌面松开:投掷(release 发 thrown → _on_dart_thrown)。
+func _on_throw_up() -> void:
+	if _darts_input == null or _darts_input.current_mode() != &"desktop":
+		return
+	_darts_input.release()
+
+
+func _on_power_changed(p: float) -> void:
+	if _power_bar != null:
+		_power_bar.value = p
+
+
+## 命令 model + 表现:每支镖各自结算,命中处冒金币浮字、jackpot 闪光。
+func _on_dart_thrown(aim: float, power: float) -> void:
+	if _throw_fsm != null:
+		_throw_fsm.transition_to("Resolve")
+	var r: Dictionary = FortuneMill.do_throw(aim, power)
+	for h in r.get("hits", []):
+		var pos: Vector2 = _wheel_hit_pos()
+		if _fx != null:
+			_fx.popup("+%s" % Currency.format(float(h.get("gold", 0.0))), pos, _hit_color(h))
+		if h.get("seg", &"") == &"jackpot" and _fx != null:
+			_fx.flash(Color(1, 0.85, 0.3, 0.4))
 	_pulse_button("fortune.throw")
 	_play_sfx(&"throw", -8.0, randf_range(0.96, 1.08))
+
+
+## Resolve 态短暂停留(飞镖落定 juice)后回 Idle。
+func _resolve_then_idle() -> void:
+	await get_tree().create_timer(0.15).timeout
+	if _throw_fsm != null and _throw_fsm.is_in("Resolve"):
+		_throw_fsm.transition_to("Idle")
+
+
+## 转盘中心的屏幕坐标(浮字锚点);未入树时给个兜底。
+func _wheel_hit_pos() -> Vector2:
+	if _wheel_view != null and _wheel_view.is_inside_tree():
+		return _wheel_view.global_position + _wheel_view.size * 0.5
+	return Vector2(200, 200)
+
+
+## 命中浮字配色:vermin 红、其余走飞镖房强调色。
+func _hit_color(h: Dictionary) -> Color:
+	if bool(h.get("vermin", false)):
+		return Color(0.72, 0.32, 0.32)
+	return _art.color_for(&"darts") if _art != null else Color(0.9, 0.8, 0.4)
+
+
+## 转盘扇区配色(按倍率高低区分难度;view 专属,不入 model)。
+func _wheel_palette() -> Dictionary:
+	return {
+		&"jackpot": Color("f4d35e"),
+		&"x2a": Color("4a7c59"), &"x2b": Color("3f6b4e"),
+		&"x20a": Color("6a9fb5"), &"x20b": Color("5a8fa5"),
+		&"x5": Color("8a7fb5"),
+		&"x100": Color("e08a3c"),
+		&"vermin": Color("7a3b3b"),
+	}
+
+
+## 每帧:同步转盘相位到视图 + 桌面蓄力中用鼠标 y 定 aim。
+func _process(_dt: float) -> void:
+	if _wheel_view == null:
+		return
+	var wv := _wheel_view as _WheelView
+	wv.angle_deg = FortuneMill.darts.wheel_angle
+	wv.win_bonus = FortuneMill.modifiers.value_for(&"win_zone", 0.0)
+	if _darts_input != null and _darts_input.current_mode() == &"desktop" and _throw_fsm != null and _throw_fsm.is_in("Charge"):
+		var vp := get_viewport()
+		if vp != null:
+			var vh := float(vp.get_visible_rect().size.y)
+			_darts_input.set_aim(FortuneDartsInput.desktop_aim(vp.get_mouse_position().y, vh))
 
 
 ## 在锚点控件右侧冒一条浮字(纯表现;fx 未就绪/控件未入树时静默跳过)。
@@ -909,3 +1032,79 @@ func _maybe_show_offline() -> void:
 	var mins := int(float((rep.get("darts", {}) as Dictionary).get("elapsed", 0.0)) / 60.0)
 	_offline_label.visible = true
 	_offline_label.text = "欢迎回来!离线 %d 分钟,自动攒了:%s" % [mins, ", ".join(parts)]
+
+
+## --- 内部类:转盘自绘视图 + 投掷态机状态(纯 view;不入 model) ---
+
+## 命运转盘自绘 Control:画 FortuneWheelLayout.SEGMENTS 扇区,随 angle_deg 旋转,金弧示 win_zone 加宽带。
+class _WheelView extends Control:
+	var angle_deg: float = 0.0
+	var win_bonus: float = 0.0
+	var palette: Dictionary = {}
+
+	func _process(_dt: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var radius := minf(size.x, size.y) * 0.46
+		var acc := 0.0
+		for s in FortuneWheelLayout.SEGMENTS:
+			var col: Color = palette.get(s["name"], Color(0.4, 0.4, 0.4))
+			_wedge(c, radius, acc + angle_deg, acc + float(s["span"]) + angle_deg, col)
+			acc += float(s["span"])
+		# jackpot 加宽命中带(金弧,随 win_bonus 变宽 → 升级看得见)
+		var jc := FortuneWheelLayout.jackpot_center()
+		var half := FortuneWheelLayout.jackpot_half_base() + maxf(0.0, win_bonus) * 0.5
+		_arc_band(c, radius + 3.0, jc - half + angle_deg, jc + half + angle_deg, Color(1, 0.95, 0.6))
+		draw_circle(c, 5.0, Color(0.1, 0.1, 0.1))
+		# 命中基准指针(固定在盘右 0°,不随盘转)
+		draw_line(c, c + Vector2(radius + 10.0, 0.0), Color(0.95, 0.95, 0.9), 3.0)
+
+	func _wedge(c: Vector2, radius: float, a0: float, a1: float, col: Color) -> void:
+		var pts := PackedVector2Array()
+		pts.append(c)
+		var steps := maxi(2, int((a1 - a0) / 6.0))
+		for i in range(steps + 1):
+			var a := deg_to_rad(lerpf(a0, a1, float(i) / float(steps)))
+			pts.append(c + Vector2(cos(a), sin(a)) * radius)
+		draw_colored_polygon(pts, col)
+
+	func _arc_band(c: Vector2, radius: float, a0: float, a1: float, col: Color) -> void:
+		var steps := maxi(2, int((a1 - a0) / 6.0))
+		var pa := PackedVector2Array()
+		for i in range(steps + 1):
+			var a := deg_to_rad(lerpf(a0, a1, float(i) / float(steps)))
+			pa.append(c + Vector2(cos(a), sin(a)) * radius)
+		draw_polyline(pa, col, 4.0)
+
+
+## 投掷态机状态:桌面 Charge 由 Throw 按钮驱动;触屏在 Idle/Aim 里接 ScreenTouch/Drag 拉弓;
+## Resolve 落定后回 Idle。状态薄,真正结算走 model(host._on_dart_thrown)。
+class _ThrowState extends KitState:
+	var host
+	var drag: Vector2 = Vector2.ZERO
+
+	func enter(_prev: String) -> void:
+		if name == &"Resolve" and host != null:
+			host._resolve_then_idle()
+		elif name == &"Idle":
+			drag = Vector2.ZERO
+
+	func handle_input(event: InputEvent) -> void:
+		if host == null or host._darts_input == null:
+			return
+		if host._darts_input.current_mode() != &"touch":
+			return
+		if name == &"Idle" and event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+			drag = Vector2.ZERO
+			transition_to("Aim")
+		elif name == &"Aim":
+			if event is InputEventScreenDrag:
+				drag += (event as InputEventScreenDrag).relative
+			elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
+				# 拉弓释放:反向为方向、拖长为力度
+				var aim := FortuneDartsInput.touch_aim(drag)
+				var power := FortuneDartsInput.touch_power(drag, FortuneDartsInput.DRAG_MAX)
+				host._darts_input.fire(aim, power)
+				transition_to("Resolve")
