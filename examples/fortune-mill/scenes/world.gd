@@ -7,6 +7,7 @@ const SMOKE_MAX_STEPS := 500000
 const PachinkoBoard := preload("res://examples/fortune-mill/scenes/pachinko_board.gd")
 const FortuneArtBank := preload("res://examples/fortune-mill/gfx/art_bank.gd")
 const FortuneFx := preload("res://examples/fortune-mill/gfx/fx.gd")
+const FortuneSoundBank := preload("res://examples/fortune-mill/sfx/sound_bank.gd")
 ## i18n 标题 key → art_bank 房间调色板 key(图标 + 面板边框上色)。
 const TITLE_TO_ROOM := {
 	"fortune.room_darts": &"darts",
@@ -72,9 +73,10 @@ var _ach_recent: Array = []   # 最近解锁的 toast 文案(滚动展示)
 var _lang_button: Button
 var _i18n_labels: Dictionary = {}   # key(String) -> Label(标题栏,随语言刷新)
 var _i18n_buttons: Dictionary = {}  # key(String) -> Button(主操作按钮,随语言刷新)
-# 手感/美术(P5 5A;仅可玩路径实例化)
+# 手感/美术/音效(P5 5A/5B;仅可玩路径实例化)
 var _art: FortuneArtBank
 var _fx: FortuneFx
+var _sfx: FortuneSoundBank
 
 
 func _ready() -> void:
@@ -310,6 +312,12 @@ func _run_smoke() -> void:
 	var art_sushi = ab.texture_for(&"sushi", 32).get_image().get_pixel(16, 16)
 	var art_ok: bool = art_tex != null and art_tex.get_width() == 32 and not art_darts.is_equal_approx(art_sushi) and ab.source_for(&"darts") == "procedural"
 
+	# --- P5 5B:程序化音效接缝(headless 合成 + voice 可辨识 + 无真音频走程序化兜底)---
+	var sb = FortuneSoundBank.new()
+	var s_throw = sb.stream_for(&"throw")
+	var s_jackpot = sb.stream_for(&"jackpot")
+	var sfx_ok: bool = s_throw != null and s_throw is AudioStream and s_throw.get_length() > 0.0 and s_jackpot.get_length() > s_throw.get_length() and sb.source_for(&"throw") == "procedural"
+
 	var gacha_boost := (darts_post_gacha / darts_pre_gacha) if darts_pre_gacha > 0.0 else 0.0
 	var switch_boost := (darts_post_switch / darts_pre_switch) if darts_pre_switch > 0.0 else 0.0
 	var dice_boost := (darts_post_dice / darts_pre_dice) if darts_pre_dice > 0.0 else 0.0
@@ -323,11 +331,12 @@ func _run_smoke() -> void:
 	var p4c := ach_ok
 	var p4d := migration_ok and i18n_ok
 	var p5a := art_ok
-	if p012 and p3 and p3s and p4 and p4b and p4c and p4d and p5a:
-		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | achievements=%d/%d throws=%d | migration=v%d→v%d i18n=%s/%s | art=%dx%d/%s | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, ach_count, ach_total, int(stat_throws), int(mig.from), int(mig.to), i18n_en, i18n_zh, art_tex.get_width(), art_tex.get_height(), ab.source_for(&"darts"), Currency.format(stuffing_final), Currency.format(ribbons_final)])
+	var p5b := sfx_ok
+	if p012 and p3 and p3s and p4 and p4b and p4c and p4d and p5a and p5b:
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | achievements=%d/%d throws=%d | migration=v%d→v%d i18n=%s/%s | art=%dx%d/%s sfx=%.2fs/%s | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, ach_count, ach_total, int(stat_throws), int(mig.from), int(mig.to), i18n_en, i18n_zh, art_tex.get_width(), art_tex.get_height(), ab.source_for(&"darts"), s_throw.get_length(), sb.source_for(&"throw"), Currency.format(stuffing_final), Currency.format(ribbons_final)])
 		get_tree().quit(0)
 	else:
-		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f) | ach=%s(all=%s count=%d/%d dedup=%s throws=%d) | migration=%s i18n=%s(en=%s zh=%s missing=%s) | p5a=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best, ach_ok, ach_all, ach_count, ach_total, ach_dedup, int(stat_throws), migration_ok, i18n_ok, i18n_en, i18n_zh, i18n_missing, art_ok])
+		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f) | ach=%s(all=%s count=%d/%d dedup=%s throws=%d) | migration=%s i18n=%s(en=%s zh=%s missing=%s) | p5a=%s p5b=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best, ach_ok, ach_all, ach_count, ach_total, ach_dedup, int(stat_throws), migration_ok, i18n_ok, i18n_en, i18n_zh, i18n_missing, art_ok, sfx_ok])
 		get_tree().quit(1)
 
 
@@ -511,6 +520,9 @@ func _build_ui() -> void:
 	_fx = FortuneFx.new()
 	add_child(_fx)
 
+	# 音效库(程序化 SFX;经 CoreKit.audio 轮转池播放)
+	_sfx = FortuneSoundBank.new()
+
 
 ## 标题栏:房间图标(art_bank)+ 文案(走 i18n key,注册进 _i18n_labels 供切语言时刷新)。
 func _add_title(col: VBoxContainer, key: String) -> void:
@@ -579,6 +591,7 @@ func _throw_pressed() -> void:
 	if d > 0.0:
 		_pop_at(_gold_label, "+%s" % Currency.format(d), _art.color_for(&"darts"))
 	_pulse_button("fortune.throw")
+	_play_sfx(&"throw", -8.0, randf_range(0.96, 1.08))
 
 
 ## 在锚点控件右侧冒一条浮字(纯表现;fx 未就绪/控件未入树时静默跳过)。
@@ -592,6 +605,13 @@ func _pop_at(anchor: Control, text: String, color: Color) -> void:
 func _pulse_button(key: String) -> void:
 	if _fx != null and _i18n_buttons.has(key):
 		_fx.pulse(_i18n_buttons[key])
+
+
+## 播一条程序化 SFX(经 CoreKit.audio 轮转池;pitch 抖动加活力,纯表现)。
+func _play_sfx(key: StringName, volume_db: float = -6.0, pitch: float = 1.0) -> void:
+	if _sfx == null:
+		return
+	CoreKit.audio.play_sfx(_sfx.stream_for(key), volume_db, pitch)
 
 
 ## 主操作按钮:文案走 i18n key,注册进 _i18n_buttons 供切语言时刷新。
@@ -630,6 +650,7 @@ func _on_scratch_pressed() -> void:
 	if money_won > 0.0:
 		_pop_at(_money_label, "+%s" % Currency.format(money_won), _art.color_for(&"lotto"))
 	_pulse_button("fortune.scratch")
+	_play_sfx(&"scratch", -7.0, randf_range(0.97, 1.05))
 	if _scratch_status == null:
 		return
 	var earned := Currency.format(money_won)
@@ -646,6 +667,7 @@ func _on_drop_pressed() -> void:
 		_pachinko_board.drop(balls)
 	else:
 		FortuneMill.drop_ball()
+	_play_sfx(&"drop", -9.0, randf_range(0.9, 1.12))   # 落球发射音(落槽 tick 由物理板负责)
 
 
 ## 配方按钮:已解锁 → 选中它;未解锁 → 花 ribbons 解锁(解锁高级配方触发跨房规则开关)。
@@ -664,6 +686,7 @@ func _on_pull_pressed() -> void:
 	if st_won > 0.0:
 		_pop_at(_stuffing_label, "+%s" % Currency.format(st_won), _art.color_for(&"gacha"))
 	_pulse_button("fortune.pull")
+	_play_sfx(&"pull", -7.0, randf_range(0.97, 1.05))
 	if _gacha_status == null:
 		return
 	var st := Currency.format(st_won)
@@ -713,6 +736,7 @@ func _on_dirty(_payload) -> void:
 func _on_jackpot(_count) -> void:
 	if _fx != null:
 		_fx.flash(Color(0.95, 0.78, 0.25, 0.45))   # 金色 JACKPOT 闪
+	_play_sfx(&"jackpot", -4.0)                     # 上行琶音 fanfare
 	_refresh()
 
 
@@ -726,6 +750,7 @@ func _on_cleared(room) -> void:
 			"gacha": room_key = &"gacha"
 		var c: Color = _art.color_for(room_key)
 		_fx.flash(Color(c.r, c.g, c.b, 0.4))   # 房间强调色过关庆祝闪
+	_play_sfx(&"clear", -3.0)                  # 过关 fanfare
 	match str(room):
 		"lotto":
 			if _scratch_status != null:

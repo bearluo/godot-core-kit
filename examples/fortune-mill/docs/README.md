@@ -6,7 +6,8 @@ P0 阶段只有飞镖房。目录:
 - `systems/` —— 纯数据层(Currency/KitModifiers/DartsRoom/FortuneMill autoload)
 - `scenes/` —— world 场景 + 表现层
 - `gfx/` —— 表现层美术/手感(art_bank 程序化接缝 + fx 手感层,P5)
-- `assets/` —— 真素材投放口(drop-in;默认空,见 `assets/README.md`)
+- `sfx/` —— 程序化音效(sound_bank 音效接缝,P5)
+- `assets/` —— 真素材/音频投放口(drop-in;默认空,见 `assets/README.md`)
 - `data/dart_upgrades/` —— 升级 .tres
 - `test/test_fortune_*.gd` —— headless 断言(进 kit 门 run_all)
 
@@ -209,4 +210,21 @@ incremental 原本是纯灰底标签+按钮,5A 给可玩路径加视觉与手感
 
 验收:`FORTUNE_SMOKE PASS ... art=32x32/procedural`(headless 生成 + 房间辨识 + 无真素材走程序化兜底)。
 测试 `test_fortune_art_bank`(每房 key 出图/尺寸 / 缓存同实例 / 房间中心色不同 / asset_path 接缝 / 无素材=procedural /
-未登记 key 兜底)进 kit 门(共 36 测)。fx/皮肤为纯表现,由非 smoke world 90 帧无报错兜底。
+未登记 key 兜底)进 kit 门。fx/皮肤为纯表现,由非 smoke world 90 帧无报错兜底。
+
+### 5B 程序化音效接缝(`sfx/`)
+
+5A 给了视觉/手感,5B 补听觉——结构完全平行 art_bank,更深 dogfood `CoreKit.audio`(AudioManager):
+
+- **`sfx/sound_bank.gd`(`FortuneSoundBank`,音效接缝)**:动作 SFX 统一经 `stream_for(key)` 取。
+  **先真音频后程序化**——查 `assets/<key>.wav` 再 `.ogg`,命中 `load` 真音频,缺失才按 key 的 voice 参数
+  (基频/时长/波形 blip·noise·arp/扫频)确定性合成 16-bit 单声道 `AudioStreamWAV` 兜底(快起短衰包络),
+  结果缓存。仓库默认零音频全走程序化;把 `wav`/`ogg` 丢进 `assets/`(文件名=key)即**零改代码顶替**。
+  纯样本运算 headless 可测(dummy 音频驱动),故进 kit 门。
+- **播放**:6 类动作(投镖 `throw` / 刮卡 `scratch` / 抽卡 `pull` / 落球发射 `drop` / JACKPOT `jackpot` /
+  过关 `clear`)在 world 命令处经 `CoreKit.audio.play_sfx(stream, volume_db, pitch)`(AudioManager 轮转池)播放,
+  连续动作带 `pitch` 抖动加活力。柏青哥落槽 tick 仍由物理板 `pachinko_board` 负责(发射音与落槽音分工)。
+
+验收:`FORTUNE_SMOKE PASS ... sfx=0.10s/procedural`(headless 合成 + voice 可辨识 jackpot>throw + 无真音频走程序化)。
+测试 `test_fortune_sound_bank`(每 key 合成/时长>0 / 缓存同实例 / voice 时长不同 / asset_path wav·ogg 接缝 /
+无音频=procedural / 未登记兜底)进 kit 门(共 37 测)。播放为纯表现,由非 smoke world 90 帧无报错兜底。
