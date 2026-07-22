@@ -132,17 +132,15 @@ func _run_smoke() -> void:
 	fm.achievements.from_dict({})    # 已解锁成就清空
 	CoreKit.saves.delete_slot(fm.SAVE_SLOT)
 
-	# --- 命运转盘定点验证(趁未升级:单镖 base×500×radial2=1000;vermin→0;两投顺带喂 jackpot/vermin 统计)---
-	fm.darts.wheel_angle = FortuneWheelLayout.jackpot_center()
-	var wr: Dictionary = fm.do_throw(0.5, FortuneWheelLayout.POWER_SWEET)
+	# --- 墙面定点验证(趁未升级:单镖 base×500×radial2=1000;vermin→0;两投顺带喂 jackpot/vermin 统计)---
+	var wr: Dictionary = fm.do_throw(FortuneWheelLayout.aim_for(&"jackpot"), FortuneWheelLayout.POWER_SWEET)
 	var wheel_ok: bool = absf(float(wr["gold"]) - 1000.0) < 0.01 and wr["hits"][0]["seg"] == &"jackpot"
-	fm.darts.wheel_angle = FortuneWheelLayout.vermin_center()
-	var vermin_ok: bool = absf(float(fm.do_throw(0.5, FortuneWheelLayout.POWER_SWEET)["gold"])) < 0.01
+	var vermin_ok: bool = absf(float(fm.do_throw(FortuneWheelLayout.aim_for(&"vermin"), FortuneWheelLayout.POWER_SWEET)["gold"])) < 0.01
 
-	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous(命运转盘:对准 jackpot 甜点确定性投)---
-	fm.darts.wheel_angle = FortuneWheelLayout.jackpot_center()   # 盘定格于 jackpot 中心 → 甜点镖必中头奖
+	# --- P0:飞镖房手动爬到 1M 贿赂 Verminous(墙面:aim 对准 jackpot 甜点确定性投)---
+	var jackpot_aim: float = FortuneWheelLayout.aim_for(&"jackpot")
 	while not fm.can_bribe() and steps < SMOKE_MAX_STEPS:
-		fm.do_throw(0.5, FortuneWheelLayout.POWER_SWEET)
+		fm.do_throw(jackpot_aim, FortuneWheelLayout.POWER_SWEET)
 		if steps % 20 == 0:
 			_smoke_buy_round(fm)
 		steps += 1
@@ -346,7 +344,7 @@ func _run_smoke() -> void:
 	var p5a := art_ok
 	var p5b := sfx_ok
 	if p012 and p3 and p3s and p4 and p4b and p4c and p4d and p5a and p5b and wheel_ok and vermin_ok:
-		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | achievements=%d/%d throws=%d | migration=v%d→v%d i18n=%s/%s | art=%dx%d/%s sfx=%.2fs/%s | wheel=jackpot%.0f/vermin0 | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, ach_count, ach_total, int(stat_throws), int(mig.from), int(mig.to), i18n_en, i18n_zh, art_tex.get_width(), art_tex.get_height(), ab.source_for(&"darts"), s_throw.get_length(), sb.source_for(&"throw"), float(wr["gold"]), Currency.format(stuffing_final), Currency.format(ribbons_final)])
+		print("[Fortune][SMOKE] PASS steps=%d jackpots=%d darts_boost=%.2fx gorgon=%s dice_boost=%.2fx rimmington=%s craft=%s switch_boost=%.2fx hivemind=%s gacha_boost=%.2fx executor=%s | ng=%d thr=%s prestige_gmul=%.2fx lethal_best=%.1fs | achievements=%d/%d throws=%d | migration=v%d→v%d i18n=%s/%s | art=%dx%d/%s sfx=%.2fs/%s | wall=jackpot%.0f/vermin0 | stuffing=%s ribbons=%s" % [steps, jackpots, boost, fm.lotto.is_cleared(), dice_boost, fm.pachinko.is_cleared(), craft_ok, switch_boost, fm.sushi.is_cleared(), gacha_boost, fm.gacha.is_cleared(), ng_level, Currency.format(thr_post), prestige_gmul, lethal_best, ach_count, ach_total, int(stat_throws), int(mig.from), int(mig.to), i18n_en, i18n_zh, art_tex.get_width(), art_tex.get_height(), ab.source_for(&"darts"), s_throw.get_length(), sb.source_for(&"throw"), float(wr["gold"]), Currency.format(stuffing_final), Currency.format(ribbons_final)])
 		get_tree().quit(0)
 	else:
 		print("[Fortune][SMOKE] FAIL p0=%s auto=%s offline=%s cross=%s gorgon=%s | drop=%s dice_cross=%s rimmington=%s off3=%s | craft=%s switch=%s hivemind=%s off4=%s | pull=%s gacha_cross=%s executor=%s off5=%s | ng=%s reset=%s prestige=%s(%.2f→%.2f) lethal=%s(enter=%s best=%.1f) | ach=%s(all=%s count=%d/%d dedup=%s throws=%d) | migration=%s i18n=%s(en=%s zh=%s missing=%s) | p5a=%s p5b=%s | wheel=%s vermin=%s" % [ok, auto_ok, offline_ok, crossroom_ok, gorgon_ok, pach_drop_ok, dice_cross_ok, rimmington_ok, off3_ok, craft_ok, switch_cross_ok, hivemind_ok, off4_ok, pull_ok, gacha_cross_ok, executor_ok, off5_ok, ng_ok, reset_ok, prestige_ok, gmul_pre, gmul_post, lethal_ok, lethal_enter_ok, lethal_best, ach_ok, ach_all, ach_count, ach_total, ach_dedup, int(stat_throws), migration_ok, i18n_ok, i18n_en, i18n_zh, i18n_missing, art_ok, sfx_ok, wheel_ok, vermin_ok])
