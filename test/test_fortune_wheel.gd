@@ -41,15 +41,21 @@ func _initialize() -> void:
 	if not (WL.radial_bonus(0.0) > WL.radial_bonus(0.5) and WL.radial_bonus(0.5) > WL.radial_bonus(1.0)):
 		print("FAIL 6: radial_bonus 应随 r 单调降"); failures += 1
 
-	# 7. landing 确定性 + 甜点 power=POWER_SWEET → r≈0(最靠盘心)
-	var l_sweet := WL.landing(0.5, WL.POWER_SWEET)
-	if absf(float(l_sweet["r"])) > 0.01:
-		print("FAIL 7a: 甜点力度应 r≈0,实际 %s" % l_sweet["r"]); failures += 1
-	if absf(float(l_sweet["a_off"])) > 0.01:   # aim=0.5 → 居中 a_off≈0
-		print("FAIL 7b: aim=0.5 应 a_off≈0,实际 %s" % l_sweet["a_off"]); failures += 1
-	var l_bad := WL.landing(0.5, 1.0)
-	if float(l_bad["r"]) <= float(l_sweet["r"]):
-		print("FAIL 7c: 偏离甜点 r 应更大"); failures += 1
+	# 7. landing 确定性 + 整圈映射:aim=0.5 → a_off=180(不再 0);甜点 power → r≈0
+	var l_mid := WL.landing(0.5, WL.POWER_SWEET)
+	if absf(float(l_mid["r"])) > 0.01:
+		print("FAIL 7a: 甜点力度应 r≈0,实际 %s" % l_mid["r"]); failures += 1
+	if absf(float(l_mid["a_off"]) - 180.0) > 0.01:
+		print("FAIL 7b: aim=0.5 应 a_off≈180,实际 %s" % l_mid["a_off"]); failures += 1
+	if absf(float(WL.landing(0.0, WL.POWER_SWEET)["a_off"])) > 0.01:
+		print("FAIL 7c: aim=0 应 a_off≈0"); failures += 1
+	if float(WL.landing(0.5, 1.0)["r"]) <= float(l_mid["r"]):
+		print("FAIL 7d: 偏离甜点 r 应更大"); failures += 1
+
+	# 7e. aim_for 往返:每档 aim_for(n) 都能确定命中该档
+	for n in [&"jackpot", &"vermin", &"x100", &"x5", &"x20a"]:
+		if WL.segment_at(WL.aim_for(n) * 360.0, 0.0)["name"] != n:
+			print("FAIL 7e: aim_for(%s) 应命中 %s" % [n, n]); failures += 1
 
 	# 8. fan_offsets:居中对称,和≈0,长度对
 	var fan := WL.fan_offsets(3)

@@ -39,11 +39,10 @@ func cost_of(id: StringName) -> float:
 	return float(def.base_cost) * pow(float(def.growth), level_of(id))
 
 
-## 推进转盘相位(由 autoload ticker 每拍调,与 produce 同拍)。
-func update(dt: float) -> void:
-	if dt <= 0.0:
-		return
-	wheel_angle = fposmod(wheel_angle + WHEEL_SPEED * dt, 360.0)
+## 墙面静态,无旋转:update 为 no-op(保留供 autoload ticker 调用,wheel_angle 恒 0)。
+## 命中档只由发射角(aim)决定,throw 里 wheel_angle 项恒为 0 → 落点确定。
+func update(_dt: float) -> void:
+	pass
 
 
 ## 手动投:方向 aim(0..1) + 力度 power(0..1)。扇形多镖各以不同角偏移扎盘,各自结算。

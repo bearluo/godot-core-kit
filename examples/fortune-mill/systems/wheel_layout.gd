@@ -3,14 +3,15 @@ extends RefCounted
 ## 命运转盘的几何 + 结算数学。全静态、无状态、纯 float 运算 → headless 可测。
 ## model(DartsRoom)与 view 都调此;view 只用来渲染,权威结算在 DartsRoom.throw 里经此计算。
 
-## 扇区(顺时针,从 0° 起铺满 360°)。宽度=难度:越窄倍率越高;含一块 vermin 没收段。
+## 竖直墙面奖区(top→bottom)。宽度=难度:越窄倍率越高;含一块 vermin 没收段。
+## 语义为「墙」而非转盘:aim(发射角)线性映射到本序列,不旋转。span 和 ≡ 360。
 const SEGMENTS := [
-	{"name": &"jackpot", "span": 18.0, "mult": 500.0, "vermin": false},
-	{"name": &"x2a",     "span": 72.0, "mult": 2.0,   "vermin": false},
 	{"name": &"x20a",    "span": 40.0, "mult": 20.0,  "vermin": false},
-	{"name": &"x5",      "span": 58.0, "mult": 5.0,   "vermin": false},
-	{"name": &"vermin",  "span": 40.0, "mult": 0.0,   "vermin": true},
+	{"name": &"x2a",     "span": 72.0, "mult": 2.0,   "vermin": false},
 	{"name": &"x100",    "span": 30.0, "mult": 100.0, "vermin": false},
+	{"name": &"jackpot", "span": 18.0, "mult": 500.0, "vermin": false},
+	{"name": &"vermin",  "span": 40.0, "mult": 0.0,   "vermin": true},
+	{"name": &"x5",      "span": 58.0, "mult": 5.0,   "vermin": false},
 	{"name": &"x2b",     "span": 62.0, "mult": 2.0,   "vermin": false},
 	{"name": &"x20b",    "span": 40.0, "mult": 20.0,  "vermin": false},
 ]
@@ -74,11 +75,17 @@ static func radial_bonus(r: float) -> float:
 	return lerpf(2.0, 1.0, clampf(r, 0.0, 1.0))
 
 
-## (aim,power) → 盘面落点 {r(离盘心 0..1), a_off(盘面角偏移 °)}。纯确定性,无 RNG。
+## (aim,power) → 墙面落点 {r(离档心 0..1), a_off(发射角映射的墙面角 °)}。纯确定性,无 RNG。
+## a_off 铺满整圈:aim 0..1 线性映射 0..360,配合冻结旋转 → 发射角唯一决定命中档。
 static func landing(aim: float, power: float) -> Dictionary:
-	var a_off := (clampf(aim, 0.0, 1.0) - 0.5) * AIM_ARC
+	var a_off := clampf(aim, 0.0, 1.0) * 360.0
 	var r := clampf(absf(power - POWER_SWEET) / POWER_SWEET, 0.0, 1.0)
 	return {"r": r, "a_off": a_off}
+
+
+## 能确定命中某档的 aim 值(该档中心角 / 360)。用于 smoke / 测试 / view 预览。
+static func aim_for(name: StringName) -> float:
+	return _center_of(name) / 360.0
 
 
 ## n 支扇形多镖的角偏移(居中对称,和为 0)。
