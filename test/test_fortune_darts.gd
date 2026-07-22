@@ -32,19 +32,21 @@ func _room(reg) -> Array:
 	return [room, cur, mods]
 
 
-## 用 landing 反推能命中 jackpot 的 (aim,power,wheel_angle):
-## 令 aim=0.5(a_off=0)、power=SWEET(r=0)→ hit_angle=wheel_angle;设 wheel_angle=jackpot 中心。
-func _aim_jackpot(room) -> void:
-	room.wheel_angle = WL.jackpot_center()
+## 墙面:aim=aim_for(seg) 令发射角确定命中该档,power=SWEET 令 r=0(档心 radial2)。冻结旋转,无 wheel_angle。
 
 
 func _initialize() -> void:
 	var failures := 0
 
+	# 0. 冻结旋转:update 为 no-op,wheel_angle 恒 0
+	var t0 = _room(_reg()); var room0 = t0[0]
+	room0.update(1.0)
+	if absf(room0.wheel_angle) > 0.0001:
+		print("FAIL 0: update 应 no-op,wheel_angle 恒 0,实际 %s" % room0.wheel_angle); failures += 1
+
 	# 1. throw(甜点+对准 jackpot) → 单镖 gold = base(1.0)×500×radial(2.0)×gmul(1.0) = 1000
 	var t = _room(_reg()); var room = t[0]; var cur = t[1]
-	_aim_jackpot(room)
-	var r = room.throw(0.5, WL.POWER_SWEET)
+	var r = room.throw(WL.aim_for(&"jackpot"), WL.POWER_SWEET)
 	if absf(float(r["gold"]) - 1000.0) > 0.01 or absf(cur.get_amount() - float(r["gold"])) > 0.01:
 		print("FAIL 1: jackpot 甜点单镖应 1000 并入账,实际 %s" % r["gold"]); failures += 1
 	if r["hits"].size() != 1 or r["hits"][0]["seg"] != &"jackpot":
@@ -52,15 +54,13 @@ func _initialize() -> void:
 
 	# 2. throw 命中 vermin → payout 0
 	var t2 = _room(_reg()); var room2 = t2[0]; var cur2 = t2[1]
-	room2.wheel_angle = WL.vermin_center()
-	var r2 = room2.throw(0.5, WL.POWER_SWEET)
+	var r2 = room2.throw(WL.aim_for(&"vermin"), WL.POWER_SWEET)
 	if absf(float(r2["gold"])) > 0.01:
 		print("FAIL 2: vermin 应 payout 0,实际 %s" % r2["gold"]); failures += 1
 
 	# 3. radial:同 jackpot,力度=0(松手即投,r=|0-SWEET|/SWEET=1,radial=1.0)→ 500,小于甜点 1000
 	var t3 = _room(_reg()); var room3 = t3[0]
-	_aim_jackpot(room3)
-	var r3 = room3.throw(0.5, 0.0)
+	var r3 = room3.throw(WL.aim_for(&"jackpot"), 0.0)
 	if absf(float(r3["gold"]) - 500.0) > 0.01:
 		print("FAIL 3: jackpot 边缘力度应 500(radial 1.0),实际 %s" % r3["gold"]); failures += 1
 
@@ -68,19 +68,18 @@ func _initialize() -> void:
 	var t4 = _room(_reg()); var room4 = t4[0]; var cur4 = t4[1]
 	cur4.add(1000.0)
 	room4.buy_upgrade(&"double_dart")
-	_aim_jackpot(room4)
-	var r4 = room4.throw(0.5, WL.POWER_SWEET)
+	var r4 = room4.throw(WL.aim_for(&"jackpot"), WL.POWER_SWEET)
 	if r4["hits"].size() != 2:
 		print("FAIL 4: double_dart 后应 2 支,实际 %d" % r4["hits"].size()); failures += 1
 
 	# 5. widen_zone:jackpot 带外一点,未升级非 jackpot、升级后变 jackpot → payout 升
 	var t5 = _room(_reg()); var room5 = t5[0]; var cur5 = t5[1]; var mods5 = t5[2]
-	# 令 hit_angle 落在 jackpot 中心 + 基础半宽 + 8°(基础带外)
-	room5.wheel_angle = WL.jackpot_center() + WL.jackpot_half_base() + 8.0
-	var before = room5.throw(0.5, WL.POWER_SWEET)   # 非 jackpot
+	# 令落点在 jackpot 中心 - 基础半宽 - 8°(基础带外,x100 侧)
+	var edge_aim := (WL.jackpot_center() - WL.jackpot_half_base() - 8.0) / 360.0
+	var before = room5.throw(edge_aim, WL.POWER_SWEET)   # 非 jackpot(x100)
 	cur5.add(100000.0)
 	for _i in 3: room5.buy_upgrade(&"widen_zone")   # win_zone +18°
-	var after = room5.throw(0.5, WL.POWER_SWEET)    # 现应命中 jackpot
+	var after = room5.throw(edge_aim, WL.POWER_SWEET)    # 现应命中 jackpot
 	if after["hits"][0]["seg"] != &"jackpot" or float(after["gold"]) <= float(before["gold"]):
 		print("FAIL 5: widen_zone 应把该落点变 jackpot 且 payout 升"); failures += 1
 
