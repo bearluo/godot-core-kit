@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = &"golden_tips"
-title = "Golden Tips"
+title = "镀金镖头"
 kind = &"value"
 target = &"gold_per_dart"
 op = &"mul"

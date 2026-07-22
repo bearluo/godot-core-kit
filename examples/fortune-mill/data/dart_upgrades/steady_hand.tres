@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = &"steady_hand"
-title = "Steady Hand"
+title = "稳手瞄准"
 kind = &"aid"
 target = &"aim_steady"
 op = &"add"

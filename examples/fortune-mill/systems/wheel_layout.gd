@@ -17,7 +17,8 @@ const SEGMENTS := [
 ]
 
 const AIM_ARC := 120.0      ## aim 0..1 映射到 ±AIM_ARC/2 的盘面角偏移
-const POWER_SWEET := 0.6    ## 力度甜点(落盘心);偏离 → 落点外移
+const POWER_SWEET := 0.5    ## 力度甜点(命中所瞄档、不偏移、radial 2.0);上下对称便于越界落空
+const POWER_SHIFT := 150.0  ## 力度偏离甜点的竖直偏移基数(度):实际偏移=本值/(1+aim_steady),等级低漂移大、高了小
 const FAN_STEP := 14.0      ## 扇形多镖每支相邻角距(°)
 const AI_RADIAL := 1.5      ## AI/离线期望的平均径向加成(手动走真 radial_bonus)
 
@@ -75,12 +76,16 @@ static func radial_bonus(r: float) -> float:
 	return lerpf(2.0, 1.0, clampf(r, 0.0, 1.0))
 
 
-## (aim,power) → 墙面落点 {r(离档心 0..1), a_off(发射角映射的墙面角 °)}。纯确定性,无 RNG。
-## a_off 铺满整圈:aim 0..1 线性映射 0..360,配合冻结旋转 → 发射角唯一决定命中档。
-static func landing(aim: float, power: float) -> Dictionary:
-	var a_off := clampf(aim, 0.0, 1.0) * 360.0
-	var r := clampf(absf(power - POWER_SWEET) / POWER_SWEET, 0.0, 1.0)
-	return {"r": r, "a_off": a_off}
+## (aim,power,steady) → 墙面落点 {r(离档心 0..1), a_off(命中墙面角 °), whiff(是否落空)}。纯确定性,无 RNG。
+## a_off = aim 铺满 0..360(顶→底)减力度竖直偏移:超甜点→上移(a_off 减)、欠→下移(a_off 增);甜点=不偏移。
+## 偏移幅度 = POWER_SHIFT/(1+steady):steady(aim_steady)越高偏移越小——等级低漂移大、等级高漂移少。
+## a_off 超出 [0,360) 即落空(whiff)不计分——不夹紧、不回绕,飞出墙外就是没中。
+static func landing(aim: float, power: float, steady: float = 0.0) -> Dictionary:
+	var miss := power - POWER_SWEET
+	var shift := POWER_SHIFT / (1.0 + maxf(0.0, steady))
+	var a_off := clampf(aim, 0.0, 1.0) * 360.0 - miss * shift
+	var r := clampf(absf(miss) / POWER_SWEET, 0.0, 1.0)
+	return {"r": r, "a_off": a_off, "whiff": a_off < 0.0 or a_off >= 360.0}
 
 
 ## 能确定命中某档的 aim 值(该档中心角 / 360)。用于 smoke / 测试 / view 预览。

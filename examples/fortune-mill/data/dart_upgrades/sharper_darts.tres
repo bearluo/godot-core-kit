@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = &"sharper_darts"
-title = "Sharper Darts"
+title = "锋利飞镖"
 kind = &"value"
 target = &"gold_per_dart"
 op = &"add"

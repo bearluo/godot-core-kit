@@ -1,12 +1,13 @@
 extends Control
-## 飞镖墙房(全屏进入式)。读 FortuneMill 命令层:玩家控发射角(aim)+蓄力(power) →
-## do_throw → 飞镖走「解算发射速度命中 model 判定档」的真重力抛物线(落点确定)→ 命中爆金币,
-## 金币落地堆积、每隔 COLLECT_INTERVAL 成批扫进右上计数器(空中的不收)→ 右=看守 Verminous(攒够门槛贿赂放行)。
+## 飞镖墙房(全屏进入式)。读 FortuneMill 命令层:发射角(aim)自动上下扫描、点击锁定并蓄力(power) →
+## do_throw → 飞镖走真重力抛物线落在 model 判定的精确落点(力度竖直偏移:超甜点上移、欠下移;越界落空)→
+## 命中爆金币,金币落地堆积、每隔 COLLECT_INTERVAL 成批扫进右上计数器(空中的不收)→ 右=看守 Verminous(攒够贿赂放行)。
 ## 换皮不换核:结算/经济全在 FortuneMill/DartsRoom;本类只做输入 + 表现。8 档奖墙读 FortuneWheelLayout.SEGMENTS。
+## 颜色代表倍率(靶墙不写字),右侧图例给「颜色→倍率」对照。
 
 const WORLD_SCENE := "res://examples/fortune-mill/scenes/world.tscn"
 
-# 8 档配色(seg -> Color,与 world._wheel_palette 一致)
+# 8 档配色(seg -> Color,与 world._wheel_palette 一致);颜色=倍率,墙上不写字,靠右侧图例对照
 const PALETTE := {
 	&"jackpot": Color("f4d35e"),
 	&"x2a": Color("4a7c59"), &"x2b": Color("3f6b4e"),
@@ -15,7 +16,7 @@ const PALETTE := {
 	&"x100": Color("e08a3c"),
 	&"vermin": Color("7a3b3b"),
 }
-# 档内显示标签
+# 倍率标签(只用于右侧图例,不画在靶墙上)
 const MULT_LABEL := {
 	&"jackpot": "★500", &"x2a": "×2", &"x2b": "×2",
 	&"x20a": "×20", &"x20b": "×20", &"x5": "×5", &"x100": "×100", &"vermin": "劫",
@@ -23,6 +24,8 @@ const MULT_LABEL := {
 
 const CYAN := Color("46e0ff")
 const CYAN_GLOW := Color(0.28, 0.88, 1.0, 0.22)
+const AI_COL := Color("c77dff")           ## AI 磨工自动投镖的强调色(紫,区别玩家青)
+const AI_COL_DIM := Color("6f4aa0")
 const GOLD := Color("f4c542")
 const GOLD_HI := Color("ffdf6e")
 const RAT := Color("8a8f96")
@@ -33,9 +36,11 @@ const GRAY := Color("9aa0a6")
 const RED_SOFT := Color("e0857f")
 
 const GRAV := 1000.0
-const FLIGHT_T := 0.5           ## 飞镖飞行时长(s);解算发射速度使其在 T 时刻恰落在目标档
+const FLIGHT_T := 0.5           ## 飞镖飞行时长(s);解算发射速度使其在 T 时刻恰落在目标点
 const FLOOR_Y := 588.0
 const COLLECT_INTERVAL := 3.0
+const AIM_SWEEP_SPEED := 0.85    ## 发射角自动扫描速度(每秒 aim 单位);一趟 0→1 约 1.18s,玩家点击锁定
+const AI_MAX_VISUAL_RATE := 6.0  ## 雇佣AI 自动投镖每秒最多可视化几支(超出只让数字更大,不刷屏)
 
 var _font: Font
 var _t: float = 0.0
@@ -55,19 +60,22 @@ var _pops: Array = []
 # 输入 / 态机
 var _darts_input                 # FortuneDartsInput
 var _throw_fsm                   # KitStateMachine
-var _cur_aim: float = 0.5        # 跟踪当前发射角(经 aim_changed),供瞄准预览
+var _cur_aim: float = 0.5        # 当前发射角:桌面下自动上下扫描,点击锁定;触屏由拖拽定
+var _sweep_dir: float = 1.0      # 扫描方向(±1),到 0/1 反弹
+var _auto_t: float = 0.0         # 雇佣AI 自动投镖计时(throws_per_sec 驱动;纯表现)
+var _ai_flash: float = 0.0       # AI 炮台开火闪光(每次自动投镖脉冲一下)
 
 # HUD
 var _gold_label: Label
 var _rate_label: Label
 var _bribe_button: Button
-var _throw_button: Button
 var _upgrade_buttons: Dictionary = {}   # id -> Button
 
 
 func _ready() -> void:
 	_font = load("res://examples/fortune-mill/scenes/proto_font.tres")
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE   # 墙面空白区的点击落到 _unhandled_input(HUD 按钮各自 STOP 消费)
 	_build_hud()
 	_build_throw_fsm()
 	_darts_input = FortuneDartsInput.new()
@@ -106,8 +114,29 @@ func _thrower() -> Vector2:
 	return Vector2(size.x * 0.12, 504.0)
 
 
+func _shoulder() -> Vector2:
+	return _thrower() + Vector2(0.0, -84.0)
+
+
+## 发射角瞄准的墙面点(左缘、_cur_aim 对应高度):投掷臂朝它旋转,手=臂末端。
+func _aim_wall_point() -> Vector2:
+	var b := _board()
+	return Vector2(b.position.x, b.position.y + clampf(_cur_aim, 0.0, 1.0) * b.size.y)
+
+
+## 手 = 肩沿「朝瞄准墙面点」方向伸出的投掷臂末端,随发射角旋转;飞镖由此发射。
 func _hand() -> Vector2:
-	return _thrower() + Vector2(30.0, -80.0)
+	return _shoulder() + (_aim_wall_point() - _shoulder()).normalized() * 32.0
+
+
+## 雇佣AI 磨工:一台墙挂自动投镖机的机身位置(玩家右上方,买 hire_ai 才现身)。
+func _ai_base() -> Vector2:
+	return _thrower() + Vector2(66.0, -190.0)
+
+
+## AI 投镖机炮口(机身朝奖墙方向的枪管末端);自动镖由此发射。
+func _ai_muzzle() -> Vector2:
+	return _ai_base() + Vector2(24.0, 8.0)
 
 
 func _guard() -> Vector2:
@@ -153,6 +182,7 @@ func _build_throw_fsm() -> void:
 func _on_throw_down() -> void:
 	if _darts_input == null or _darts_input.current_mode() != &"desktop":
 		return
+	_darts_input.set_aim(_cur_aim)   # 停止摆动、锁定当前发射角(_process 见 locked 即停止旋转)
 	_darts_input.begin_charge()
 	if _throw_fsm != null:
 		_throw_fsm.transition_to("Charge")
@@ -169,16 +199,19 @@ func _on_power_changed(p: float) -> void:
 	_wind = p
 
 
-## 命令 model + 表现:每支镖扎进其 seg 对应的墙带,金币按命中档爆量,浮字显示真金额。
+## 命令 model + 表现:每支镖落在 model 返回的精确竖直落点(力度偏移已并入);越界=落空不计分。
 func _on_dart_thrown(aim: float, power: float) -> void:
 	if _throw_fsm != null:
 		_throw_fsm.transition_to("Resolve")
-	var r: Dictionary = FortuneMill.do_throw(aim, power)
-	for h in r.get("hits", []):
+	var res: Dictionary = FortuneMill.do_throw(aim, power)
+	var b := _board()
+	for h in res.get("hits", []):
 		var seg: StringName = h.get("seg", &"")
-		var rect := band_rect_for(seg)
-		var target := Vector2(rect.position.x + 18.0 + randf() * (rect.size.x - 40.0), rect.get_center().y)
-		_spawn_dart_to(target, seg, float(h.get("gold", 0.0)), bool(h.get("vermin", false)))
+		var pos := float(h.get("pos", 0.5))            # 命中的墙面竖直比例(力度偏移已并入,确定);<0 或 >1 = 飞出墙外落空
+		var miss := bool(h.get("whiff", false))
+		var ty := b.position.y + pos * b.size.y        # 落空时 pos 越界 → 落点在墙上/下方
+		var tx := b.position.x + b.size.x * (0.18 + randf() * 0.64)   # x 轴随机漂移(纯表现,不改竖直命中档)
+		_spawn_dart_to(Vector2(tx, ty), seg, float(h.get("gold", 0.0)), bool(h.get("vermin", false)), miss, power)
 	_refresh()
 
 
@@ -188,13 +221,13 @@ func _resolve_then_idle() -> void:
 		_throw_fsm.transition_to("Idle")
 
 
-## 解算发射速度:飞镖从手在 FLIGHT_T 时刻恰落在 target(真重力抛物线,落点确定)。
-func _spawn_dart_to(target: Vector2, seg: StringName, gold: float, vermin: bool) -> void:
+## 解算发射速度:飞镖从手在 t 时刻恰落在 target(真重力抛物线,落点确定)。力度越大飞行越快越平 → 轨迹可见变化。
+func _spawn_dart_to(target: Vector2, seg: StringName, gold: float, vermin: bool, miss: bool, power: float) -> void:
 	var p0 := _hand()
-	var t := FLIGHT_T
+	var t := lerpf(0.66, 0.42, clampf(power, 0.0, 1.0))
 	var vx := (target.x - p0.x) / t
 	var vy := (target.y - p0.y) / t - 0.5 * GRAV * t
-	_darts.append({"p": p0, "vel": Vector2(vx, vy), "t": 0.0, "target": target, "seg": seg, "gold": gold, "vermin": vermin})
+	_darts.append({"p": p0, "vel": Vector2(vx, vy), "t": 0.0, "T": t, "target": target, "seg": seg, "gold": gold, "vermin": vermin, "miss": miss})
 
 
 func _process(dt: float) -> void:
@@ -208,20 +241,60 @@ func _process(dt: float) -> void:
 	_counter_pulse = maxf(0.0, _counter_pulse - dt * 2.4)
 	for k in _flash.keys():
 		_flash[k] = maxf(0.0, float(_flash[k]) - dt * 3.0)
-	# 桌面蓄力中:鼠标 y 定发射角(aim)
-	if _darts_input != null and _darts_input.current_mode() == &"desktop" and _throw_fsm != null and _throw_fsm.is_in("Charge"):
-		var vp := get_viewport()
-		if vp != null:
-			var vh := float(vp.get_visible_rect().size.y)
-			_darts_input.set_aim(FortuneDartsInput.desktop_aim(vp.get_mouse_position().y, vh))
-	# 飞镖:真重力抛物线,t 到 FLIGHT_T 落在目标档
+	# 桌面:投掷臂/发射角自动上下往复摆动;玩家点击墙面停止摆动、锁定发射角并蓄力(见 _on_throw_down)
+	if _darts_input != null and _darts_input.current_mode() == &"desktop":
+		var locked: bool = _throw_fsm != null and _throw_fsm.is_in("Charge")
+		if not locked:
+			_cur_aim += _sweep_dir * AIM_SWEEP_SPEED * dt
+			if _cur_aim >= 1.0:
+				_cur_aim = 1.0; _sweep_dir = -1.0
+			elif _cur_aim <= 0.0:
+				_cur_aim = 0.0; _sweep_dir = 1.0
+			_darts_input.set_aim(_cur_aim)
+	# 雇佣AI磨工:throws_per_sec>0 时自动投镖(纯表现——经济由 autoload ticker 的 produce 结算,此处不计分不加币)
+	_ai_flash = maxf(0.0, _ai_flash - dt * 4.0)
+	var tps := FortuneMill.darts.throws_per_sec()
+	if tps > 0.0:
+		_auto_t -= dt
+		if _auto_t <= 0.0:
+			_auto_t = 1.0 / minf(tps, AI_MAX_VISUAL_RATE)
+			_auto_throw()
+	else:
+		_auto_t = 0.0
+	# 飞镖:真重力抛物线。命中镖 t 到 T 扎墙;落空镖不定时,飞到地板停留后淡出
 	var kept: Array = []
 	for d in _darts:
 		d["t"] = float(d["t"]) + dt
 		d["vel"] = d["vel"] + Vector2(0.0, GRAV * dt)
 		d["p"] = d["p"] + d["vel"] * dt
-		if float(d["t"]) >= FLIGHT_T:
-			_resolve_dart(d)
+		if bool(d.get("miss", false)):
+			var dp: Vector2 = d["p"]
+			var bd := _board()
+			var is_up: bool = float((d["target"] as Vector2).y) < bd.position.y
+			if is_up:
+				# 上限落空:飞到墙顶缘 → 停留在墙面上(顶部一段区域内随机散开,不排一条线)+ 落空
+				if dp.y <= bd.position.y + 6.0 and dp.x >= bd.position.x - 20.0:
+					var sx := clampf(dp.x + randf_range(-24.0, 24.0), bd.position.x + 6.0, bd.position.x + bd.size.x - 6.0)
+					var sy := bd.position.y + randf_range(6.0, 46.0)
+					_stick_whiff(Vector2(sx, sy), d["vel"])
+				elif dp.x > size.x + 60.0 or dp.y < -80.0:
+					pass   # 意外未触顶就出界,丢弃
+				else:
+					kept.append(d)
+			elif dp.y >= FLOOR_Y and (d["vel"] as Vector2).y >= 0.0:
+				# 下限落空:坠到地板(近墙脚一段区域内随机散开,不排一条线)停留
+				var fx := clampf(dp.x + randf_range(-30.0, 30.0), bd.position.x - 40.0, bd.position.x + bd.size.x + 40.0)
+				var fy := FLOOR_Y - randf_range(0.0, 26.0)
+				_stick_whiff(Vector2(fx, fy), d["vel"])
+			elif dp.x > size.x + 60.0 or dp.y > size.y + 80.0:
+				pass   # 出界丢弃
+			else:
+				kept.append(d)
+		elif float(d["t"]) >= float(d["T"]):
+			if bool(d.get("auto", false)):
+				_resolve_auto_dart(d)
+			else:
+				_resolve_dart(d)
 		else:
 			kept.append(d)
 	_darts = kept
@@ -265,7 +338,7 @@ func _process(dt: float) -> void:
 	queue_redraw()
 
 
-## 飞镖落定:扎在目标档 + 按档爆金币 + 浮字显示真金额(vermin=劫,不出金币)。
+## 飞镖落定:命中→扎档+爆金币+浮字真金额;落空→只出「落空」浮字,不计分不出金币;vermin=劫,不出金币。
 func _resolve_dart(d: Dictionary) -> void:
 	var sp: Vector2 = d["target"]
 	var seg: StringName = d["seg"]
@@ -287,6 +360,59 @@ func _resolve_dart(d: Dictionary) -> void:
 	_spawn_coins(sp, n)
 	var big := seg == &"jackpot"
 	_pops.append({"p": sp + Vector2(-8.0, -20.0), "txt": "+%s" % Currency.format(gold), "life": 0.95, "big": big, "col": GOLD_HI})
+
+
+## 落空镖停留:扎在墙面(上限)或地板(下限)停留 ~1.2s 后淡出 + 冒「落空」(不计分,已在 model 处理)。
+func _stick_whiff(pos: Vector2, vel: Vector2) -> void:
+	var dir := vel.normalized()
+	if dir.length() < 0.1:
+		dir = Vector2(0.3, -1.0).normalized()
+	_stuck.append({"pos": pos, "life": 1.2, "dir": dir})
+	_shake = maxf(_shake, 0.2)
+	_pops.append({"p": pos + Vector2(-16.0, -18.0), "txt": "落空", "life": 0.9, "big": false, "col": GRAY})
+
+
+## --- 雇佣AI磨工:自动投镖表现(纯装饰;经济在 autoload ticker 的 produce,已计入 auto 金币/秒) ---
+
+## AI 自动投一镖:从炮口射向某档(按 span 加权、避开 vermin),炮台闪光一下。
+func _auto_throw() -> void:
+	_ai_flash = 1.0
+	var seg := _auto_target_segment()
+	var band := band_rect_for(seg)
+	var tx := band.position.x + band.size.x * (0.2 + randf() * 0.6)
+	var ty := band.position.y + band.size.y * (0.2 + randf() * 0.6)
+	var p0 := _ai_muzzle()
+	var t := 0.5
+	var vx := (tx - p0.x) / t
+	var vy := (ty - p0.y) / t - 0.5 * GRAV * t
+	_darts.append({"p": p0, "vel": Vector2(vx, vy), "t": 0.0, "T": t, "target": Vector2(tx, ty), "seg": seg, "gold": 0.0, "vermin": false, "miss": false, "auto": true})
+
+
+## 自动投镖的目标档:按 span 加权抽一档,排除 vermin(AI 磨工不会主动撞守卫区)。纯表现。
+func _auto_target_segment() -> StringName:
+	var total := 0.0
+	for s in FortuneWheelLayout.SEGMENTS:
+		if s["name"] == &"vermin":
+			continue
+		total += float(s["span"])
+	var roll := randf() * total
+	var acc := 0.0
+	for s in FortuneWheelLayout.SEGMENTS:
+		if s["name"] == &"vermin":
+			continue
+		acc += float(s["span"])
+		if roll < acc:
+			return s["name"]
+	return &"x2a"
+
+
+## 自动镖落定:扎档 + 轻闪 + 少量装饰金币汇入计数器;不计分、不出金额浮字、不震屏。
+func _resolve_auto_dart(d: Dictionary) -> void:
+	var sp: Vector2 = d["target"]
+	var seg: StringName = d["seg"]
+	_stuck.append({"pos": sp, "life": 0.9, "dir": (d["vel"] as Vector2).normalized(), "auto": true})
+	_flash[seg] = maxf(float(_flash.get(seg, 0.0)), 0.55)
+	_spawn_coins(sp, 2 + (randi() % 3))
 
 
 ## 命中档 → 金币颗数(表现量,不等于金额;金额由浮字显示)。
@@ -318,10 +444,11 @@ func _build_hud() -> void:
 	back.position = Vector2(20.0, 18.0)
 	back.pressed.connect(_on_back_pressed)
 	add_child(back)
-	# 金币 / 自动(右上)
+	# 金币 / 自动(右上;IGNORE 让墙面点击穿透到 _unhandled_input)
 	_gold_label = Label.new()
 	_gold_label.position = Vector2(size.x - 280.0, 18.0); _gold_label.size = Vector2(256.0, 28.0)
 	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_gold_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_gold_label.add_theme_font_override("font", _font_or_fallback())
 	_gold_label.add_theme_font_size_override("font_size", 24)
 	_gold_label.add_theme_color_override("font_color", GOLD)
@@ -329,17 +456,20 @@ func _build_hud() -> void:
 	_rate_label = Label.new()
 	_rate_label.position = Vector2(size.x - 280.0, 48.0); _rate_label.size = Vector2(256.0, 22.0)
 	_rate_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_rate_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rate_label.add_theme_font_override("font", _font_or_fallback())
 	_rate_label.add_theme_font_size_override("font_size", 15)
 	add_child(_rate_label)
-	# 投掷按钮(下中,按住蓄力松手投)
-	_throw_button = Button.new()
-	_throw_button.text = "按住蓄力 · 松手投镖"
-	_throw_button.position = Vector2(size.x * 0.5 - 110.0, size.y - 52.0)
-	_throw_button.size = Vector2(220.0, 40.0)
-	_throw_button.button_down.connect(_on_throw_down)
-	_throw_button.button_up.connect(_on_throw_up)
-	add_child(_throw_button)
+	# 操作提示(下中)
+	var hint := Label.new()
+	hint.text = "投掷臂自动上下摆动瞄准 · 点住墙面停止摆动、锁定发射角并蓄力 · 力度到甜点金线=不偏移;超了往上、低了往下,冲出墙外=落空"
+	hint.position = Vector2(size.x * 0.5 - 330.0, size.y - 38.0); hint.size = Vector2(660.0, 24.0)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint.add_theme_font_override("font", _font_or_fallback())
+	hint.add_theme_font_size_override("font_size", 15)
+	hint.add_theme_color_override("font_color", Color(0.72, 0.82, 0.88))
+	add_child(hint)
 	# 升级按钮(左侧竖排)
 	var box := VBoxContainer.new()
 	box.position = Vector2(20.0, 92.0); box.custom_minimum_size = Vector2(240.0, 0.0)
@@ -365,8 +495,8 @@ func _on_back_pressed() -> void:
 func _refresh() -> void:
 	if _gold_label == null:
 		return
-	_gold_label.text = "Gold: %s" % Currency.format(FortuneMill.currency.get_amount())
-	_rate_label.text = "自动: %s gold/s" % Currency.format(FortuneMill.darts.auto_gold_rate())
+	_gold_label.text = "金币:%s" % Currency.format(FortuneMill.currency.get_amount())
+	_rate_label.text = "自动:%s 金币/秒" % Currency.format(FortuneMill.darts.auto_gold_rate())
 	for id in _upgrade_buttons:
 		var def = FortuneMill.registry.get_def(&"dart_upgrade", id)
 		var cost := FortuneMill.darts.cost_of(id)
@@ -374,10 +504,10 @@ func _refresh() -> void:
 		btn.text = "%s  Lv.%d  (%s)" % [def.title, FortuneMill.darts.level_of(id), Currency.format(cost)]
 		btn.disabled = not FortuneMill.currency.can_afford(cost)
 	if FortuneMill.darts.is_cleared():
-		_bribe_button.text = "✅ 已贿赂 Verminous — 放行"
+		_bribe_button.text = "✅ 已贿赂看守鼠 — 放行"
 		_bribe_button.disabled = true
 	else:
-		_bribe_button.text = "贿赂 Verminous (需 %s)" % Currency.format(FortuneMill.darts.bribe_threshold())
+		_bribe_button.text = "贿赂看守鼠 (需 %s)" % Currency.format(FortuneMill.darts.bribe_threshold())
 		_bribe_button.disabled = not FortuneMill.can_bribe()
 
 
@@ -390,9 +520,11 @@ func _draw() -> void:
 	draw_set_transform(shake_off, 0.0, Vector2.ONE)
 	_draw_bg()
 	_draw_board(_board())
+	_draw_legend()
 	_draw_guard(_guard())
 	_draw_thrower(_thrower())
-	_draw_aim_preview()
+	_draw_ai_turret()
+	_draw_aim_ray()
 	_draw_power_bar()
 	for s in _stuck:
 		var age: float = 1.1 - float(s["life"])
@@ -400,11 +532,11 @@ func _draw() -> void:
 			var rr := 8.0 + age * 150.0
 			draw_arc(s["pos"], rr, 0.0, TAU, 20, Color(1.0, 1.0, 1.0, (0.26 - age) / 0.26 * 0.7), 3.0)
 	for s in _stuck:
-		_draw_dart(s["pos"], s["dir"])
+		_draw_dart(s["pos"], s["dir"], bool(s.get("auto", false)))
 	for co in _coins:
 		_draw_coin(co["p"], 7.0)
 	for d in _darts:
-		_draw_dart(d["p"], (d["vel"] as Vector2).normalized())
+		_draw_dart(d["p"], (d["vel"] as Vector2).normalized(), bool(d.get("auto", false)))
 	_draw_collect_ring()
 	_draw_counter_pulse()
 	var font := _font_or_fallback()
@@ -444,11 +576,10 @@ func _draw_bg() -> void:
 	draw_line(Vector2(0.0, 540.0), Vector2(w, 540.0), Color("0c0a08"), 4.0)
 
 
-## 奖墙:8 档竖带(读 SEGMENTS,按 span 比例),命中闪白,jackpot 描金。
+## 奖墙:8 档竖带(读 SEGMENTS,按 span 比例)。颜色=倍率,墙上不写字;命中闪白,jackpot 描金。
 func _draw_board(b: Rect2) -> void:
 	draw_rect(b.grow(10.0), Color("3a2c1e"))
 	draw_rect(b.grow(10.0), Color("14100b"), false, 4.0)
-	var font := _font_or_fallback()
 	var acc := 0.0
 	for s in FortuneWheelLayout.SEGMENTS:
 		var seg: StringName = s["name"]
@@ -462,35 +593,49 @@ func _draw_board(b: Rect2) -> void:
 		var border := GOLD if seg == &"jackpot" else Color(0.0, 0.0, 0.0, 0.28)
 		var bw := 3.0 if seg == &"jackpot" else 2.0
 		draw_rect(zr, border, false, bw)
-		var txt: String = MULT_LABEL.get(seg, "?")
-		var fs := 24 if seg == &"jackpot" else 18
-		var ts := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		var lp := zr.position + zr.size * 0.5 - ts * 0.5 + Vector2(0.0, ts.y * 0.35)
-		draw_string(font, lp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.1, 0.09, 0.06))
 
 
-## 瞄准预览:蓄力中高亮当前 aim 命中的档 + 画弹道虚线。
-func _draw_aim_preview() -> void:
-	if _throw_fsm == null or not (_throw_fsm.is_in("Charge") or _throw_fsm.is_in("Aim")):
+## 倍率图例(颜色→倍率):按要求文字不写在靶墙上,改在墙右侧一列「色块 + 倍率」对照。
+func _draw_legend() -> void:
+	var b := _board()
+	var font := _font_or_fallback()
+	var x := b.position.x + b.size.x + 46.0
+	var y := b.position.y + 4.0
+	for seg in [&"jackpot", &"x100", &"x20a", &"x5", &"x2a", &"vermin"]:
+		var col: Color = PALETTE.get(seg, Color(0.4, 0.4, 0.4))
+		draw_rect(Rect2(x, y, 22.0, 22.0), col)
+		var bd := GOLD if seg == &"jackpot" else Color(0.0, 0.0, 0.0, 0.35)
+		draw_rect(Rect2(x, y, 22.0, 22.0), bd, false, 2.0)
+		draw_string(font, Vector2(x + 30.0, y + 17.0), MULT_LABEL.get(seg, "?"), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(0.86, 0.89, 0.92))
+		y += 30.0
+
+
+## 发射方向指示:从手沿投掷臂方向的一段射线(不够到墙、不泄露落点),长度随蓄力;摆动青、锁定金。
+func _draw_aim_ray() -> void:
+	if _darts_input == null or _darts_input.current_mode() != &"desktop":
 		return
-	var aim := _cur_aim
-	var win_bonus := FortuneMill.modifiers.value_for(&"win_zone", 0.0)
-	var seg: StringName = FortuneWheelLayout.segment_at(clampf(aim, 0.0, 1.0) * 360.0, win_bonus)["name"]
-	var rect := band_rect_for(seg)
-	draw_rect(rect, Color(CYAN.r, CYAN.g, CYAN.b, 0.22))
-	draw_rect(rect, CYAN, false, 2.0)
-	# 弹道虚线(解算发射速度到档心)
+	if _throw_fsm != null and _throw_fsm.is_in("Resolve"):
+		return
+	var locked: bool = _throw_fsm != null and _throw_fsm.is_in("Charge")
 	var p0 := _hand()
-	var target := rect.get_center()
-	var vx := (target.x - p0.x) / FLIGHT_T
-	var vy := (target.y - p0.y) / FLIGHT_T - 0.5 * GRAV * FLIGHT_T
-	var vv := Vector2(vx, vy)
-	var pt := p0
-	for i in 40:
-		vv += Vector2(0.0, GRAV * 0.0125)
-		pt += vv * 0.0125
-		if i % 2 == 0:
-			draw_circle(pt, 2.0, Color(CYAN.r, CYAN.g, CYAN.b, maxf(0.08, 0.5 - float(i) * 0.01)))
+	var dir := (_aim_wall_point() - _shoulder()).normalized()
+	var col := GOLD if locked else CYAN
+	var ln := 26.0 + (clampf(_power, 0.0, 1.0) * 40.0 if locked else 0.0)
+	var tip := p0 + dir * ln
+	draw_line(p0, tip, Color(col.r, col.g, col.b, 0.9), 3.0)
+	var pp := Vector2(-dir.y, dir.x)
+	draw_colored_polygon(PackedVector2Array([tip + dir * 8.0, tip + pp * 5.0, tip - pp * 5.0]), col)
+
+
+## 墙面区域(HUD 按钮外)按下=停止摆动+锁定发射角+蓄力、松开=投掷。按钮各自 STOP 消费点击,不误触。
+func _unhandled_input(event: InputEvent) -> void:
+	if _darts_input == null or _darts_input.current_mode() != &"desktop":
+		return
+	if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		if (event as InputEventMouseButton).pressed:
+			_on_throw_down()
+		else:
+			_on_throw_up()
 
 
 func _draw_power_bar() -> void:
@@ -501,7 +646,7 @@ func _draw_power_bar() -> void:
 	var bw := 14.0
 	draw_rect(Rect2(bx, top, bw, bh), Color("0e0b09"))
 	draw_rect(Rect2(bx, top, bw, bh), Color("2a231c"), false, 2.0)
-	var sweet_y := top + bh * (1.0 - 0.6)
+	var sweet_y := top + bh * (1.0 - FortuneWheelLayout.POWER_SWEET)
 	draw_rect(Rect2(bx - 3.0, sweet_y - 3.0, bw + 6.0, 6.0), Color(GOLD.r, GOLD.g, GOLD.b, 0.85))
 	var fh := bh * clampf(_power, 0.0, 1.0)
 	var col := CYAN.lerp(GOLD, clampf(_power, 0.0, 1.0))
@@ -537,8 +682,7 @@ func _limbs(f: Vector2, col: Color, wdt: float) -> void:
 	draw_line(hip, sh, col, wdt)
 	draw_line(hip, f + Vector2(-14.0, -6.0), col, wdt)
 	draw_line(hip, f + Vector2(13.0, -6.0), col, wdt)
-	var reach := Vector2(18.0, -20.0).lerp(Vector2(36.0, 2.0), 1.0 - _wind)
-	draw_line(sh, sh + reach, col, wdt)
+	draw_line(sh, _hand(), col, wdt)   # 投掷臂朝当前发射角(手随之上下旋转)
 	draw_line(sh, sh + Vector2(-12.0, 16.0), col, wdt)
 
 
@@ -581,15 +725,33 @@ func _draw_coin(p: Vector2, r: float) -> void:
 	draw_circle(p + Vector2(-r * 0.3, -r * 0.3), r * 0.28, GOLD_HI)
 
 
-func _draw_dart(p: Vector2, dir: Vector2) -> void:
+func _draw_dart(p: Vector2, dir: Vector2, auto := false) -> void:
 	var d := dir.normalized()
 	var perp := Vector2(-d.y, d.x)
 	var tail := p - d * 15.0
 	draw_line(tail, p + d * 6.0, Color("d7dde1"), 3.0)
 	var tip := p + d * 11.0
 	draw_colored_polygon(PackedVector2Array([tip, p + perp * 4.0, p - perp * 4.0]), Color("ffe08a"))
-	draw_line(tail, tail + (perp - d) * 6.0, CYAN, 2.5)
-	draw_line(tail, tail - (perp + d) * 6.0, CYAN, 2.5)
+	var fletch := AI_COL if auto else CYAN   # AI 自动镖用紫尾羽,一眼区别玩家镖
+	draw_line(tail, tail + (perp - d) * 6.0, fletch, 2.5)
+	draw_line(tail, tail - (perp + d) * 6.0, fletch, 2.5)
+
+
+## 雇佣AI 投镖机:买 hire_ai(throws_per_sec>0)才画。支柱 + 机身 + 朝墙枪管,开火时顶灯与炮口脉冲。
+func _draw_ai_turret() -> void:
+	if FortuneMill.darts.throws_per_sec() <= 0.0:
+		return
+	var b := _ai_base()
+	draw_line(b + Vector2(0.0, 14.0), Vector2(b.x, FLOOR_Y), AI_COL_DIM, 5.0)   # 落地支柱
+	var body := Rect2(b.x - 17.0, b.y - 14.0, 34.0, 28.0)
+	draw_rect(body, Color("221a2e"))
+	draw_rect(body, AI_COL_DIM, false, 2.0)
+	var m := _ai_muzzle()
+	draw_line(b + Vector2(6.0, 4.0), m + Vector2(12.0, 0.0), AI_COL, 5.0)       # 朝奖墙的枪管
+	var lit := 0.30 + _ai_flash * 0.7
+	draw_circle(b + Vector2(0.0, -20.0), 5.0, Color(AI_COL.r, AI_COL.g, AI_COL.b, lit))   # 顶灯(开火脉冲)
+	if _ai_flash > 0.2:
+		draw_circle(m + Vector2(12.0, 0.0), 4.0 + _ai_flash * 5.0, Color(AI_COL.r, AI_COL.g, AI_COL.b, _ai_flash * 0.5))
 
 
 ## 投掷态机状态:桌面 Charge 由投掷按钮驱动;触屏在 Idle/Aim 接拉弓;Resolve 落定回 Idle。

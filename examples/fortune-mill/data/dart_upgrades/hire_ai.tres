@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = &"hire_ai"
-title = "Hire AI Grinder"
+title = "雇佣AI磨工"
 kind = &"automation"
 target = &"throws_per_sec"
 op = &"add"

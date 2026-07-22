@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = &"widen_zone"
-title = "Widen Jackpot"
+title = "加宽头奖"
 kind = &"zone"
 target = &"win_zone"
 op = &"add"

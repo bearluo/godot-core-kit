@@ -58,11 +58,35 @@ func _initialize() -> void:
 	if absf(float(r2["gold"])) > 0.01:
 		print("FAIL 2: vermin 应 payout 0,实际 %s" % r2["gold"]); failures += 1
 
-	# 3. radial:同 jackpot,力度=0(松手即投,r=|0-SWEET|/SWEET=1,radial=1.0)→ 500,小于甜点 1000
+	# 3. 力度失手 → 确定性竖直偏移:瞄 jackpot 但力度=0(严重偏弱)→ 命中角大幅下移漂出 jackpot,且确定可复现
 	var t3 = _room(_reg()); var room3 = t3[0]
-	var r3 = room3.throw(WL.aim_for(&"jackpot"), 0.0)
-	if absf(float(r3["gold"]) - 500.0) > 0.01:
-		print("FAIL 3: jackpot 边缘力度应 500(radial 1.0),实际 %s" % r3["gold"]); failures += 1
+	var miss_a = room3.throw(WL.aim_for(&"jackpot"), 0.0)
+	var t3b = _room(_reg()); var room3b = t3b[0]
+	var miss_b = room3b.throw(WL.aim_for(&"jackpot"), 0.0)
+	if miss_a["hits"][0]["seg"] == &"jackpot":
+		print("FAIL 3: 力度=0 应漂出 jackpot,实际仍命中 jackpot"); failures += 1
+	if miss_a["hits"][0]["seg"] != miss_b["hits"][0]["seg"] or absf(float(miss_a["gold"]) - float(miss_b["gold"])) > 0.01:
+		print("FAIL 3b: 漂移应确定可复现(同 aim+力度 → 同档同金额)"); failures += 1
+	if float(miss_a["gold"]) >= 1000.0:
+		print("FAIL 3c: 失手 payout 应低于甜点命中 jackpot 的 1000,实际 %s" % miss_a["gold"]); failures += 1
+
+	# 3d. 小幅失手(偏甜点 0.05,drift≈7.5°<jackpot 半宽 9°)→ 仍在 jackpot 带内但 radial 降 → payout∈(500,1000)
+	var t3c = _room(_reg()); var room3c = t3c[0]
+	var small_miss = room3c.throw(WL.aim_for(&"jackpot"), WL.POWER_SWEET - 0.05)
+	if small_miss["hits"][0]["seg"] != &"jackpot" or not (float(small_miss["gold"]) < 1000.0 and float(small_miss["gold"]) > 500.0):
+		print("FAIL 3d: 小幅失手应仍中 jackpot 但 payout∈(500,1000),实际 seg=%s gold=%s" % [small_miss["hits"][0]["seg"], small_miss["gold"]]); failures += 1
+
+	# 3e. 越界落空:瞄近顶档 x20a(中心 20°)+ 满力(超甜点)→ 命中角冲出上限 <0 → whiff 不计分(seg=miss,gold 0)
+	var t3d = _room(_reg()); var room_up = t3d[0]
+	var up = room_up.throw(WL.aim_for(&"x20a"), 1.0)
+	if not bool(up["hits"][0].get("whiff", false)) or up["hits"][0]["seg"] != &"miss" or absf(float(up["gold"])) > 0.01:
+		print("FAIL 3e: 顶档满力应越上限落空(whiff+seg=miss+gold0),实际 seg=%s whiff=%s gold=%s" % [up["hits"][0]["seg"], up["hits"][0].get("whiff", false), up["gold"]]); failures += 1
+
+	# 3f. 越界落空:瞄近底档 x20b(中心 340°)+ 零力(欠甜点)→ 命中角冲出下限 ≥360 → whiff 不计分
+	var t3e = _room(_reg()); var room_dn = t3e[0]
+	var dn = room_dn.throw(WL.aim_for(&"x20b"), 0.0)
+	if not bool(dn["hits"][0].get("whiff", false)) or absf(float(dn["gold"])) > 0.01:
+		print("FAIL 3f: 底档零力应越下限落空(whiff+gold0),实际 whiff=%s gold=%s" % [dn["hits"][0].get("whiff", false), dn["gold"]]); failures += 1
 
 	# 4. 扇形多镖:买 double_dart 一级 → darts_per_throw=2;throw 返 2 个 hits,各自结算
 	var t4 = _room(_reg()); var room4 = t4[0]; var cur4 = t4[1]

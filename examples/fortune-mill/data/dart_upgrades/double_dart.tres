@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = &"double_dart"
-title = "Double Dart"
+title = "多重飞镖"
 kind = &"multi"
 target = &"darts_per_throw"
 op = &"add"
