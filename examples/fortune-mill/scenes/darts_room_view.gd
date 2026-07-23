@@ -176,7 +176,7 @@ func _apply_input_mode() -> void:
 
 func _build_throw_fsm() -> void:
 	_throw_fsm = KitStateMachine.new()
-	for sname in ["Idle", "Aim", "Charge", "Resolve"]:
+	for sname in ["Idle", "Charge", "Resolve"]:
 		var st := _ThrowState.new()
 		st.name = sname
 		st.host = self
@@ -185,7 +185,7 @@ func _build_throw_fsm() -> void:
 
 
 func _on_throw_down() -> void:
-	if _darts_input == null or _darts_input.current_mode() != &"desktop":
+	if _darts_input == null:
 		return
 	_darts_input.set_aim(_cur_aim)   # 停止摆动、锁定当前发射角(_process 见 locked 即停止旋转)
 	_darts_input.begin_charge()
@@ -194,7 +194,7 @@ func _on_throw_down() -> void:
 
 
 func _on_throw_up() -> void:
-	if _darts_input == null or _darts_input.current_mode() != &"desktop":
+	if _darts_input == null:
 		return
 	_darts_input.release()
 
@@ -246,8 +246,8 @@ func _process(dt: float) -> void:
 	_counter_pulse = maxf(0.0, _counter_pulse - dt * 2.4)
 	for k in _flash.keys():
 		_flash[k] = maxf(0.0, float(_flash[k]) - dt * 3.0)
-	# 桌面:投掷臂/发射角自动上下往复摆动;玩家点击墙面停止摆动、锁定发射角并蓄力(见 _on_throw_down)
-	if _darts_input != null and _darts_input.current_mode() == &"desktop":
+	# 投掷臂/发射角自动上下往复摆动(桌面鼠标、触屏统一);点住停止摆动、锁定发射角并蓄力(见 _on_throw_down)
+	if _darts_input != null:
 		var locked: bool = _throw_fsm != null and _throw_fsm.is_in("Charge")
 		if not locked:
 			_cur_aim += _sweep_dir * AIM_SWEEP_SPEED * dt
@@ -467,7 +467,7 @@ func _build_hud() -> void:
 	add_child(_rate_label)
 	# 操作提示(下中)
 	var hint := Label.new()
-	hint.text = "投掷臂自动上下摆动瞄准 · 点住墙面停止摆动、锁定发射角并蓄力 · 力度到甜点金线=不偏移;超了往上、低了往下,冲出墙外=落空"
+	hint.text = "投掷臂自动上下摆动瞄准 · 点住停止摆动、锁定发射角并蓄力,松开投掷 · 力度到甜点金线=不偏移;超了往上、低了往下,冲出墙外=落空"
 	hint.position = Vector2(size.x * 0.5 - 330.0, size.y - 38.0); hint.size = Vector2(660.0, 24.0)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -617,7 +617,7 @@ func _draw_legend() -> void:
 
 ## 发射方向指示:从手沿投掷臂方向的一段射线(不够到墙、不泄露落点),长度随蓄力;摆动青、锁定金。
 func _draw_aim_ray() -> void:
-	if _darts_input == null or _darts_input.current_mode() != &"desktop":
+	if _darts_input == null:
 		return
 	if _throw_fsm != null and _throw_fsm.is_in("Resolve"):
 		return
@@ -632,15 +632,24 @@ func _draw_aim_ray() -> void:
 	draw_colored_polygon(PackedVector2Array([tip + dir * 8.0, tip + pp * 5.0, tip - pp * 5.0]), col)
 
 
-## 墙面区域(HUD 按钮外)按下=停止摆动+锁定发射角+蓄力、松开=投掷。按钮各自 STOP 消费点击,不误触。
+## 墙面区域(HUD 按钮外)按下=停止摆动+锁定发射角+蓄力、松开=投掷。桌面接鼠标左键、触屏接屏幕触摸
+## (各只接本端事件,避开触屏鼠标模拟导致的重复触发);HUD 按钮各自 STOP 消费点击,不误触。
 func _unhandled_input(event: InputEvent) -> void:
-	if _darts_input == null or _darts_input.current_mode() != &"desktop":
+	if _darts_input == null:
 		return
-	if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
-		if (event as InputEventMouseButton).pressed:
-			_on_throw_down()
-		else:
-			_on_throw_up()
+	var mode: StringName = _darts_input.current_mode()
+	if mode == &"desktop":
+		if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			if (event as InputEventMouseButton).pressed:
+				_on_throw_down()
+			else:
+				_on_throw_up()
+	elif mode == &"touch":
+		if event is InputEventScreenTouch:
+			if (event as InputEventScreenTouch).pressed:
+				_on_throw_down()
+			else:
+				_on_throw_up()
 
 
 func _draw_power_bar() -> void:
@@ -759,30 +768,11 @@ func _draw_ai_turret() -> void:
 		draw_circle(m + Vector2(12.0, 0.0), 4.0 + _ai_flash * 5.0, Color(AI_COL.r, AI_COL.g, AI_COL.b, _ai_flash * 0.5))
 
 
-## 投掷态机状态:桌面 Charge 由投掷按钮驱动;触屏在 Idle/Aim 接拉弓;Resolve 落定回 Idle。
+## 投掷态机状态:Idle →(点住墙面/屏幕)Charge 蓄力 →(松手)Resolve 落定 → 回 Idle。
+## 桌面与触屏统一走旋臂瞄准,按下/松开事件由 view 的 _unhandled_input 接管,本态机只管状态流转。
 class _ThrowState extends KitState:
 	var host
-	var drag: Vector2 = Vector2.ZERO
 
 	func enter(_prev: String) -> void:
 		if name == &"Resolve" and host != null:
 			host._resolve_then_idle()
-		elif name == &"Idle":
-			drag = Vector2.ZERO
-
-	func handle_input(event: InputEvent) -> void:
-		if host == null or host._darts_input == null:
-			return
-		if host._darts_input.current_mode() != &"touch":
-			return
-		if name == &"Idle" and event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
-			drag = Vector2.ZERO
-			transition_to("Aim")
-		elif name == &"Aim":
-			if event is InputEventScreenDrag:
-				drag += (event as InputEventScreenDrag).relative
-			elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
-				var aim := FortuneDartsInput.touch_aim(drag)
-				var power := FortuneDartsInput.touch_power(drag, FortuneDartsInput.DRAG_MAX)
-				host._darts_input.fire(aim, power)
-				transition_to("Resolve")

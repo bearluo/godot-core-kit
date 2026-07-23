@@ -1,7 +1,8 @@
 class_name FortuneDartsInput
 extends Node
-## 双端输入适配:把「鼠标瞄准+蓄力」/「触屏拉弓」都归结为 (aim,power) 一对量,发 thrown 信号。
-## 纯映射数学是 static(可无头测);节点部分读 InputEvent 供 view 用。model/经济与本层解耦。
+## 双端输入适配:桌面(鼠标左键)与触屏(屏幕触摸)统一走「旋臂瞄准 + 点住蓄力 + 松手投」,
+## 都归结为 (aim,power) 一对量发 thrown 信号。纯映射数学是 static(可无头测);
+## 节点部分维护蓄力状态供 view 用。model/经济与本层解耦。
 
 signal thrown(aim: float, power: float)
 signal aim_changed(aim: float)
@@ -67,13 +68,13 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _mode == &"desktop" and _charging:
+	if _charging:   # 桌面与触屏统一:begin_charge 后即按三角波蓄力,松手投
 		_hold += delta
 		power_changed.emit(desktop_power(_hold, POWER_SWEET))
 
 
-## desktop:按下开始蓄力、松开投掷;aim 由 view 每帧用鼠标 y 调 set_aim。
-## touch:view 用 drag 向量算 aim/power,松手调 fire。(具体事件在 view 的 FSM 里接,见 Task 5)
+## 桌面与触屏一致:旋臂每帧 set_aim(当前扫描角),点住 begin_charge 蓄力、松开 release 投掷。
+## (按下/松开事件由 view 的 _unhandled_input 接鼠标左键/屏幕触摸,见 darts_room_view)
 func set_aim(aim: float) -> void:
 	_aim = clampf(aim, 0.0, 1.0)
 	aim_changed.emit(_aim)
