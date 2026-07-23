@@ -19,7 +19,7 @@ func _reg() -> Object:
 	var reg = KitDataRegistry.new()
 	reg.register(&"dart_upgrade", &"sharper_darts", _def(&"sharper_darts", &"value", &"gold_per_dart", &"add", 1.0, 10.0, 1.15, -1))
 	reg.register(&"dart_upgrade", &"double_dart", _def(&"double_dart", &"multi", &"darts_per_throw", &"add", 1.0, 100.0, 2.5, 9))
-	reg.register(&"dart_upgrade", &"widen_zone", _def(&"widen_zone", &"zone", &"win_zone", &"add", 6.0, 50.0, 1.8, 16))
+	reg.register(&"dart_upgrade", &"widen_zone", _def(&"widen_zone", &"zone", &"win_zone", &"add", 6.0, 50.0, 1.8, 4))
 	reg.register(&"dart_upgrade", &"hire_ai", _def(&"hire_ai", &"automation", &"throws_per_sec", &"add", 0.5, 500.0, 1.9, 25))
 	return reg
 
@@ -96,16 +96,17 @@ func _initialize() -> void:
 	if r4["hits"].size() != 2:
 		print("FAIL 4: double_dart 后应 2 支,实际 %d" % r4["hits"].size()); failures += 1
 
-	# 5. widen_zone:jackpot 带外一点,未升级非 jackpot、升级后变 jackpot → payout 升
-	var t5 = _room(_reg()); var room5 = t5[0]; var cur5 = t5[1]; var mods5 = t5[2]
-	# 令落点在 jackpot 中心 - 基础半宽 - 8°(基础带外,x100 侧)
-	var edge_aim := (WL.jackpot_center() - WL.jackpot_half_base() - 8.0) / 360.0
-	var before = room5.throw(edge_aim, WL.POWER_SWEET)   # 非 jackpot(x100)
-	cur5.add(100000.0)
-	for _i in 3: room5.buy_upgrade(&"widen_zone")   # win_zone +18°
-	var after = room5.throw(edge_aim, WL.POWER_SWEET)    # 现应命中 jackpot
+	# 5. widen_zone 逐档换图:落点 a_off=170 在基础档 T0 属 vermin(0 payout)、升满 T4 头奖做大后变 jackpot
+	var t5 = _room(_reg()); var room5 = t5[0]; var cur5 = t5[1]
+	var edge_aim := 170.0 / 360.0
+	var before = room5.throw(edge_aim, WL.POWER_SWEET)   # T0:vermin,payout 0
+	cur5.add(1_000_000.0)
+	for _i in 4: room5.buy_upgrade(&"widen_zone")        # 升到布局档 T4
+	if room5.level_of(&"widen_zone") != 4:
+		print("FAIL 5a: widen_zone 应升到 4 档,实际 %d" % room5.level_of(&"widen_zone")); failures += 1
+	var after = room5.throw(edge_aim, WL.POWER_SWEET)    # T4:jackpot
 	if after["hits"][0]["seg"] != &"jackpot" or float(after["gold"]) <= float(before["gold"]):
-		print("FAIL 5: widen_zone 应把该落点变 jackpot 且 payout 升"); failures += 1
+		print("FAIL 5: 升满加宽头奖应把该落点(T0非头奖)变 jackpot 且 payout 升,before=%s after_seg=%s after=%s" % [before["gold"], after["hits"][0]["seg"], after["gold"]]); failures += 1
 
 	# 6. auto_gold_rate:无 hire_ai → 0;produce 不加
 	var t6 = _room(_reg()); var room6 = t6[0]; var cur6 = t6[1]

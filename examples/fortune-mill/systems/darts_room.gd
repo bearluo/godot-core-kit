@@ -50,7 +50,7 @@ func update(_dt: float) -> void:
 func throw(aim: float, power: float) -> Dictionary:
 	var darts := maxi(1, int(_modifiers.value_for(&"darts_per_throw", 1.0)))
 	var per_dart := _modifiers.value_for(&"gold_per_dart", DART_BASE)
-	var win_bonus := _modifiers.value_for(&"win_zone", 0.0)
+	var layout := FortuneWheelLayout.layout_for(level_of(&"widen_zone"))   # 加宽头奖等级 = 奖励区布局档
 	var gmul := _modifiers.value_for(&"global_mul", 1.0)
 	var land := FortuneWheelLayout.landing(aim, power, _modifiers.value_for(&"aim_steady", 0.0))
 	var r := float(land["r"])
@@ -64,7 +64,7 @@ func throw(aim: float, power: float) -> Dictionary:
 			# 落空:飞出墙面上下限,该镖不计分(pos 越界让 view 把镖画到墙外)
 			hits.append({"seg": &"miss", "mult": 0.0, "r": r, "gold": 0.0, "vermin": false, "whiff": true, "pos": hit_angle / 360.0})
 			continue
-		var seg := FortuneWheelLayout.segment_at(hit_angle, win_bonus)
+		var seg := FortuneWheelLayout.segment_at(hit_angle, layout)
 		var pay: float = per_dart * float(seg["mult"]) * rb * gmul
 		total += pay
 		hits.append({"seg": seg["name"], "mult": float(seg["mult"]), "r": r, "gold": pay, "vermin": bool(seg["vermin"]), "whiff": false, "pos": hit_angle / 360.0})
@@ -82,7 +82,8 @@ func auto_gold_rate() -> float:
 	var per_dart := _modifiers.value_for(&"gold_per_dart", DART_BASE)
 	var ai_skill := _modifiers.value_for(&"ai_skill", 0.0)
 	var gmul := _modifiers.value_for(&"global_mul", 1.0)
-	return tps * float(darts) * per_dart * FortuneWheelLayout.expected_mult(ai_skill) * gmul
+	var layout := FortuneWheelLayout.layout_for(level_of(&"widen_zone"))   # 布局档影响期望(高档头奖大 → 期望更高)
+	return tps * float(darts) * per_dart * FortuneWheelLayout.expected_mult(ai_skill, layout) * gmul
 
 
 ## 当前自动投镖频率(次/秒);买 hire_ai 才 >0。view 用它驱动自动投镖「表现」,

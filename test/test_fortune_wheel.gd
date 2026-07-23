@@ -15,20 +15,23 @@ func _initialize() -> void:
 	if absf(total - 360.0) > 0.01 or not has_jack or not has_vermin:
 		print("FAIL 1: SEGMENTS 应覆盖 360 且含 jackpot+vermin,实际 total=%s" % total); failures += 1
 
-	# 2. jackpot 中心 win_bonus=0 时命中 jackpot
+	# 2. jackpot 中心命中 jackpot(基础档 T0)
 	var jc := WL.jackpot_center()
-	if WL.segment_at(jc, 0.0)["name"] != &"jackpot":
+	if WL.segment_at(jc)["name"] != &"jackpot":
 		print("FAIL 2: jackpot 中心应命中 jackpot"); failures += 1
 
-	# 3. 扩大中奖区:jackpot 边缘外一点,win_bonus=0 非 jackpot,win_bonus 大 → 变 jackpot
-	var edge := jc + WL.jackpot_half_base() + 8.0
-	var was_jack: bool = WL.segment_at(edge, 0.0)["name"] == &"jackpot"
-	var now_jack: bool = WL.segment_at(edge, 40.0)["name"] == &"jackpot"
-	if was_jack or not now_jack:
-		print("FAIL 3: win_bonus 应加宽 jackpot 命中带"); failures += 1
+	# 3. 加宽头奖=逐档换图:落点 a_off=170 在基础档 T0 属 vermin、满档 T4 头奖做大后属 jackpot
+	if WL.segment_at(170.0, WL.layout_for(0))["name"] == &"jackpot":
+		print("FAIL 3a: a_off=170 在 T0 不应是 jackpot"); failures += 1
+	if WL.segment_at(170.0, WL.layout_for(4))["name"] != &"jackpot":
+		print("FAIL 3b: a_off=170 在 T4 应是 jackpot(头奖扩大)"); failures += 1
+	if not (WL.span_of(&"jackpot", WL.layout_for(4)) > WL.span_of(&"jackpot", WL.layout_for(0))):
+		print("FAIL 3c: 头奖 span 应随档变大"); failures += 1
+	if not (WL.span_of(&"vermin", WL.layout_for(4)) < WL.span_of(&"vermin", WL.layout_for(0))):
+		print("FAIL 3d: 劫区 span 应随档变小"); failures += 1
 
 	# 4. vermin 段 mult=0
-	var vseg := WL.segment_at(WL.vermin_center(), 0.0)
+	var vseg := WL.segment_at(WL.vermin_center())
 	if not bool(vseg["vermin"]) or float(vseg["mult"]) != 0.0:
 		print("FAIL 4: vermin 段应 mult=0"); failures += 1
 
@@ -52,9 +55,9 @@ func _initialize() -> void:
 	if float(WL.landing(0.5, 1.0)["r"]) <= float(l_mid["r"]):
 		print("FAIL 7d: 偏离甜点 r 应更大"); failures += 1
 
-	# 7e. aim_for 往返:每档 aim_for(n) 都能确定命中该档
+	# 7e. aim_for 往返:每档 aim_for(n) 都能确定命中该档(基础档 T0)
 	for n in [&"jackpot", &"vermin", &"x100", &"x5", &"x20a"]:
-		if WL.segment_at(WL.aim_for(n) * 360.0, 0.0)["name"] != n:
+		if WL.segment_at(WL.aim_for(n) * 360.0)["name"] != n:
 			print("FAIL 7e: aim_for(%s) 应命中 %s" % [n, n]); failures += 1
 
 	# 8. fan_offsets:居中对称,和≈0,长度对
@@ -63,6 +66,20 @@ func _initialize() -> void:
 		print("FAIL 8: fan_offsets(3) 应对称居中,实际 %s" % str(fan)); failures += 1
 	if WL.fan_offsets(1).size() != 1 or absf(float(WL.fan_offsets(1)[0])) > 0.01:
 		print("FAIL 8b: fan_offsets(1) 应 [0]"); failures += 1
+
+	# 9. 5 套奖励区布局:每套 span 和≡360、含 jackpot+vermin;layout_for 越界钳制;期望随档升
+	for ti in range(WL.LAYOUTS.size()):
+		var lt := 0.0; var hj := false; var hv := false
+		for s in WL.LAYOUTS[ti]:
+			lt += float(s["span"])
+			if s["name"] == &"jackpot": hj = true
+			if bool(s.get("vermin", false)): hv = true
+		if absf(lt - 360.0) > 0.01 or not hj or not hv:
+			print("FAIL 9: 布局 T%d 应覆盖 360 且含 jackpot+vermin,实际 %s" % [ti, lt]); failures += 1
+	if WL.layout_for(-5) != WL.LAYOUTS[0] or WL.layout_for(999) != WL.LAYOUTS[WL.TIER_MAX]:
+		print("FAIL 9b: layout_for 越界应钳制到 [0,TIER_MAX]"); failures += 1
+	if not (WL.expected_mult(0.5, WL.layout_for(4)) > WL.expected_mult(0.5, WL.layout_for(0))):
+		print("FAIL 9c: 高布局档 expected_mult 应更高"); failures += 1
 
 	if failures == 0:
 		print("test_fortune_wheel: ALL PASS"); quit(0)

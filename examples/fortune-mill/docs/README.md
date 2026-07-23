@@ -171,25 +171,27 @@ P4 是大阶段,照 P3 分阶段:**4A 扭蛋(本节)→ 4B NG+/NG++ + Lethal Mod
 扇形多镖各自扎盘、扎上即出金币雨;升级**看得见地改变玩法**;电脑/Android 双端;单 AI 随机→升级练稳准。
 仍是 incremental——真交互只是金币复利循环的**引擎点火与油门**,不是独立手速小游戏。范围仅 Room 1。
 
-- **转盘几何/结算(`systems/wheel_layout.gd`,`class_name FortuneWheelLayout`,纯静态无状态)**:`SEGMENTS`
-  8 扇区铺满 360°(宽度=难度:越窄倍率越高,含一块 `vermin` ×0 没收段);`segment_at(angle, win_bonus)`
-  判命中扇区(`win_bonus` 加宽 jackpot 命中带);`landing(aim, power)` → 落点 `{r, a_off}`(力度甜点
-  `POWER_SWEET` 落盘心 r=0,偏离外移);`radial_bonus(r)` 盘心 2.0→边缘 1.0;`fan_offsets(n)` 扇形多镖角偏移;
-  `expected_mult(ai_skill)` AI/离线期望倍率。全 float、无 RNG → headless 可测(`test_fortune_wheel`)。
+- **奖墙几何/结算(`systems/wheel_layout.gd`,`class_name FortuneWheelLayout`,纯静态无状态)**:**5 套奖励区布局
+  `LAYOUTS[T0..T4]`**(各 8 档铺满 360°,宽度=难度:越窄倍率越高,含一块 `vermin` ×0 没收段;`SEGMENTS`=T0 基础,
+  向后兼容);`layout_for(tier)` 取某档布局(封顶 `TIER_MAX`=4);`segment_at(angle, layout)` 判命中档(纯按 span 找带);
+  `landing(aim, power)` → 落点 `{r, a_off}`(力度甜点 `POWER_SWEET` 落档心 r=0,偏离外移);`radial_bonus(r)` 盘心
+  2.0→边缘 1.0;`fan_offsets(n)` 扇形多镖角偏移;`expected_mult(ai_skill, layout)` AI/离线期望倍率。全 float、无 RNG
+  → headless 可测(`test_fortune_wheel`)。
 - **model(`systems/darts_room.gd`)**:`throw(aim, power)` 纯函数 + model 自持 `wheel_angle`(`update(dt)` 以
   `WHEEL_SPEED` 推进,view 只读渲染);扇形多镖各以 `fan_offsets` 不同角度扎盘,单镖 = `gold_per_dart × 扇区倍率
-  × radial_bonus × global_mul`。jackpot 甜点单镖 = `1×500×2 = 1000`。`auto_gold_rate()` 走 `expected_mult(ai_skill)`
-  期望值,保**在线=离线**。
+  × radial_bonus × global_mul`。jackpot 甜点单镖 = `1×500×2 = 1000`。命中档由**当前布局档**(=加宽头奖等级,
+  `layout_for(level_of(&"widen_zone"))`)决定;`auto_gold_rate()` 走 `expected_mult(ai_skill, 当前档)` 期望值,保**在线=离线**。
 - **6 升级线(看得见地改玩法)**:`sharper_darts`(镖值 add)/`golden_tips`(镖值 mul)/`double_dart`(扇形多镖
-  `darts_per_throw`)/`steady_hand`(操作辅助 `aim_steady`)/**`widen_zone`**(加宽 jackpot 命中带 `win_zone`,
-  换掉旧 bullseye 解锁)/**`hire_ai`**(雇唯一 1 个 AI:一条驱动 `throws_per_sec` + `ai_skill`,L1 随机瞄准→逐级
+  `darts_per_throw`)/`steady_hand`(操作辅助 `aim_steady`)/**`widen_zone`(加宽头奖=逐档换奖励区布局图,`level=布局档
+  T0→T4`,max_level 4;头奖逐档做大、劫区压缩)**/**`hire_ai`**(雇唯一 1 个 AI:一条驱动 `throws_per_sec` + `ai_skill`,L1 随机瞄准→逐级
   练稳准,自动底薪与手动高技巧并存)。
 - **双端输入(`scenes/darts_input.gd`,`FortuneDartsInput`)**:玩家只产 `(aim, power)`;桌面=鼠标 y 定 aim +
   按住蓄力(三角摆动 power)、松开投掷;Android=拉弓(反向=aim、拖长=power)。纯映射 static 可测
   (`test_fortune_input`);跨平台 model/经济/存档完全相同,仅输入层不同。`CoreKit.settings` 的模式覆盖由 view 施加,
   适配器本身不依赖 settings 子系统(保持无头可测)。
-- **view + 投掷态机(`scenes/world.gd`)**:自绘 `_WheelView`(Control)读 `model.wheel_angle` 旋转、按 `win_zone`
-  画加宽金弧;**首个 fortune-mill dogfood `KitStateMachine`** 投掷态机(桌面 Idle→Charge→Resolve、触屏 Idle→Aim→Resolve)。
+- **view + 投掷态机(全屏墙房 `scenes/darts_room_view.gd`,hub `scenes/world.gd` 只留「进入飞镖房」入口)**:墙房
+  `_layout()` 自绘**当前布局档**的 8 档奖墙(加宽头奖升级即换整套图);**首个 fortune-mill dogfood `KitStateMachine`**
+  投掷态机(桌面 Idle→Charge→Resolve、触屏 Idle→Aim→Resolve)。
 - **存档迁移 v3→v4**:升级 id 改名(`bullseye_training`→`widen_zone`、`rattling_gunner`→`hire_ai`)+ 废弃旧
   `dart_tier_*` 统计;成就统计键从 `dart_tier_N` 改为 `dart_seg_<扇区>`(见成就目录)。
 - 验收:`test_fortune_wheel` + `test_fortune_input` + 重写的 `test_fortune_darts` 进 kit 门(run_all 37→**39**);

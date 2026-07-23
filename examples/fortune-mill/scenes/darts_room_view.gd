@@ -147,11 +147,16 @@ func _counter_target() -> Vector2:
 	return Vector2(size.x - 78.0, 34.0)
 
 
-## 按 SEGMENTS 的 span 比例把奖墙竖切成 8 带,返回该档矩形。
+## 当前奖励区布局(加宽头奖等级 = 布局档;view 只读渲染,结算权威在 model)。
+func _layout() -> Array:
+	return FortuneWheelLayout.layout_for(FortuneMill.darts.level_of(&"widen_zone"))
+
+
+## 按当前布局的 span 比例把奖墙竖切成 8 带,返回该档矩形。
 func band_rect_for(seg_name: StringName) -> Rect2:
 	var b := _board()
 	var acc := 0.0
-	for s in FortuneWheelLayout.SEGMENTS:
+	for s in _layout():
 		var frac := float(s["span"]) / 360.0
 		if s["name"] == seg_name:
 			return Rect2(b.position.x, b.position.y + acc * b.size.y, b.size.x, frac * b.size.y)
@@ -391,13 +396,13 @@ func _auto_throw() -> void:
 ## 自动投镖的目标档:按 span 加权抽一档,排除 vermin(AI 磨工不会主动撞守卫区)。纯表现。
 func _auto_target_segment() -> StringName:
 	var total := 0.0
-	for s in FortuneWheelLayout.SEGMENTS:
+	for s in _layout():
 		if s["name"] == &"vermin":
 			continue
 		total += float(s["span"])
 	var roll := randf() * total
 	var acc := 0.0
-	for s in FortuneWheelLayout.SEGMENTS:
+	for s in _layout():
 		if s["name"] == &"vermin":
 			continue
 		acc += float(s["span"])
@@ -581,7 +586,7 @@ func _draw_board(b: Rect2) -> void:
 	draw_rect(b.grow(10.0), Color("3a2c1e"))
 	draw_rect(b.grow(10.0), Color("14100b"), false, 4.0)
 	var acc := 0.0
-	for s in FortuneWheelLayout.SEGMENTS:
+	for s in _layout():
 		var seg: StringName = s["name"]
 		var frac := float(s["span"]) / 360.0
 		var zr := Rect2(b.position.x, b.position.y + acc * b.size.y, b.size.x, frac * b.size.y)
