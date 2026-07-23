@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://drdcr6i3ifvrw"]
+
+[ext_resource type="Script" uid="uid://b366yr1xs4q15" path="res://examples/fortune-mill/scenes/proto_upgrade.gd" id="1_ylk4l"]
+
+[node name="UpgradeProto" type="Control" unique_id=1044155693]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 1152.0
+offset_bottom = 648.0
+script = ExtResource("1_ylk4l")

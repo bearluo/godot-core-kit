@@ -1,0 +1,266 @@
+[gd_scene format=3 uid="uid://dktdttuyykoxc"]
+
+[ext_resource type="SystemFont" uid="uid://c7bfjkp0766re" path="res://examples/fortune-mill/scenes/proto_font.tres" id="1_alkcj"]
+[ext_resource type="Script" uid="uid://ccc31b4d673u6" path="res://examples/fortune-mill/scenes/proto_wheel_view.gd" id="2_bktfy"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_x3iei"]
+content_margin_left = 16.0
+content_margin_top = 16.0
+content_margin_right = 16.0
+content_margin_bottom = 16.0
+bg_color = Color(0.07450981, 0.14509805, 0.11372549, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.7921569, 0.63529414, 0.2901961, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wmkuc"]
+bg_color = Color(0.047058824, 0.09019608, 0.07058824, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nxj0v"]
+bg_color = Color(0.8784314, 0.627451, 0.23529412, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_p26ps"]
+content_margin_left = 14.0
+content_margin_top = 8.0
+content_margin_right = 14.0
+content_margin_bottom = 8.0
+bg_color = Color(0.10980392, 0.16470589, 0.14117648, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.7921569, 0.63529414, 0.2901961, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_85lak"]
+content_margin_left = 14.0
+content_margin_top = 8.0
+content_margin_right = 14.0
+content_margin_bottom = 8.0
+bg_color = Color(0.07450981, 0.1254902, 0.101960786, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.7921569, 0.63529414, 0.2901961, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_va8cb"]
+content_margin_left = 14.0
+content_margin_top = 8.0
+content_margin_right = 14.0
+content_margin_bottom = 8.0
+bg_color = Color(0.14901961, 0.21960784, 0.18431373, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.9019608, 0.7607843, 0.3764706, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="WheelUIProto" type="Control" unique_id=1636049783]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 1152.0
+offset_bottom = 648.0
+
+[node name="Felt" type="ColorRect" parent="." unique_id=4751743]
+layout_mode = 0
+offset_right = 1152.0
+offset_bottom = 648.0
+color = Color(0.05490196, 0.23137255, 0.18039216, 1)
+
+[node name="Vignette" type="ColorRect" parent="." unique_id=69293309]
+layout_mode = 0
+offset_top = 92.0
+offset_right = 1152.0
+offset_bottom = 94.0
+color = Color(0.7921569, 0.63529414, 0.2901961, 1)
+
+[node name="Title" type="Label" parent="." unique_id=1558896383]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 24.0
+offset_right = 600.0
+offset_bottom = 72.0
+theme_override_colors/font_color = Color(0.9411765, 0.8784314, 0.6901961, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 30
+text = "命运磨坊  ·  飞镖房"
+
+[node name="Hint" type="Label" parent="." unique_id=2068753038]
+layout_mode = 0
+offset_left = 42.0
+offset_top = 100.0
+offset_right = 642.0
+offset_bottom = 126.0
+theme_override_colors/font_color = Color(0.6039216, 0.654902, 0.62352943, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 15
+text = "上下瞄准 · 按住蓄力,力度落在甜点 → 扎中盘心,奖励最高翻倍"
+
+[node name="Gold" type="Label" parent="." unique_id=880218673]
+layout_mode = 0
+offset_left = 700.0
+offset_top = 28.0
+offset_right = 1112.0
+offset_bottom = 72.0
+theme_override_colors/font_color = Color(0.95686275, 0.827451, 0.36862746, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 30
+text = "$ 1,000"
+horizontal_alignment = 2
+
+[node name="Wheel" type="Control" parent="." unique_id=888845624]
+anchors_preset = 0
+offset_left = 210.0
+offset_top = 150.0
+offset_right = 630.0
+offset_bottom = 570.0
+script = ExtResource("2_bktfy")
+win_bonus = 30.0
+
+[node name="SidePanel" type="Panel" parent="." unique_id=1560279845]
+layout_mode = 0
+offset_left = 700.0
+offset_top = 150.0
+offset_right = 1112.0
+offset_bottom = 560.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_x3iei")
+
+[node name="SPTitle" type="Label" parent="SidePanel" unique_id=1978878220]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 18.0
+offset_right = 384.0
+offset_bottom = 52.0
+theme_override_colors/font_color = Color(0.7921569, 0.63529414, 0.2901961, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 24
+text = "升 级"
+
+[node name="Row1" type="Label" parent="SidePanel" unique_id=1565302276]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 70.0
+offset_right = 388.0
+offset_bottom = 98.0
+theme_override_colors/font_color = Color(0.9098039, 0.9098039, 0.8784314, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 19
+text = "锋利飞镖    ·    $50"
+
+[node name="Row2" type="Label" parent="SidePanel" unique_id=33963810]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 108.0
+offset_right = 388.0
+offset_bottom = 136.0
+theme_override_colors/font_color = Color(0.9098039, 0.9098039, 0.8784314, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 19
+text = "黄金镖头    ·    $80"
+
+[node name="Row3" type="Label" parent="SidePanel" unique_id=2028085979]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 146.0
+offset_right = 388.0
+offset_bottom = 174.0
+theme_override_colors/font_color = Color(0.9098039, 0.9098039, 0.8784314, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 19
+text = "双重飞镖    ·    $120"
+
+[node name="Row4" type="Label" parent="SidePanel" unique_id=344038013]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 184.0
+offset_right = 388.0
+offset_bottom = 212.0
+theme_override_colors/font_color = Color(0.9098039, 0.9098039, 0.8784314, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 19
+text = "加宽奖区    ·    $200"
+
+[node name="Row5" type="Label" parent="SidePanel" unique_id=1735298100]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 222.0
+offset_right = 388.0
+offset_bottom = 250.0
+theme_override_colors/font_color = Color(0.9098039, 0.9098039, 0.8784314, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 19
+text = "雇佣 AI      ·    $500"
+
+[node name="SPNote" type="Label" parent="SidePanel" unique_id=1993595885]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 286.0
+offset_right = 388.0
+offset_bottom = 386.0
+theme_override_colors/font_color = Color(0.6039216, 0.654902, 0.62352943, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 16
+text = "目标:攒够 $1,000,000
+贿赂看守 Verminous 过关"
+
+[node name="PowerLabel" type="Label" parent="." unique_id=574449677]
+layout_mode = 0
+offset_left = 214.0
+offset_top = 584.0
+offset_right = 284.0
+offset_bottom = 612.0
+theme_override_colors/font_color = Color(0.9098039, 0.9098039, 0.8784314, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 17
+text = "力度"
+
+[node name="PowerBar" type="ProgressBar" parent="." unique_id=1196876459]
+layout_mode = 0
+offset_left = 292.0
+offset_top = 586.0
+offset_right = 592.0
+offset_bottom = 613.0
+theme_override_styles/background = SubResource("StyleBoxFlat_wmkuc")
+theme_override_styles/fill = SubResource("StyleBoxFlat_nxj0v")
+value = 62.0
+show_percentage = false
+
+[node name="ThrowButton" type="Button" parent="." unique_id=1737137199]
+layout_mode = 0
+offset_left = 620.0
+offset_top = 578.0
+offset_right = 740.0
+offset_bottom = 622.0
+theme_override_colors/font_color = Color(0.9411765, 0.8784314, 0.6901961, 1)
+theme_override_fonts/font = ExtResource("1_alkcj")
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("StyleBoxFlat_p26ps")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_85lak")
+theme_override_styles/hover = SubResource("StyleBoxFlat_va8cb")
+text = "投  掷"
