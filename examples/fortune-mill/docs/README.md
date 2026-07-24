@@ -9,6 +9,7 @@ P0 阶段只有飞镖房。目录:
 - `sfx/` —— 程序化音效(sound_bank 音效接缝,P5)
 - `assets/` —— 真素材/音频投放口(drop-in;默认空,见 `assets/README.md`)
 - `data/dart_upgrades/` —— 升级 .tres
+- `tools/` —— 构建脚本(`build_gacha_pack.ps1` 一键出扭蛋 OTA 内容包,见「OTA」节)
 - `test/test_fortune_*.gd` —— headless 断言(进 kit 门 run_all)
 
 架构纪律:经济逻辑跑纯 RefCounted 数据层不挂节点树;UI 只读模型发命令;
@@ -260,3 +261,76 @@ incremental 原本是纯灰底标签+按钮,5A 给可玩路径加视觉与手感
 验收:`FORTUNE_SMOKE PASS ... sfx=0.10s/procedural`(headless 合成 + voice 可辨识 jackpot>throw + 无真音频走程序化)。
 测试 `test_fortune_sound_bank`(每 key 合成/时长>0 / 缓存同实例 / voice 时长不同 / asset_path wav·ogg 接缝 /
 无音频=procedural / 未登记兜底)进 kit 门(飞镖房转盘重构后共 39 测)。播放为纯表现,由非 smoke world 90 帧无报错兜底。
+
+## OTA:把「整个扭蛋房」做成可下载内容包(dogfood `CoreKit.updater`)
+
+这一节把热更新机制(kit 第 15 子系统 `CoreKit.updater` / `KitPackUpdater`,v0.23.0)与导出管线
+(`KitPackManifest` + `build_manifest` CLI,v0.24.0)在本 example 里跑通:**base 只发 4 房、扭蛋房(第 5 房)
+做成额外可下载的内容包**,下载并重启后第 5 房才出现。选「整个房间」是因为扭蛋房含 **GDScript 逻辑**
+(`gacha_room.gd`)+ 数据(3 道具 def/.tres + 4 升级 .tres)+ 跨房协同(GACHA 收集向 add/mul),
+正好压满研究 §4b 最关键的一条结论:**GDScript 逻辑热更必须重启进程**(`GDScriptCache` 无法运行时逐出)。
+
+### 分包只在「导出期」,源码保持全量
+
+**源码仓库不拆**——`run_all` 与 `FORTUNE_SMOKE` 始终带扭蛋房全量跑(`gacha_boost=1.61x executor=true`)。
+拆分只发生在**导出**:瘦身 base 排除扭蛋文件、扭蛋单独导成 `.pck`。为此 `fortune_state.gd` 做了**运行时解耦**——
+不再顶层 `preload` 扭蛋脚本,改 `_load_script_if_exists("res://.../gacha_room.gd")`;缺则 `gacha = null`,
+全流程约 12 处 `if gacha != null:` 守卫(tick/pull/买升级/贿赂/存读档/离线),对外暴露 `has_gacha() -> bool`。
+`world.gd` 据 `has_gacha()` 决定第 5 列是真 UI 还是 `🔒` 占位 + OTA 按钮。**两种情况都验过**:扭蛋在 base
+→ 守卫透明,smoke 全绿;扭蛋缺席 → 0 解析错误、0 运行期 error、占位不崩。
+
+### 三段导出管线(一键脚本 `tools/build_gacha_pack.ps1`)
+
+1. **导出扭蛋包**:`--export-pack "gacha" build/packs/gacha-v1.pck`。`gacha` preset 用
+   `export_filter="resources"` + `export_files` 精确列出扭蛋房 3 脚本 + 7 个 `.tres`,`script_export_mode=2`。
+   `--export-pack` **无需导出模板**(区别于 `--export-debug`),headless 可跑。
+2. **写 spec.json**:`{engine:"", url_base, packs:[{id,version,order,file,url}]}`(`engine` 空 = 用运行引擎
+   `major.minor`,戳进 manifest 供 updater 校验引擎匹配)。
+3. **生成 manifest.json**:跑 kit CLI `res://addons/godot-core-kit/tools/build_manifest.gd -- <spec> <out>`,
+   `KitPackManifest.build` 逐包 `FileAccess.get_sha256` 戳 size/sha256、拼下载 url、按 order 排序、原子写。
+
+产物 `manifest.json` 直接作 `CoreKit.updater.check(<manifest_url>)` 的下发内容。本地联调:
+`build_gacha_pack.ps1 -Serve -Port 8091` 顺带起 `py -m http.server`;真机:`-UrlBase https://你的CDN/`。
+
+> `export_presets.cfg` 是 `.gitignore` 的本机文件,不入库。上面 `gacha` preset 与瘦身 base 的排除项需在
+> 你本机的 `export_presets.cfg` 里配。**瘦身 base**:在 Android(或桌面)preset 的 `exclude_filter` 追加
+> `examples/fortune-mill/systems/gacha_room.gd,examples/fortune-mill/defs/gacha_*,examples/fortune-mill/data/gacha_*`
+> (base 就不含扭蛋房,靠 OTA 补)。
+
+### 游戏内流程 + 重启屏障
+
+缺包时第 5 列占位提供「检查/下载 (OTA)」按钮,全程走 `CoreKit.updater` 信号零轮询:
+
+```
+check(GACHA_MANIFEST_URL)
+  → up_to_date            (无新包)
+  → check_failed(reason)  (网络/引擎不匹配/manifest 坏)
+  → update_available(plan)→ download(plan)
+        → downloaded(id)
+        → ready_to_apply  → 显现「▶ 重启以应用更新」按钮 → restart_to_apply()
+        → download_failed(id, reason)  (sha256 不符/写盘失败)
+```
+
+**为什么必须重启**:下载校验落盘后,包已在 `user://kit_updater/`,但扭蛋房的 GDScript 逻辑只有在**进程重启**、
+`updater` 于 `_init` 阶段 `mount_installed()` 把 `.pck` 挂进 `res://`、`GDScriptCache` 全新加载时才生效——
+运行时 `load_resource_pack` 挂了包也无法让已缓存/未加载的 GDScript 类立即可用(研究 §4b 实测坐实)。故设计成
+**下载(运行时)/ 应用(重启)两相分离**:`ready_to_apply` 只亮重启键,重启后 `mount_installed` + 启动期
+`_load_script_if_exists` 命中挂载包里的 `gacha_room.gd` → 第 5 房带逻辑+数据+跨房协同整体上线。
+
+### 本机端到端已验证(真·HTTP 全链路)
+
+- **解耦**:扭蛋在 base → run_all 42 FAILS=0 + smoke 全绿;扭蛋缺席 → 导入 0 错、启动 exit 0、占位不崩。
+- **导出**:`gacha-v1.pck` 35104 bytes(仅扭蛋房脚本+数据,不含引擎)。
+- **manifest**:CLI 产出 `engine=4.7 sha256=331119da… size=35104`。
+- **真·HTTP 下载**:`PackUpdater` 默认 `HttpPackTransport`(真 `HTTPRequest`)从 localhost 拉 manifest →
+  下载 `.pck` → sha256 校验 → 落盘 `state.json`,`update_available→downloaded→ready_to_apply` 信号齐。
+  (踩坑:`HTTPRequest.request()` 必须在树跑起来后发;`_initialize` 里发返回 `err=3 ERR_UNCONFIGURED`——
+  节点未入树。运行时按钮触发天然规避,不是 transport 缺陷。)
+- **挂载后可玩**:瘦身 base(res:// 藏掉扭蛋)+ 挂载下载包 → 启动 `_load_script_if_exists` 命中挂载包 →
+  `[Fortune] ready: … 3 gacha item + 4 gacha upgrades`(从挂载包加载)→ `FORTUNE_SMOKE PASS`
+  `gacha_boost=1.61x executor=true`。证明:`class_name` 跨挂载解析、`registry.load_dir` 扫挂载包目录、
+  GDScript 逻辑 + 数据 + 跨房协同全部随内容包上线。
+
+**留给用户的真机步骤**(与出 APK 同理,恒是设备侧):出瘦身 base APK(Android preset 排除扭蛋)→ 把
+`build/packs/` 托管到可达地址(改 `world.gd` 的 `GACHA_MANIFEST_URL` 或 CDN)→ 装 base、进扭蛋列点
+「检查/下载」→ 重启 → 扭蛋房出现。见仓库根记忆 [[apk-android-export]] 的出包踩坑。
