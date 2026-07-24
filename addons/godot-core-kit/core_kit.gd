@@ -10,12 +10,12 @@ extends Node
 ## 命名坑:属性 log 会遮蔽全局函数 log()(与旧 Log autoload 同款遮蔽);本脚本
 ## 内部不需要数学 log(),不受影响。
 
-const VERSION := "0.22.0"
+const VERSION := "0.23.0"
 
-## 全局根的保留键 = 14 个内置子系统的属性名。CoreKit.provide 拒绝覆盖这些键;
+## 全局根的保留键 = 15 个内置子系统的属性名。CoreKit.provide 拒绝覆盖这些键;
 ## 子作用域(KitContext)不受此限,可 shadow。
 const RESERVED_KEYS := ["log", "settings", "bus", "scenes", "pool", "saves",
-	"ticker", "input", "audio", "res", "console", "i18n", "layers", "clock"]
+	"ticker", "input", "audio", "res", "console", "i18n", "layers", "clock", "updater"]
 
 const LogScript := preload("res://addons/godot-core-kit/core/log.gd")
 const SettingsScript := preload("res://addons/godot-core-kit/core/settings.gd")
@@ -31,6 +31,7 @@ const ConsoleScript := preload("res://addons/godot-core-kit/console/dev_console.
 const LocaleManagerScript := preload("res://addons/godot-core-kit/systems/locale_manager.gd")
 const LayerManagerScript := preload("res://addons/godot-core-kit/systems/layer_manager.gd")
 const GameClockScript := preload("res://addons/godot-core-kit/systems/game_clock.gd")
+const PackUpdaterScript := preload("res://addons/godot-core-kit/systems/pack_updater.gd")
 
 var log: LogScript
 var settings: SettingsScript
@@ -46,6 +47,7 @@ var console: ConsoleScript
 var i18n: LocaleManagerScript
 var layers: LayerManagerScript
 var clock: GameClockScript
+var updater: PackUpdaterScript
 
 ## 全局根服务注册表:key:String -> service:Variant。内置在 _ready 预注册,
 ## 游戏代码经 provide/service 增删查;KitContext 作用域向上回退最终兜底到这里。
@@ -109,6 +111,15 @@ func _init() -> void:
 	clock.name = "GameClock"
 	add_child(clock)
 
+	# PackUpdater 是唯一在 _init 就执行工作的子系统:相 A 的 mount_installed() 必须
+	# 先于任何游戏内容 preload/load。CoreKit._init()(autoload 构造时,早于其它
+	# autoload 与主场景)正是那个时刻——把「尽早挂包」的时机编码进结构里。
+	# 此时 CoreKit 尚未入树,但 mount_installed 只用 ProjectSettings/FileAccess,不需 tree。
+	updater = PackUpdaterScript.new()
+	updater.name = "PackUpdater"
+	add_child(updater)
+	updater.mount_installed()
+
 
 func _ready() -> void:
 	# 唯一的跨子系统接线点:此时全部子系统已各自 _ready 完毕。
@@ -135,6 +146,7 @@ func _ready() -> void:
 	_services["i18n"] = i18n
 	_services["layers"] = layers
 	_services["clock"] = clock
+	_services["updater"] = updater
 
 	log.info("CoreKit v%s ready" % VERSION)
 

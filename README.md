@@ -29,6 +29,7 @@
 | `CoreKit.i18n` | 本地化(i18n) | [i18n](addons/godot-core-kit/docs/systems/i18n.md) |
 | `CoreKit.layers` | 跨场景常驻具名层 | [layer-manager](addons/godot-core-kit/docs/systems/layer-manager.md) |
 | `CoreKit.clock` | 游戏时钟/日历(混合推进 + bus 广播) | [game-clock](addons/godot-core-kit/docs/systems/game-clock.md) |
+| `CoreKit.updater` | 内容包下载/校验/挂载(分包瘦身 + 热更) | [pack-updater](addons/godot-core-kit/docs/systems/pack-updater.md) |
 | `KitStateMachine`(类库) | Node 型状态机 | [state-machine](addons/godot-core-kit/docs/state-machine.md) |
 | `KitContext`(类库) | 节点绑定的层级服务容器(DI) | [kit-context](addons/godot-core-kit/docs/di/kit-context.md) |
 | `KitRebindButton`/`KitRebindList`(类库) | 键位重绑定 UI 组件 | [rebind](addons/godot-core-kit/docs/ui/rebind.md) |

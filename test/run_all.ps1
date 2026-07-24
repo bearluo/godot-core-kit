@@ -1,4 +1,4 @@
-# godot-core-kit 全量验证:import -> 26 个断言测试 -> demo 冒烟
+# godot-core-kit 全量验证:import -> 27 个断言测试 -> demo 冒烟
 # 用法(在仓库根目录): powershell -File test\run_all.ps1
 $ErrorActionPreference = 'Continue'
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -54,7 +54,7 @@ Write-Output "import exit=$($imp.code)"
 
 $tests = @('test_log','test_event_bus','test_scene_manager','test_object_pool',
   'test_save_manager','test_settings','test_frame_scheduler','test_state_machine',
-  'test_input_manager','test_audio_manager','test_resource_manager','test_kit_context','test_core_kit','test_dev_console','test_locale_manager','test_rebind','test_transition','test_ui_stack','test_layer_manager','test_game_clock','test_kit_inventory','test_kit_data_registry','test_kit_offline','test_kit_modifiers','test_kit_stats','test_kit_achievements')
+  'test_input_manager','test_audio_manager','test_resource_manager','test_kit_context','test_core_kit','test_dev_console','test_locale_manager','test_rebind','test_transition','test_ui_stack','test_layer_manager','test_game_clock','test_kit_inventory','test_kit_data_registry','test_kit_offline','test_kit_modifiers','test_kit_stats','test_kit_achievements','test_pack_updater')
 $fails = 0
 Write-Output "`n=== tests ==="
 foreach ($t in $tests) {
@@ -69,7 +69,7 @@ Write-Output "`n=== demo smoke (--quit-after 60) ==="
 $d = Run-Godot @('--headless','--path','.','res://demo/demo.tscn','--quit-after','60') 90000 'demo'
 Write-Output "demo exit=$($d.code)"
 $demoText = Get-Content $d.out -Raw
-foreach ($e in @('all subsystems smoke-tested','FrameScheduler:','ResourceManager:','KitContext:','-> [Idle]','-> [Run]','-> [Menu]','dispatch(stop) hit=true','stack_depth=0','execute(1+2)=3','god cheat -> god mode','i18n: locale=en t(DEMO_HELLO)=Hello','i18n: locale=zh t(DEMO_HELLO)=','RebindUI: rebind ok=true','conflict_blocked=true','Transition: type=SLIDE none=false','UiStack: depth=3','Layers: hud_z=10','Clock: y1 spring d2 06:00 day_evt=true','Inventory: wood=120 used=3 moved=true','DataRegistry: crops=2 turnip_ok=true')) {
+foreach ($e in @('all subsystems smoke-tested','FrameScheduler:','ResourceManager:','KitContext:','-> [Idle]','-> [Run]','-> [Menu]','dispatch(stop) hit=true','stack_depth=0','execute(1+2)=3','god cheat -> god mode','i18n: locale=en t(DEMO_HELLO)=Hello','i18n: locale=zh t(DEMO_HELLO)=','RebindUI: rebind ok=true','conflict_blocked=true','Transition: type=SLIDE none=false','UiStack: depth=3','Layers: hud_z=10','Clock: y1 spring d2 06:00 day_evt=true','Inventory: wood=120 used=3 moved=true','DataRegistry: crops=2 turnip_ok=true','PackUpdater: mounted=0 content_ver=0 errors=0')) {
   $hit = $demoText -match [regex]::Escape($e)
   Write-Output ("demo marker '{0}' : {1}" -f $e, $(if($hit){'present'}else{'*** MISSING ***'}))
   if (-not $hit) { $fails++ }

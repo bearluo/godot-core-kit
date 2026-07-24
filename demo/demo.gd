@@ -186,6 +186,14 @@ func _ready() -> void:
 	CoreKit.log.info("DataRegistry: crops=%d turnip_ok=%s" % [
 		reg.count(&"crop"), reg.get_def(&"crop", &"turnip") != null])
 
+	# 内容包更新器 冒烟:相 A 查询 API(无网络,不触发下载/挂载/重启)——
+	# 全新工程无已安装包,mounted/local_version 均为 0(经门面第 15 子系统)。
+	# 刻意不调 restart_to_apply():非 headless 下它会 set_restart_on_exit+quit,副作用危险。
+	CoreKit.log.info("PackUpdater: mounted=%d content_ver=%d errors=%d" % [
+		CoreKit.updater.mounted_packs().size(),
+		CoreKit.updater.local_version("content"),
+		CoreKit.updater.mount_errors().size()])
+
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
 
 
