@@ -478,24 +478,29 @@ func _build_ui() -> void:
 	_hivemind_button.pressed.connect(func() -> void: FortuneMill.bribe_hivemind())
 	scol.add_child(_hivemind_button)
 
-	# 扭蛋房列
+	# 扭蛋房列(可下载内容包 OTA:未下载则占位,下载 + 重启后出现)
 	var gcol := _room_panel(cols, "fortune.room_gacha")
 	_add_title(gcol, "fortune.room_gacha")
-	_stuffing_label = Label.new(); gcol.add_child(_stuffing_label)
-	_gacha_status = Label.new(); gcol.add_child(_gacha_status)
-	_gacha_rate_label = Label.new(); gcol.add_child(_gacha_rate_label)
-	_collection_label = Label.new(); gcol.add_child(_collection_label)
-	gcol.add_child(_i18n_button("fortune.pull", _on_pull_pressed))
-	gcol.add_child(HSeparator.new())
-	for id in FortuneMill.registry.ids(&"gacha_upgrade", true):
-		var btn := Button.new()
-		btn.pressed.connect(func() -> void: FortuneMill.buy_gacha_upgrade(id))
-		gcol.add_child(btn)
-		_gacha_upgrade_buttons[id] = btn
-	gcol.add_child(HSeparator.new())
-	_executor_button = Button.new(); _executor_button.text = "贿赂 Executor (需 1M stuffing)"
-	_executor_button.pressed.connect(func() -> void: FortuneMill.bribe_executor())
-	gcol.add_child(_executor_button)
+	if FortuneMill.has_gacha():
+		_stuffing_label = Label.new(); gcol.add_child(_stuffing_label)
+		_gacha_status = Label.new(); gcol.add_child(_gacha_status)
+		_gacha_rate_label = Label.new(); gcol.add_child(_gacha_rate_label)
+		_collection_label = Label.new(); gcol.add_child(_collection_label)
+		gcol.add_child(_i18n_button("fortune.pull", _on_pull_pressed))
+		gcol.add_child(HSeparator.new())
+		for id in FortuneMill.registry.ids(&"gacha_upgrade", true):
+			var btn := Button.new()
+			btn.pressed.connect(func() -> void: FortuneMill.buy_gacha_upgrade(id))
+			gcol.add_child(btn)
+			_gacha_upgrade_buttons[id] = btn
+		gcol.add_child(HSeparator.new())
+		_executor_button = Button.new(); _executor_button.text = "贿赂 Executor (需 1M stuffing)"
+		_executor_button.pressed.connect(func() -> void: FortuneMill.bribe_executor())
+		gcol.add_child(_executor_button)
+	else:
+		var lock := Label.new()
+		lock.text = "🔒 扭蛋房未安装\n内容包待下载\n(OTA 更新后重启出现)"
+		gcol.add_child(lock)
 
 	# 元进度列 (NG+)
 	var ncol := _room_panel(cols, "fortune.room_meta")
@@ -848,23 +853,24 @@ func _refresh() -> void:
 		sbtn.text = "%s  Lv.%d  (%s rb)" % [sdef.title, slvl, Currency.format(scost)]
 		sbtn.disabled = not FortuneMill.ribbons.can_afford(scost)
 	_hivemind_button.disabled = not FortuneMill.can_bribe_hivemind()
-	# 扭蛋房
-	_stuffing_label.text = "Stuffing: %s" % Currency.format(FortuneMill.stuffing.get_amount())
-	_gacha_rate_label.text = "自动: %s st/s" % Currency.format(FortuneMill.gacha.auto_stuffing_rate())
-	var coll: Array = []
-	for iid in FortuneMill.gacha.item_ids():
-		var n := FortuneMill.gacha.owned(iid)
-		if n > 0:
-			coll.append("%s×%d" % [str(iid), n])
-	_collection_label.text = "收藏: %s" % (", ".join(coll) if not coll.is_empty() else "(空)")
-	for id in _gacha_upgrade_buttons:
-		var gdef = FortuneMill.registry.get_def(&"gacha_upgrade", id)
-		var glvl := FortuneMill.gacha.level_of(id)
-		var gcost := FortuneMill.gacha.cost_of(id)
-		var gbtn: Button = _gacha_upgrade_buttons[id]
-		gbtn.text = "%s  Lv.%d  (%s st)" % [gdef.title, glvl, Currency.format(gcost)]
-		gbtn.disabled = not FortuneMill.stuffing.can_afford(gcost)
-	_executor_button.disabled = not FortuneMill.can_bribe_executor()
+	# 扭蛋房(可下载内容包;缺包时列为占位,跳过刷新)
+	if FortuneMill.has_gacha():
+		_stuffing_label.text = "Stuffing: %s" % Currency.format(FortuneMill.stuffing.get_amount())
+		_gacha_rate_label.text = "自动: %s st/s" % Currency.format(FortuneMill.gacha.auto_stuffing_rate())
+		var coll: Array = []
+		for iid in FortuneMill.gacha.item_ids():
+			var n: int = FortuneMill.gacha.owned(iid)
+			if n > 0:
+				coll.append("%s×%d" % [str(iid), n])
+		_collection_label.text = "收藏: %s" % (", ".join(coll) if not coll.is_empty() else "(空)")
+		for id in _gacha_upgrade_buttons:
+			var gdef = FortuneMill.registry.get_def(&"gacha_upgrade", id)
+			var glvl: int = FortuneMill.gacha.level_of(id)
+			var gcost: float = FortuneMill.gacha.cost_of(id)
+			var gbtn: Button = _gacha_upgrade_buttons[id]
+			gbtn.text = "%s  Lv.%d  (%s st)" % [gdef.title, glvl, Currency.format(gcost)]
+			gbtn.disabled = not FortuneMill.stuffing.can_afford(gcost)
+		_executor_button.disabled = not FortuneMill.can_bribe_executor()
 	# 元进度 (NG+)
 	_ng_label.text = "周目: NG+%d   门槛 ×%.0f" % [FortuneMill.prestige.ng_level(), FortuneMill.prestige.threshold_factor()]
 	_prestige_points_label.text = "Prestige 点: %s" % Currency.format(FortuneMill.prestige.points())

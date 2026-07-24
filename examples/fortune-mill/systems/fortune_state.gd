@@ -29,7 +29,7 @@ var darts: DartsRoom
 var lotto: LottoRoom
 var pachinko: PachinkoRoom
 var sushi: SushiRoom
-var gacha: GachaRoom
+var gacha = null   ## 扭蛋房:可下载内容包(OTA)提供;缺包(未下载)为 null,base 各处守卫降级
 var prestige: Prestige     # NG+ 元进度:门槛缩放 + prestige 加成 + Lethal Mode(经共享 modifiers)
 var stats: KitStats            # 统计计数器(累计投镖/最高单次收益/各档靶心首命中…);NG+ 保留不重置
 var achievements: KitAchievements   # 51 条成就引擎:阈值判定 + 去重 + Steam 抽象层;NG+ 保留
@@ -56,14 +56,20 @@ func _ready() -> void:
 	var np := registry.load_dir(&"pachinko_upgrade", PACHINKO_DIR)
 	var nr := registry.load_dir(&"sushi_recipe", SUSHI_RECIPES_DIR)
 	var ns := registry.load_dir(&"sushi_upgrade", SUSHI_UPGRADES_DIR)
-	var ngi := registry.load_dir(&"gacha_item", GACHA_ITEMS_DIR)
-	var ngu := registry.load_dir(&"gacha_upgrade", GACHA_UPGRADES_DIR)
+	var ngi := 0   # 扭蛋房数据在可下载内容包里;缺包为 0(见下 gacha 装配块)
+	var ngu := 0
 	var npu := registry.load_dir(&"prestige_upgrade", PRESTIGE_UPGRADES_DIR)
 	darts = DartsRoom.new(currency, modifiers, registry)
 	lotto = LottoRoom.new(money, modifiers, registry)       # 共享 modifiers → 跨房协同
 	pachinko = PachinkoRoom.new(tickets, modifiers, registry)
 	sushi = SushiRoom.new(ribbons, modifiers, registry)     # 解锁高级配方 → 往别房注册永久开关
-	gacha = GachaRoom.new(stuffing, modifiers, registry)    # 收集道具 → 往各房挂永久被动 add/mul
+	# 扭蛋房 = 可下载内容包(OTA):脚本 + defs + data 都在包里。缺包(未下载)时整块跳过,gacha 保持 null。
+	# updater 已在 CoreKit._init 挂载好内容包(早于本 _ready),故此处 ResourceLoader.exists 能命中包内脚本。
+	var GachaRoomScript = _load_script_if_exists("res://examples/fortune-mill/systems/gacha_room.gd")
+	if GachaRoomScript != null:
+		ngi = registry.load_dir(&"gacha_item", GACHA_ITEMS_DIR)
+		ngu = registry.load_dir(&"gacha_upgrade", GACHA_UPGRADES_DIR)
+		gacha = GachaRoomScript.new(stuffing, modifiers, registry)   # 收集道具 → 往各房挂永久被动 add/mul
 	prestige = Prestige.new(modifiers, registry)            # NG+ 门槛缩放 + prestige 加成(经共享 modifiers)
 	# 成就 + 统计:代码目录建 51 条 def → 注册进 registry;data/achievements/ 有 .tres 则覆盖(drop-in)
 	var na := AchievementCatalog.build(registry)
@@ -113,9 +119,10 @@ func tick(dt: float) -> void:
 	var sp := sushi.produce(dt)  # 自动厨师连续产出
 	if sc > 0.0 or sp > 0.0:
 		CoreKit.bus.publish("fortune:ribbons_changed", ribbons.get_amount())
-	var gp := gacha.produce(dt)  # 自动抽卡连续产出
-	if gp > 0.0:
-		CoreKit.bus.publish("fortune:stuffing_changed", stuffing.get_amount())
+	if gacha != null:
+		var gp: float = gacha.produce(dt)  # 自动抽卡连续产出(缺包时无扭蛋房,跳过)
+		if gp > 0.0:
+			CoreKit.bus.publish("fortune:stuffing_changed", stuffing.get_amount())
 	prestige.tick_lethal(dt)     # Lethal Mode 计时(仅进行中累加)
 
 
@@ -318,11 +325,18 @@ func can_bribe_hivemind() -> bool:
 	return sushi.can_bribe()
 
 
-## --- 扭蛋房命令 ---
+## --- 扭蛋房命令(可下载内容包;缺包时全部降级为无操作) ---
+
+## 扭蛋房是否已装配(内容包已下载并在启动期挂载)。表现层据此显示真房间 or「下载解锁」占位。
+func has_gacha() -> bool:
+	return gacha != null
+
 
 ## 抽一次扭蛋(收集道具进收藏柜 + 产 stuffing;收集道具会往各房挂被动 add/mul → 改别房产率)。
 func do_pull() -> Dictionary:
-	var r := gacha.pull()
+	if gacha == null:
+		return {}
+	var r: Dictionary = gacha.pull()
 	CoreKit.bus.publish("fortune:stuffing_changed", stuffing.get_amount())
 	CoreKit.bus.publish("fortune:item_pulled", r)
 	stats.add(&"gacha_pulls", 1.0); _evaluate_achievements()
@@ -335,7 +349,7 @@ func do_pull() -> Dictionary:
 
 
 func buy_gacha_upgrade(id: StringName) -> bool:
-	if gacha.buy_upgrade(id):
+	if gacha != null and gacha.buy_upgrade(id):
 		CoreKit.bus.publish("fortune:upgrade_purchased", String(id))
 		CoreKit.bus.publish("fortune:stuffing_changed", stuffing.get_amount())
 		return true
@@ -343,7 +357,7 @@ func buy_gacha_upgrade(id: StringName) -> bool:
 
 
 func bribe_executor() -> bool:
-	if gacha.bribe():
+	if gacha != null and gacha.bribe():
 		CoreKit.bus.publish("fortune:room_cleared", "gacha")
 		stats.add(&"guard_gacha", 1.0); _evaluate_achievements()
 		_check_lethal_finish()
@@ -353,14 +367,14 @@ func bribe_executor() -> bool:
 
 
 func can_bribe_executor() -> bool:
-	return gacha.can_bribe()
+	return gacha != null and gacha.can_bribe()
 
 
 ## --- NG+ 元进度命令(ascend 进周目 / prestige 升级 / Lethal Mode) ---
 
 ## 5 房是否全通关(ascend 与 Lethal 完成的判定)。
 func is_run_complete() -> bool:
-	return darts.is_cleared() and lotto.is_cleared() and pachinko.is_cleared() and sushi.is_cleared() and gacha.is_cleared()
+	return darts.is_cleared() and lotto.is_cleared() and pachinko.is_cleared() and sushi.is_cleared() and (gacha == null or gacha.is_cleared())
 
 
 func can_ascend() -> bool:
@@ -420,12 +434,13 @@ func _check_lethal_finish() -> void:
 ## 保留:部分稀有扭蛋道具(epic 稀有度)——重置后按持有数重新收集(其被动层随之重建)。
 func _reset_rooms() -> void:
 	var kept: Dictionary = {}   # 快照要保留的 epic 扭蛋道具(id -> 持有数)
-	for iid in gacha.item_ids():
-		var idef = registry.get_def(&"gacha_item", iid)
-		if idef != null and idef.rarity == &"epic":
-			var n := gacha.owned(iid)
-			if n > 0:
-				kept[iid] = n
+	if gacha != null:
+		for iid in gacha.item_ids():
+			var idef = registry.get_def(&"gacha_item", iid)
+			if idef != null and idef.rarity == &"epic":
+				var n: int = gacha.owned(iid)
+				if n > 0:
+					kept[iid] = n
 	currency.set_amount(1.0)    # 飞镖回开局 $1
 	money.set_amount(0.0)
 	tickets.set_amount(0.0)
@@ -435,9 +450,10 @@ func _reset_rooms() -> void:
 	lotto.from_dict({})         # 含清掉 JACKPOT 永久 global_mul(spec:累积不重置,除 NG+)
 	pachinko.from_dict({})
 	sushi.from_dict({})
-	gacha.from_dict({})         # 收藏柜清空、被动层撤除
-	for iid in kept:
-		gacha.grant_item(iid, int(kept[iid]))   # 重新收集保留的 epic 道具 → 被动层重建
+	if gacha != null:
+		gacha.from_dict({})         # 收藏柜清空、被动层撤除
+		for iid in kept:
+			gacha.grant_item(iid, int(kept[iid]))   # 重新收集保留的 epic 道具 → 被动层重建
 
 
 func _publish_all_currencies() -> void:
@@ -456,7 +472,8 @@ func settle_offline(last_seen: float, now: float) -> Dictionary:
 	var rep_m := KitOffline.settle(last_seen, now, lotto.auto_money_rate(), OFFLINE_CAP_SECONDS)
 	var rep_t := KitOffline.settle(last_seen, now, pachinko.auto_ticket_rate(), OFFLINE_CAP_SECONDS)
 	var rep_r := KitOffline.settle(last_seen, now, sushi.auto_ribbon_rate(), OFFLINE_CAP_SECONDS)
-	var rep_st := KitOffline.settle(last_seen, now, gacha.auto_stuffing_rate(), OFFLINE_CAP_SECONDS)
+	var st_rate: float = gacha.auto_stuffing_rate() if gacha != null else 0.0   # 缺包 → rate 0 → 零报告(形状不变)
+	var rep_st := KitOffline.settle(last_seen, now, st_rate, OFFLINE_CAP_SECONDS)
 	offline_report = {"darts": rep_g, "lotto": rep_m, "pachinko": rep_t, "sushi": rep_r, "gacha": rep_st}
 	if rep_g.earned > 0.0:
 		currency.add(rep_g.earned)
@@ -492,7 +509,7 @@ func to_dict() -> Dictionary:
 		"lotto": lotto.to_dict(),
 		"pachinko": pachinko.to_dict(),
 		"sushi": sushi.to_dict(),
-		"gacha": gacha.to_dict(),
+		"gacha": gacha.to_dict() if gacha != null else {},
 		"prestige": prestige.to_dict(),
 		"stats": stats.to_dict(),            # 统计计数器(NG+ 保留,跨周目累积)
 		"achievements": achievements.to_dict(),   # 已解锁成就集合(NG+ 保留)
@@ -510,7 +527,8 @@ func from_dict(d: Dictionary) -> void:
 	lotto.from_dict(d.get("lotto", {}))
 	pachinko.from_dict(d.get("pachinko", {}))
 	sushi.from_dict(d.get("sushi", {}))
-	gacha.from_dict(d.get("gacha", {}))
+	if gacha != null:
+		gacha.from_dict(d.get("gacha", {}))
 	prestige.from_dict(d.get("prestige", {}))   # 重建门槛因子 + prestige 加成(须在各房 from_dict 之后无强序依赖,源相互独立)
 	stats.from_dict(d.get("stats", {}))
 	achievements.from_dict(d.get("achievements", {}))
@@ -571,6 +589,15 @@ func _build_migrator() -> SaveMigrator:
 			d["stats"] = st
 		return d)
 	return m
+
+
+## 若脚本路径存在(base 或已在启动期挂载的内容包)则 load,否则返回 null。
+## 可下载内容包(扭蛋房)的存在性探测:updater 在 CoreKit._init 已挂好包,
+## 故此处 ResourceLoader.exists 能命中包内脚本(DirAccess/ResourceLoader 均可见 mounted pack)。
+func _load_script_if_exists(path: String):
+	if ResourceLoader.exists(path):
+		return load(path)
+	return null
 
 
 ## 窗口关闭时存一次(退出存)。只挂 WM_CLOSE_REQUEST——不挂 EXIT_TREE,
