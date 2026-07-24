@@ -6,7 +6,7 @@ extends SceneTree
 ## ④ prestige 加成经共享 modifiers,跨房间重置(darts.from_dict)存活 ⑤ Lethal Mode 撤加成 + 门槛回 1M
 ## + 计时 + 最佳时间取 min + 期间禁买 ⑥ 持久化(ng_level/points/levels/best + modifier 重放)。
 const Currency := preload("res://examples/fortune-mill/systems/currency.gd")
-const KitModifiers := preload("res://examples/fortune-mill/systems/kit_modifiers.gd")
+const KitModifiers := preload("res://addons/godot-core-kit/modifiers/kit_modifiers.gd")
 const Prestige := preload("res://examples/fortune-mill/systems/prestige.gd")
 const DartsRoom := preload("res://examples/fortune-mill/systems/darts_room.gd")
 const PrestigeUpgradeDef := preload("res://examples/fortune-mill/defs/prestige_upgrade_def.gd")

@@ -2,7 +2,7 @@ extends SceneTree
 ## LottoRoom + 跨房协同 headless 断言。运行:godot --headless --path . -s res://test/test_fortune_lotto.gd
 ## 重点:JACKPOT → global_mul 永久乘法层 → 经共享 KitModifiers 放大飞镖房(跨房协同证明)。
 const Currency := preload("res://examples/fortune-mill/systems/currency.gd")
-const KitModifiers := preload("res://examples/fortune-mill/systems/kit_modifiers.gd")
+const KitModifiers := preload("res://addons/godot-core-kit/modifiers/kit_modifiers.gd")
 const LottoRoom := preload("res://examples/fortune-mill/systems/lotto_room.gd")
 const DartsRoom := preload("res://examples/fortune-mill/systems/darts_room.gd")
 const LottoUpgradeDef := preload("res://examples/fortune-mill/defs/lotto_upgrade_def.gd")

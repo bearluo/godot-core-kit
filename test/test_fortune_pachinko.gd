@@ -3,7 +3,7 @@ extends SceneTree
 ## 重点:DICE roll → global_mul 叠临时 mul,update(dt) 过期自动撤下;与 JACKPOT 永久 mul 同 target 乘性叠加;
 ## 经共享 KitModifiers 放大飞镖房(跨房)。
 const Currency := preload("res://examples/fortune-mill/systems/currency.gd")
-const KitModifiers := preload("res://examples/fortune-mill/systems/kit_modifiers.gd")
+const KitModifiers := preload("res://addons/godot-core-kit/modifiers/kit_modifiers.gd")
 const PachinkoRoom := preload("res://examples/fortune-mill/systems/pachinko_room.gd")
 const DartsRoom := preload("res://examples/fortune-mill/systems/darts_room.gd")
 const PachinkoUpgradeDef := preload("res://examples/fortune-mill/defs/pachinko_upgrade_def.gd")

@@ -1,7 +1,7 @@
 extends SceneTree
 ## DartsRoom(命运转盘模型)headless 断言。运行:godot --headless --path . -s res://test/test_fortune_darts.gd
 const Currency := preload("res://examples/fortune-mill/systems/currency.gd")
-const KitModifiers := preload("res://examples/fortune-mill/systems/kit_modifiers.gd")
+const KitModifiers := preload("res://addons/godot-core-kit/modifiers/kit_modifiers.gd")
 const WL := preload("res://examples/fortune-mill/systems/wheel_layout.gd")
 const DartsRoom := preload("res://examples/fortune-mill/systems/darts_room.gd")
 const DartUpgradeDef := preload("res://examples/fortune-mill/defs/dart_upgrade_def.gd")

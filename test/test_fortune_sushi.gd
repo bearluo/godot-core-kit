@@ -4,7 +4,7 @@ extends SceneTree
 ## 重点:① 手动 craft 消耗食材 + 计时完成入账 ② craft_speed/ribbons_per_sushi 升级 ③ 自动厨师期望率
 ## ④ 解锁高级配方 → 往别房 throws_per_sec 注册永久开关(规则开关型协同)⑤ 经共享 KitModifiers 放大飞镖(跨房)⑥ 持久化。
 const Currency := preload("res://examples/fortune-mill/systems/currency.gd")
-const KitModifiers := preload("res://examples/fortune-mill/systems/kit_modifiers.gd")
+const KitModifiers := preload("res://addons/godot-core-kit/modifiers/kit_modifiers.gd")
 const SushiRoom := preload("res://examples/fortune-mill/systems/sushi_room.gd")
 const DartsRoom := preload("res://examples/fortune-mill/systems/darts_room.gd")
 const SushiRecipeDef := preload("res://examples/fortune-mill/defs/sushi_recipe_def.gd")

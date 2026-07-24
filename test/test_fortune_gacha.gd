@@ -5,7 +5,7 @@ extends SceneTree
 ## ③ stuffing_per_pull 价值升级 ④ 自动抽卡期望率 ⑤ 稀有度权重升级抬高期望
 ## ⑥ 被动收集协同经共享 KitModifiers 放大别房(飞镖,第 4 类协同)⑦ 持久化(收藏柜 + 被动层重放)。
 const Currency := preload("res://examples/fortune-mill/systems/currency.gd")
-const KitModifiers := preload("res://examples/fortune-mill/systems/kit_modifiers.gd")
+const KitModifiers := preload("res://addons/godot-core-kit/modifiers/kit_modifiers.gd")
 const GachaRoom := preload("res://examples/fortune-mill/systems/gacha_room.gd")
 const DartsRoom := preload("res://examples/fortune-mill/systems/darts_room.gd")
 const GachaItemDef := preload("res://examples/fortune-mill/defs/gacha_item_def.gd")

@@ -3,10 +3,10 @@ extends SceneTree
 ## 运行:godot --headless --path . -s res://test/test_fortune_achievements.gd
 ## 重点:① evaluate 达阈值才解锁 ② 触发去重(已解锁不重触、再求值无新解锁)③ 返回「新解锁」列表
 ## ④ Steam sink 每条只触发一次 ⑤ 手动 unlock 去重 ⑥ 持久化恢复已解锁集合 ⑦ 目录 51 条 + 阈值正确。
-const KitStats := preload("res://examples/fortune-mill/systems/kit_stats.gd")
-const KitAchievements := preload("res://examples/fortune-mill/systems/kit_achievements.gd")
+const KitStats := preload("res://addons/godot-core-kit/stats/kit_stats.gd")
+const KitAchievements := preload("res://addons/godot-core-kit/achievements/kit_achievements.gd")
 const AchievementCatalog := preload("res://examples/fortune-mill/systems/achievement_catalog.gd")
-const AchievementDef := preload("res://examples/fortune-mill/defs/achievement_def.gd")
+const AchievementDef := preload("res://addons/godot-core-kit/achievements/achievement_def.gd")
 const KitDataRegistry := preload("res://addons/godot-core-kit/data/kit_data_registry.gd")
 
 
