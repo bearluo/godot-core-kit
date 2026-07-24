@@ -72,7 +72,8 @@ func _on_ready() -> void:
         show_toast("更新已就绪,请重启游戏")
 ```
 
-`manifest.json` / 本地 `state.json` 结构见设计文档 `docs/design/2026-07-23-kit-updater-design.md` §7。
+`manifest.json` 由导出管线 [`KitPackManifest`](../tools/export-pipeline.md) 生成;`manifest.json` /
+本地 `state.json` 结构见设计文档 `docs/design/2026-07-23-kit-updater-design.md` §7。
 
 ## 注意事项
 
@@ -80,5 +81,5 @@ func _on_ready() -> void:
 - **引擎版本锁死**:包头会拒收「用比运行引擎更新的版本导出的包」。manifest 与 `state.json` 都带 `engine` 字段并在挂载/检查前严格校验(不匹配 → 不挂/不下)。**升级 Godot 版本时,所有历史内容包都要重新导出。**
 - **原子性**:下载走「暂存区 → 全部 sha256 校验通过 → temp+rename 改写 `state.json`」。任何中途失败都不会让已安装集合处于半更新状态。
 - **加密**:起步**不加密**(用官方标准模板)。PCK 加密要求自编译导出模板并全链同 key,会改动整条构建链,留作后续可选项。
-- **首轮只做机制**:导出「薄壳 base + 内容包」的管线、fortune-mill 真机 OTA、Web 端验证、Android 自重启真机验证均在后续轮次。`restart_to_apply()` 在 Android 上的自重启能力**尚未真机验证**。
+- **导出管线已交付**:产出「薄壳 base + 内容包 + manifest.json」的工具见 [export-pipeline](../tools/export-pipeline.md)(`KitPackManifest` + `build_manifest.gd`,manifest 格式与本子系统 `check()` 逐字咬合)。fortune-mill 真机 OTA、Web 端验证、Android 自重启真机验证仍在后续轮次;`restart_to_apply()` 在 Android 上的自重启能力**尚未真机验证**。
 - **测试边界**:`HttpPackTransport`(真网络)不被 headless 门覆盖;`test_pack_updater.gd` 经注入假件覆盖 `check`/`download` 行为,另有一个真 zip → 真 `load_resource_pack` 的端到端集成测。

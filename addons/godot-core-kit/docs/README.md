@@ -54,6 +54,12 @@
 | [kit-stats](stats/kit-stats.md) | `class_name KitStats` | 统计计数器:add 累加 / record_max 峰值 / set_value 快照 / get_value,to_dict 存档(生涯计数) |
 | [kit-achievements](achievements/kit-achievements.md) | `class_name KitAchievements` / `AchievementDef` | 成就引擎:数据驱动阈值判定 evaluate(stats)、触发去重返回新解锁、set_steam_sink 平台抽象层 |
 
+### tools/ —— 构建期工具（不接门面、运行时不实例化）
+
+| 文档 | 访问 | 一句话 |
+|---|---|---|
+| [export-pipeline](tools/export-pipeline.md) | `class_name KitPackManifest` + `build_manifest.gd` CLI | 导出管线:薄壳 base + 内容包 + 生成 `CoreKit.updater` 消费的 `manifest.json`(sha256/size/引擎版本) |
+
 ## 约定
 
 - 所有门面子系统经 `CoreKit.<属性>` 访问,无单独全局单例名。
