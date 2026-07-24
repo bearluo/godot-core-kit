@@ -37,6 +37,10 @@
 | `KitUiStack`/`KitUiScreen`(类库) | UI 屏栈导航 | [ui-stack](addons/godot-core-kit/docs/ui/ui-stack.md) |
 | `KitInventory`(类库) | 槽位制物品容器 | [kit-inventory](addons/godot-core-kit/docs/inventory/kit-inventory.md) |
 | `KitDataRegistry`(类库) | 定义数据表(作物/物品/配方) | [kit-data-registry](addons/godot-core-kit/docs/data/kit-data-registry.md) |
+| `KitOffline`(类库) | 离线结算(墙钟差×产率,封顶+防回拨) | [kit-offline](addons/godot-core-kit/docs/offline/kit-offline.md) |
+| `KitModifiers`(类库) | 数值修正器栈((base+Σadd)×Πmul) | [kit-modifiers](addons/godot-core-kit/docs/modifiers/kit-modifiers.md) |
+| `KitStats`(类库) | 统计计数器(生涯计数,存档) | [kit-stats](addons/godot-core-kit/docs/stats/kit-stats.md) |
+| `KitAchievements`/`AchievementDef`(类库) | 成就引擎(数据驱动阈值判定 + 去重) | [kit-achievements](addons/godot-core-kit/docs/achievements/kit-achievements.md) |
 
 ## 从 0.3.x 升级(破坏性)
 
@@ -53,6 +57,12 @@ powershell -File test\run_all.ps1       # 一键全量,末行 FAILS=0 为全绿
 
 ## 版本
 
+- **0.23.0** — 新增门面第 15 子系统 `CoreKit.updater`(`systems/pack_updater.gd`,`extends Node`):内容包(`.pck`/`.zip`)下载 / 校验 / 挂载机制,支撑「分包瘦身 + 热更」。两相结构:相 A 启动期在 `_init` 自动挂载已装包(按 `order` + 引擎版本闸门 + 单包失败隔离,只可查询不用信号);相 B 运行期 `check → download → restart_to_apply` 三动词 + 信号,原子暂存(全 sha256 校验通过才 temp+rename 改 `state.json`)。两个可注入接缝(传输 `HttpPackTransport` / 挂载 `ProjectSettings.load_resource_pack`),单测注入假件。含 GDScript 逻辑的包换逻辑必须重启进程(实测约束,见 `docs/research/2026-07-23-godot-hot-update-feasibility.md` §4b)。打破 14→15 子系统。纯增量,API 无破坏。
+- **0.22.0** — `SaveManager` 叠加存档版本迁移链:信封 `_version` 从写死改为盖 `_data_version`(默认 1),`set_data_version`/`data_version` + `register_migration(from, fn)` 注册 v(n)→v(n+1) 迁移函数;`load()` 版本不符时按序自动迁移,缺步 `migration_missing:N` / 非字典 `migration_error:N` / 未来版本 `future_version` 三者 emit `migration_failed` + 返 `{}` 保底(不静默覆盖旧文件),成功 emit `migrated`。默认版本 1 + 无迁移注册 → 逐字节兼容既有 v1 存档。纯增量,API 无破坏。
+- **0.21.0** — 新增两个 off-facade 类库 `KitStats`(`stats/`,`extends RefCounted`)与 `KitAchievements` + `AchievementDef`(`achievements/`)。`KitStats`:统计计数器,`add` 累加 / `record_max` 单调取大 / `set_value` 快照 / `get_value` + `to_dict`/`from_dict`,放置/成就的生涯计数心脏。`KitAchievements`:数据驱动阈值判定 `evaluate(stats)` 解锁「已达阈值且未解锁」者、返回新解锁 id 列表、已解锁绝不重触(去重)、`set_steam_sink` 平台抽象层(默认空,不绑 SDK)。零依赖、不接门面。纯增量,API 无破坏。
+- **0.20.0** — 新增 off-facade 数值修正器栈 `KitModifiers`(`modifiers/`,`extends RefCounted`):`(base+Σadd)×Πmul` 分层聚合,每条带 `source_id`,脏标缓存,`breakdown`/`sources` 明细。incremental/数值成长的产出心脏(Fortune Mill 跨房协同定型后反哺)。零依赖、不接门面。纯增量,API 无破坏。
+- **0.19.0** — 新增 off-facade 离线结算器 `KitOffline`(`offline/`,`extends RefCounted`,纯静态 `settle`):墙钟差 × 产率、封顶 8h、时间回拨(`now < last`)按 0 防作弊,离线补偿与在线同率。零依赖、不参与存档(调用方持久化 `last_seen`)。放置/挂机游戏读档补收益。纯增量,API 无破坏。
+- **0.18.0** — dogfood(farm-sim 消费者视角)驱动的三处向后兼容便利方法:`KitDataRegistry.ids`/`types` 加 `sorted` 可选参数(字典序,规避 StringName 数组按指针地址排的坑);`KitInventory.totals()` 跨格按 id 聚合为 `{id:总数}`;`KitStateMachine.state_name()`/`is_in(query)` null 安全的当前态查询。纯增量,API 无破坏。
 - **0.17.0** — 新增 off-facade 定义数据表 `KitDataRegistry`(`data/`,`extends RefCounted`):按 `type` 分组存放游戏自定义 `Resource` 定义(作物/物品/配方),`register` 显式登记 + `load_dir` 扫目录批量(id 取属性或文件名,剥 `.remap` 导出坑),`get_def`/`has_def`/`all`/`ids`/`types`/`count`/`clear`。零依赖、不接门面、不参与存档。纯增量,API 无破坏。
 - **0.16.0** — 新增 off-facade 槽位制物品容器 `KitInventory`(`inventory/`,`extends RefCounted`):固定 capacity 格,`add` 自动堆叠+填空+溢出返余量("背包满"),`move` 空移/合并/交换,per-slot `data` 分品质,`changed` 信号,`to_dict`/`from_dict`。游戏每个容器(背包/箱子/商店)各 `new` 一个,零依赖、不接门面。纯增量,API 无破坏。
 - **0.15.0** — 新增门面第 14 子系统 `CoreKit.clock`(`systems/game_clock.gd`,`extends Node`):年/季/日/时/分 世界时钟,混合推进(`time_scale` 自动走时 + `advance_minutes`/`advance_day`/`sleep_to_next_day` 显式跳时)+ 原生 signal + `CoreKit.bus` 广播 `clock:*`(`bind_bus` 注入,未绑定降级)+ `to_dict`/`from_dict` 持久化。顺带确立全 kit 事件命名约定 `namespace:event`(冒号)。打破 13→14 子系统(门面接线 + `test_core_kit` 同步)。纯增量,API 无破坏。
