@@ -79,6 +79,11 @@ var _art: FortuneArtBank
 var _fx: FortuneFx
 var _sfx: FortuneSoundBank
 
+## OTA:扭蛋房内容包的 manifest 地址(改成你的 CDN/服务器)。本地测试用 python -m http.server。
+const GACHA_MANIFEST_URL := "http://localhost:8080/manifest.json"
+var _ota_status: Label        # 扭蛋房占位处的 OTA 状态标签(仅缺包时建)
+var _ota_restart_btn: Button  # 下载完成后显现:重启以应用更新
+
 
 func _ready() -> void:
 	if OS.get_environment("FORTUNE_SMOKE") == "1":
@@ -103,6 +108,13 @@ func _ready() -> void:
 	CoreKit.bus.subscribe("fortune:room_cleared", _on_cleared)
 	CoreKit.bus.subscribe("fortune:achievement_unlocked", _on_achievement_unlocked)
 	CoreKit.i18n.locale_changed.connect(_on_locale_changed)   # 切语言 → 刷新 i18n 文案
+	# OTA:扭蛋房内容包更新流程(check→download→重启屏障)。仅缺包时占位 UI 触发 check。
+	CoreKit.updater.update_available.connect(_on_ota_available)
+	CoreKit.updater.up_to_date.connect(func() -> void: _ota_set("已是最新(未发现扭蛋房内容包)"))
+	CoreKit.updater.check_failed.connect(func(r: String) -> void: _ota_set("检查失败: %s" % r))
+	CoreKit.updater.downloaded.connect(func(id: String) -> void: _ota_set("已下载 %s ✓" % id))
+	CoreKit.updater.download_failed.connect(func(id: String, r: String) -> void: _ota_set("下载失败 %s: %s" % [id, r]))
+	CoreKit.updater.ready_to_apply.connect(_on_ota_ready)
 	_refresh()
 	_maybe_show_offline()
 
@@ -499,8 +511,20 @@ func _build_ui() -> void:
 		gcol.add_child(_executor_button)
 	else:
 		var lock := Label.new()
-		lock.text = "🔒 扭蛋房未安装\n内容包待下载\n(OTA 更新后重启出现)"
+		lock.text = "🔒 扭蛋房未安装"
 		gcol.add_child(lock)
+		var dl := Button.new()
+		dl.text = "检查 / 下载扭蛋房 (OTA)"
+		dl.pressed.connect(_on_ota_check)
+		gcol.add_child(dl)
+		_ota_status = Label.new()
+		_ota_status.text = "内容包待下载"
+		gcol.add_child(_ota_status)
+		_ota_restart_btn = Button.new()
+		_ota_restart_btn.text = "▶ 重启以应用更新"
+		_ota_restart_btn.visible = false
+		_ota_restart_btn.pressed.connect(func() -> void: CoreKit.updater.restart_to_apply())
+		gcol.add_child(_ota_restart_btn)
 
 	# 元进度列 (NG+)
 	var ncol := _room_panel(cols, "fortune.room_meta")
@@ -703,6 +727,30 @@ func _on_pull_pressed() -> void:
 		return
 	var st := Currency.format(st_won)
 	_gacha_status.text = "抽到 [%s] %s (+%s stuffing, 持有 %d)" % [str(r.get("rarity", &"")), str(r.get("item", &"")), st, int(r.get("owned", 0))]
+
+
+## --- OTA:扭蛋房内容包更新(check → download → 重启屏障;含 GDScript 逻辑必须重启) ---
+
+func _on_ota_check() -> void:
+	_ota_set("检查更新中…")
+	CoreKit.updater.check(GACHA_MANIFEST_URL)
+
+
+func _on_ota_available(plan: Dictionary) -> void:
+	_ota_set("发现扭蛋房内容包,下载中…")
+	CoreKit.updater.download(plan)
+
+
+func _on_ota_ready() -> void:
+	# 下载校验落盘完成;扭蛋房含 GDScript 逻辑 → 必须重启进程才生效(研究 §4b)。
+	_ota_set("下载完成 ✓ 重启后扭蛋房出现")
+	if _ota_restart_btn != null:
+		_ota_restart_btn.visible = true
+
+
+func _ota_set(msg: String) -> void:
+	if _ota_status != null:
+		_ota_status.text = msg
 
 
 ## Lethal 按钮:进行中 → 放弃;否则开一局速通。
