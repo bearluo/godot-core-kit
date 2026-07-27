@@ -1,0 +1,23 @@
+﻿Godot Engine v4.7.stable.mono.official.5b4e0cb0f - https://godotengine.org
+
+[15:21:30.267][INFO] CoreKit v0.24.1 ready[0m
+[15:21:30.288][INFO] CrystalLine ready 鈥?source tower_fire=baked place_sfx=baked[0m
+SESSION_BOOT title_scene=crystal_line art=baked sfx=baked gold=80 hp=10
+SESSION_PLACE1 ok=true gold=40 towers=1 event=placed msg=鍙敜! 绗冨畾钀戒笅銆?
+SESSION_PLACE2 ok=false gold=40 towers=1 event=no_gold
+SESSION_WAVE_START ok=true wave=1 spawn_left=6
+SESSION_COMBAT saw_enemy=true max_enemies=5 waves_cleared=1 gold=62 hp=5 game_over=false last_event=wave_clear
+SESSION_RESET gold=80 hp=10
+SESSION_DEFEAT game_over=true hp=0 waves_touched=2 last_event=defeat
+SESSION_ANTI_MICRO has_player_move_api=false tower_types=fire,ice only
+SESSION_DONE
+godot : WARNING: 3 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+所在位置 行:1 字符: 1
++ godot --headless --path . -s res://test/playtest_crystal_line_session ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARNING: 3 Obje...` for details).:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   at: cleanup (core/object/object.cpp:2535)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)
