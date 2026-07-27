@@ -106,3 +106,4 @@ SaveManager 只吃纯数据(JSON-native 类型)。`save()` 落盘前递归扫描
 - **版本迁移**:`_version` 低于当前数据版本时按注册的迁移链逐级升级(见「版本迁移」节);迁移失败 `load_failed`/`migration_failed` + 返回 `{}`(保底新档)。默认未配置迁移时 `data_version=1`,与旧版逐字节兼容。
 - **JSON int→float**:与 Settings 同理,数据经 JSON 落盘往返后 int 会变 float,取整用 `int(...)`。
 - 原子写:`save()` 走 temp+rename,写入中断只留不完整的 `.tmp`(不被 `list_slots` 计入),目标不出现写一半态。损坏内容(序列化器 `decode` 返回 `{}` 或信封校验不过)一律触发 `load_failed(slot, "corrupt")`,不删除原文件。
+- **空/畸形存档不刷引擎 ERROR(0.24.2)**:`JsonSaveSerializer.decode` 用实例式 `JSON.new().parse()` + 空/空白字节守卫,读回空文件或畸形 JSON 一律返回 `{}` 走 `load_failed(slot, "corrupt")`,不再对空串调静态 `JSON.parse_string`(后者失败会 `push_error` 刷引擎级 ERROR;微信小游戏把引擎打印渲染成红色 `console.error`)。⚠️ 这里同时校正上文「桌面与 Web 行为一致」的边界:微信小游戏的 `user://`(经 weapp-adapter FS shim,非标准浏览器 IDBFS)下「存完立刻读回」曾观察到读到空字节(kit spike DevTools 实测)——本修复只消除报错噪音、让 `load` 优雅降级,**该 FS 往返本身是否可靠仍属 spike 待实测项,不等同于已保证微信下存档能持久**。

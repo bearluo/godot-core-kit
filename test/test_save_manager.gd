@@ -209,6 +209,12 @@ func _test_serializer() -> int:
 		print("FAIL JsonSaveSerializer.decode(encode({})) 应为 {}")
 		failures += 1
 
+	# 2b. 真·空字节(微信 user:// 读回空存档文件的场景)-> {},且走守卫不调静态
+	#     JSON.parse_string 刷引擎 ERROR(v0.24.2 修复,原为 parse_string("")→line 0 报错)
+	if json.decode(PackedByteArray()) != {}:
+		print("FAIL JsonSaveSerializer.decode(空字节) 应为 {}")
+		failures += 1
+
 	# 3. 非法字节 -> {}
 	if json.decode("not valid json {{{".to_utf8_buffer()) != {}:
 		print("FAIL JsonSaveSerializer.decode(非法字节) 应为 {}")

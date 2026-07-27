@@ -81,10 +81,17 @@ func _encode(data: Dictionary) -> String:
 	return JSON.stringify(data, "\t")
 
 
-## 任何失败(JSON 非法、根不是 Dictionary)返回 {};非 Dictionary 的
-## section 值在此丢弃(schema 不符视同损坏的局部)。
+## 任何失败(空/空白、JSON 非法、根不是 Dictionary)返回 {};非 Dictionary 的
+## section 值在此丢弃(schema 不符视同损坏的局部)。用实例式 JSON.new().parse()
+## 而非静态 parse_string:后者对空/畸形输入会 push_error 刷引擎级 ERROR
+## (微信小游戏会渲染成红色 console.error)。_load_from_disk 已挡空文件,此处再兜一层。
 func _decode(text: String) -> Dictionary:
-	var parsed = JSON.parse_string(text)
+	if text.strip_edges().is_empty():
+		return {}
+	var j := JSON.new()
+	if j.parse(text) != OK:
+		return {}
+	var parsed = j.data
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
 	var result: Dictionary = {}
