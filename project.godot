@@ -19,7 +19,6 @@ config/icon="res://icon.svg"
 [autoload]
 
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
-_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [dotnet]
 
@@ -27,7 +26,7 @@ project/assembly_name="godot-core-kit (dev)"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot-core-kit/plugin.cfg", "res://addons/godot_ai/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot-core-kit/plugin.cfg", "res://addons/godot_subpack/plugin.cfg")
 
 [rendering]
 

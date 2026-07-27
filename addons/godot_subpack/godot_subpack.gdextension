@@ -1,0 +1,17 @@
+[configuration]
+
+entry_symbol = "godot_subpack_library_init"
+compatibility_minimum = "4.4"
+reloadable = false
+
+[libraries]
+windows.x86_64.editor.single.debug = "./bin/windows/godot_subpack.windows.template_debug.x86_64.dll"
+windows.x86_64.editor.single.release = "./bin/windows/godot_subpack.windows.template_release.x86_64.dll"
+macos.universal.editor.single.debug = "./bin/macos/libgodot_subpack.macos.template_debug.universal.dylib"
+macos.universal.editor.single.release = "./bin/macos/libgodot_subpack.macos.template_release.universal.dylib"
+macos.arm64.editor.single.debug = "./bin/macos/libgodot_subpack.macos.template_debug.universal.dylib"
+macos.arm64.editor.single.release = "./bin/macos/libgodot_subpack.macos.template_release.universal.dylib"
+macos.x86_64.editor.single.debug = "./bin/macos/libgodot_subpack.macos.template_debug.universal.dylib"
+macos.x86_64.editor.single.release = "./bin/macos/libgodot_subpack.macos.template_release.universal.dylib"
+linux.x86_64.editor.single.debug = "./bin/linux/libgodot_subpack.linux.template_debug.x86_64.so"
+linux.x86_64.editor.single.release = "./bin/linux/libgodot_subpack.linux.template_release.x86_64.so"
