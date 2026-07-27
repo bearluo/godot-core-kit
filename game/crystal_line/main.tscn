@@ -18,72 +18,129 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 color = Color(0.102, 0.122, 0.227, 1)
 
-[node name="VBox" type="VBoxContainer" parent="."]
+[node name="Margin" type="MarginContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 20.0
-offset_top = 20.0
-offset_right = -20.0
-offset_bottom = -20.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 10
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
 
-[node name="Title" type="Label" parent="VBox"]
+[node name="VBox" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 0
 theme_override_colors/font_color = Color(0.925, 0.941, 0.945, 1)
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 28
 text = "晶核防线"
 horizontal_alignment = 1
 
-[node name="Info" type="Label" parent="VBox"]
+[node name="Info" type="Label" parent="Margin/VBox"]
 layout_mode = 2
+size_flags_vertical = 0
 theme_override_colors/font_color = Color(0.945, 0.769, 0.059, 1)
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 16
 text = "info"
 horizontal_alignment = 1
+autowrap_mode = 3
 
-[node name="Board" type="Control" parent="VBox"]
-custom_minimum_size = Vector2(480, 768)
+[node name="Board" type="Control" parent="Margin/VBox"]
 layout_mode = 2
-size_flags_horizontal = 4
+size_flags_horizontal = 3
+size_flags_vertical = 3
 mouse_filter = 0
 
-[node name="Bar" type="HBoxContainer" parent="VBox"]
+[node name="Bar" type="HBoxContainer" parent="Margin/VBox"]
 layout_mode = 2
+size_flags_vertical = 0
 alignment = 1
-theme_override_constants/separation = 12
+theme_override_constants/separation = 10
 
-[node name="Fire" type="Button" parent="VBox/Bar"]
-custom_minimum_size = Vector2(130, 72)
+[node name="Fire" type="Button" parent="Margin/VBox/Bar"]
+custom_minimum_size = Vector2(120, 64)
 layout_mode = 2
 text = "火塔 40"
 
-[node name="Ice" type="Button" parent="VBox/Bar"]
-custom_minimum_size = Vector2(130, 72)
+[node name="Ice" type="Button" parent="Margin/VBox/Bar"]
+custom_minimum_size = Vector2(120, 64)
 layout_mode = 2
 text = "冰塔 45"
 
-[node name="Wave" type="Button" parent="VBox/Bar"]
-custom_minimum_size = Vector2(120, 72)
+[node name="Wave" type="Button" parent="Margin/VBox/Bar"]
+custom_minimum_size = Vector2(110, 64)
 layout_mode = 2
 text = "下一波"
 
-[node name="Reset" type="Button" parent="VBox/Bar"]
-custom_minimum_size = Vector2(100, 72)
+[node name="Reset" type="Button" parent="Margin/VBox/Bar"]
+custom_minimum_size = Vector2(90, 64)
 layout_mode = 2
 text = "重置"
 
-[node name="Hint" type="Label" parent="VBox"]
+[node name="Hint" type="Label" parent="Margin/VBox"]
 layout_mode = 2
+size_flags_vertical = 0
 theme_override_colors/font_color = Color(0.8, 0.85, 0.9, 1)
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 15
 text = "hint"
 autowrap_mode = 3
 horizontal_alignment = 1
 
 [node name="SfxPlayer" type="AudioStreamPlayer" parent="."]
+
+[node name="ResultOverlay" type="ColorRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.05, 0.06, 0.12, 0.72)
+
+[node name="Panel" type="PanelContainer" parent="ResultOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -180.0
+offset_right = 200.0
+offset_bottom = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="ResultOverlay/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="ResultOverlay/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "结算"
+horizontal_alignment = 1
+
+[node name="Body" type="Label" parent="ResultOverlay/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "stats"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Again" type="Button" parent="ResultOverlay/Panel/VBox"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "再来一局"
