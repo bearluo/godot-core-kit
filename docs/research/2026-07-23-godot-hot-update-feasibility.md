@@ -170,7 +170,56 @@
 - **网络限制**:Web 端 "only HTTP client, HTTP requests, WebSocket (client)" 等被支持,且受**同源策略**约束(同上文档)。CDN 需正确 CORS。
 - **线程 / SharedArrayBuffer / 跨源隔离**:仅当以 "Use Threads" 导出才需 `SharedArrayBuffer`,而这**要求 secure context + 两个响应头**:"`Cross-Origin-Opener-Policy: same-origin`" 与 "`Cross-Origin-Embedder-Policy: require-corp`"(同上)。GL Compatibility 单线程构建可以不开线程从而**规避 COOP/COEP 硬约束**,但托管方仍需能设这些头才走得了多线程路线。
 - **内存**:Web 运行整个游戏在浏览器内存里,包也需读入 VFS(内存);大包在低端设备/移动浏览器有 OOM 风险(此点官方 Web 页未给具体数值,属工程注意项,结合 proposal #5389「只能整包入 VFS」推断)。
-- **Web 小结**:可行性成立但**脆**——文档空白 + 历史 bug + 持久化被回收 + 内存 + 多线程需 COOP/COEP。**建议**:Web 上把分包做**保守**(少切、切大块内容而非核心逻辑),核心可玩循环尽量留在初始主包里;把「重进后重下」当常态设计;上线前用真 4.7 Web 导出端到端验证 `user://` 挂载。
+- **Web 小结**:可行性成立但**脆**——文档空白 + 历史 bug + 持久化被回收 + 内存 + 多线程需 COOP/COEP。**建议**:Web 上把分包做**保守**(少切、切大块内容而非核心逻辑),核心可玩循环尽量留在初始主包里;把「重进后重下」当常态设计;上线前用真 4.7 Web 导出端到端验证 `user://` 挂载。→ **该验证已于 2026-07-27 做完,见下 §7b,核心机制坐实。**
+
+---
+
+### §7b 实测坐实:4.7 Web + `user://` 挂载端到端(2026-07-27 headless 探针)
+
+**动机**:§7 全是「理论讲得通 + 历史不稳区,须自己实测」;本次把 Android 那套端到端严谨度搬到 Web,真跑一遍。
+
+**当前状态复核(2026-07-27,先于实测的桌面校准)**:
+- **历史 bug #58013 证据力被下调**:GitHub 权威状态 `open`,但**最后活动停在 2022-02-13(Godot 3.4.2)**、标签仍 `needs testing`,报告人最后自述「**还没测过 HTML5 远程加载 PCK**」——即**从未在 HTML5 上被复现/坐实**,是搁置的未确认 3.x 报告,不构成「4.x Web 已知坏」。
+- **官方文档仍空白**:4.7 `exporting_for_web` 页仍**只字未提** `load_resource_pack`;`exporting_pcks` 里那段 HTTPRequest→`store_buffer`→`load_resource_pack` 示例是**平台无关**、不带任何 Web 注意事项。
+- **「从内存/流直接挂 PCK」仍未落地**:proposal #5389 现挂实现 PR **#110820「Add PCK loading from memory」**,但 `open` / base `master` / milestone `4.x` / **未合**;4.7 里**仍必须先把整包写进 `user://`(IDBFS)再挂**。
+
+**实验装置**:Godot **4.7.stable.official (5b4e0cb0f)** 非 mono,GL Compatibility,**nothreads** Web 导出(`variant/thread_support=false` → 用 `web_nothreads_debug.zip` 模板;单线程无 `SharedArrayBuffer`,**故意规避 COOP/COEP**)。base 构建 `exclude_filter="dlc_src/*"` **故意不含** `res://dlc_src/logic.gd`;`dlc.pck` 用另一 preset `--export-pack "dlc"` 单导,只含 `logic.gd`(返回哨兵 `WEB_PACK_V2`)。驱动 = **puppeteer-core 驱本机 headless Edge(Chromium)**,软件 WebGL(`--enable-unsafe-swiftshader --use-angle=swiftshader`);本地 Node 静态服(nothreads 免 COOP/COEP,只需正确 `.wasm`=`application/wasm` MIME)。运行时下包→写 `user://`(IDBFS)→`load_resource_pack`→`load("res://dlc_src/logic.gd")` 并调用,全程 `[WEBTEST]` 标记打到浏览器控制台由驱动脚本判定。
+
+| 相 | 序列 | 结果 |
+|---|---|---|
+| `fresh` | 首启:base 无 logic → HTTP 下 `dlc.pck`(code=200,1056B)→ 写 `user://` → `load_resource_pack` → `load` 执行包内 GDScript | **PASS**(`ok=true`,返回 `WEB_PACK_V2`) |
+| `reload` | 页面 reload(= Web 版重启屏障):`has_pack_file=true` → base 仍无 logic → 从**持久化包**挂载(不再下载)→ 执行 | **PASS**(IDBFS 跨 reload 存活 + GDScript 执行) |
+
+**关键确认**:
+1. **`load_resource_pack` 在 4.7 Web 确实可用**——§7 的头号未知**坐实为正**;#58013 那类问题在 4.7 nothreads Chromium 上**未复现**。
+2. **下载包在 IDBFS 跨页面 reload 存活**(`reload` 相 `has_pack_file=true`,`OS.is_userfs_persistent()=true`)——持久化在「即时 reload」这一格成立。
+3. **包内 GDScript 在 Web 能执行**,fresh 与 reload 两相皆返回哨兵;**页面 reload 就是 Web 版的「进程重启屏障」**——§4b「含 GDScript 逻辑换逻辑必须重启」在 Web 上原样成立(重启 = reload 页面),Android 的「下载→重启→上线」模型可平移。
+
+**新踩坑(Web 一手,值得记)**:Godot 的 `HTTPRequest.request()` **不接受相对 URL**——传 `"dlc.pck"` 报 `ERROR: Invalid URL scheme: ''`、`err=31`(浏览器 fetch 会按 origin 解析相对路径,Godot 不会)。Web 端须拼**带 scheme 的绝对 URL**,用 `JavaScriptBridge.eval("location.origin")` 取源。(与 Android 端「`request()` 必须在树跑起来后发」同类,都是 HTTPRequest 的平台使用纪律。)
+
+**诚实边界(本次未证伪,仍按 §7 保守设计)**:
+- **IDBFS 长期回收未测**:只证了即时 reload 存活,浏览器「低磁盘/长期不访问时驱逐缓存」这条**没测也没法证伪**——仍按「随时可能重下」设计。
+- **仅 Chromium/Edge**:主流引擎、证据力强,但 Firefox/Safari/移动浏览器未覆盖。
+- **仅 nothreads**:多线程构建的 COOP/COEP 硬约束路径未测(本次故意避开,§7 该条不变)。
+- **仅 1KB 小包**:§7 的「整包入 VFS 内存、大包 OOM」未测。
+
+**净判定**:§7 从「理论可行但脆·须实测」→ **核心机制(下载→`user://`→`load_resource_pack`→执行 GDScript→reload 后仍生效)在 4.7 Web 本机实测坐实**;剩余脆弱性只在**持久化长期回收 / 大包内存 / 跨浏览器**三处,均属**运营注意项**而非机制阻断。探针源码:scratchpad 的 `webtest/` + `driver/`(一次性,未入库)。
+
+---
+
+### §7c 实测坐实:fortune-mill 真实扭蛋内容包的 Web OTA(2026-07-27,续 §7b)
+
+**动机**:§7b 用的是 1KB 玩具包。本节把它换成 **fortune-mill 真实薄壳 base + 真实 `gacha-v1.pck`**(与 Android AVD 端到端全通的**同一个包**),证明真实内容包(含 GDScript 逻辑 + `.tres` 数据 + 跨房协同)在 Web 上走 `CoreKit.updater` OTA 也能整体上线。
+
+**装置**:同一 fortune-mill 工程(GL Compatibility,autoload `CoreKit`+`FortuneMill`)加一个 **Web 薄壳 preset**(`exclude_filter` 排掉 gacha 的 10 个文件:`gacha_room.gd`+2 defs+7 `.tres`,nothreads);**真 `gacha-v1.pck`(35104B)原样复用**(就是 Android 那轮 `--export-pack "gacha"` 产的 Windows-Desktop 平台包——纯脚本+`.tres` 无贴图,已跨平台在 Android 挂载成功,Web 同样直接用);manifest 的 pack `url` 改写到测试 origin(sha256/size 不动)。headless Edge 自驱:薄壳带 `?autoota=1` → 自动 `updater.check(同源 manifest)→download` → 页面 reload(= Web 重启屏障)→ `_init` 阶段 `mount_installed()`。
+
+**结果(全 PASS,与 Android AVD 逐字一致)**:
+- **fresh**:薄壳启动 `[Fortune] ready: … 0 gacha item + 0 gacha upgrades`(gacha 真被排除)→ `has_gacha=false` → `update-available packs=1` → 真包下载 + sha256 `331119da…` 校验 + commit → `ready-to-apply`。
+- **reload**:`[Fortune] ready: … 3 gacha item + 4 gacha upgrades` → 真扭蛋房从挂载包整体上线(3 道具 dream_daruma/golden_dart/lucky_cat + 4 升级 auto_gacha/bigger_capsules/faster_crank/rare_fortune),`has_gacha=true`。**与 Android「3 gacha item+4 gacha upgrades」完全对齐。**
+
+**⚠️ 途中挖出一个真的 kit Web 缺陷(重要)**:kit 的 `HttpPackTransport.fetch_file`(`addons/godot-core-kit/systems/http_pack_transport.gd`)用 **`HTTPRequest.download_file` 直接落盘**,但在 **Web/HTML5 上不可靠**——`request()` 报 `RESULT_SUCCESS`/HTTP 200(本地服务器日志实证 `gacha-v1.pck` 200/35104B 确被取走),**字节却没真正写进 `user://`(IDBFS)**,随后 `_file_sha256(tmp)` 读到空/残缺 → 判 `download_failed("checksum")`(不留半更新状态,行为本身正确,但 Web 上永远走不到 `ready_to_apply`)。**修法**:Web 上(或索性通用)改「整包收进内存 `body` → `FileAccess.store_buffer` 落盘」(§7b 已证 `store_buffer` 在 Web 可靠)。先用示例侧 `web_pack_transport.gd`(`store_buffer` 版,`set_transport` 注入)证明机制可行、隔离缺陷。→ **已修复并落 main:kit v0.24.1**(`fix/kit-web-pack-transport` → ff-merge main @66c19a3,未 push):`HttpPackTransport.fetch_file` 在 `OS.has_feature("web")` 时改「body 收内存 → `FileAccess.store_buffer` 落盘」(桌面/移动仍 `download_file` 流式落盘,Android OTA 用的正是它、已验证可用);抽出 `_store_body_to_file` 由新增 `test_http_pack_transport.gd` 覆盖(落盘往返/建父目录/空 body),run_all 28→29 FAILS=0。**撤掉示例替身、用 kit 默认传输再验一遍 → 同样全 PASS**(`update-available→downloaded→ready-to-apply→reload→3 gacha item+4 gacha upgrades`),确认修复在真实集成流程中生效。
+
+**净判定**:真实内容包(GDScript+数据+跨房协同)的 Web OTA **与 Android 同构、本机坐实**,唯一卡点是 kit 传输层 `download_file` 在 Web 的上述缺陷——一个函数级修复即可,已定位+已用替身验证。探针/脚本:scratchpad 的 `build_fm_web.ps1` + `driver/fm_driver.mjs`;示例侧改动在 `example/fortune-mill` 分支(web 自驱 hook + `web_pack_transport.gd` + gitignore 的 `export_presets.cfg` 加 Web preset)。
 
 ---
 
@@ -196,8 +245,8 @@
   5. **UID 碰撞**:靠同路径 `replace_files` 覆盖,别靠 UID 顶替;新增资源保证 UID 唯一(issues #54774/#57220/#102490)。
 - **Showstopper**:无绝对技术阻断项;第 3 条是**政策**风险(可能影响上架),需产品侧决策,不是引擎能力缺失。
 
-### Web —— 可行但脆(best-effort,须实测)
-路径成立(HTTPRequest→`user://`/IDBFS→`load_resource_pack`),但官方**未记载 Web 分包**、历史有 bug(#58013)、持久化会被浏览器回收、内存/多线程 COOP/COEP 约束叠加。
+### Web —— 核心机制已实测坐实,脆弱性收窄为运营注意项(2026-07-27 更新)
+路径成立(HTTPRequest→`user://`/IDBFS→`load_resource_pack`),且 **2026-07-27 已端到端实测通过(§7b:4.7 nothreads + headless Edge,fresh/reload 两相 PASS,GDScript-in-pack 执行 + IDBFS 跨 reload 存活)**。原列的「官方未记载 Web 分包 / 历史 bug #58013」——文档确仍空白,但 #58013 经核实是**从未在 HTML5 复现的搁置 3.x 报告**、不代表 4.x 坏,实测亦未复现。剩余脆弱性 = 持久化长期回收 + 大包内存 + 跨浏览器(Chromium 已验),均属运营注意项。
 - **Top 风险**:
   1. **官方文档空白 + 历史 bug**:Web 下 `load_resource_pack` 未被文档背书,#58013 长期挂起——**上线前必须端到端实测 4.7 Web**(issue #58013、proposal #5389)。
   2. **IDBFS 持久化不保证**:下载包可能被回收/需用户允许 IndexedDB——按「随时可能重下」设计(exporting_for_web 4.7)。
@@ -214,7 +263,7 @@
 3. **加密取舍**:起步是否**明确不加密**(用官方模板、绕开自编译)?若未来要加密,是否接受「自编译导出模板 + 全链同 key」的构建复杂度?
 4. **Play 合规边界**:与产品/发行确认「远程下发 GDScript 逻辑」的红线——哪些算「游戏内容」(可下发),哪些算「客户端自更新」(必须走商店)?是否需要给热更范围加白名单(只允许特定目录/特定资源类型进包)?
 5. **UID 打包自检**:KitUpdater 的构建脚本是否加「跨包 UID 唯一性 + 目标引擎版本」预检,把 §3/§5 的坑挡在导出期?
-6. **Web 是否纳入首版**:鉴于 §7 的脆弱度,Web 分包是 P0 还是延后?若做,先写一个「4.7 Web + `user://` 挂载」最小验证 demo 再决定。
+6. **Web 是否纳入首版**:鉴于 §7 的脆弱度,Web 分包是 P0 还是延后?~~若做,先写一个「4.7 Web + `user://` 挂载」最小验证 demo 再决定。~~ **✅ 最小验证 demo 已做(§7b,2026-07-27):核心机制坐实,Web 由「须实测」降为「可纳入,按持久化回收/大包内存/跨浏览器三注意项保守设计」。P0/延后仍是产品排期决策,但技术门槛已清。**
 7. **回滚与断点续传**:内容包下载中断/校验失败/挂载 `false` 时的降级(回退到旧包 / 提示重下)——`load_resource_pack` 失败无异常,须显式设计失败路径。
 
 ---
@@ -230,5 +279,5 @@
 - 脚本/PCK 加密:[Compiling with PCK encryption key 4.7](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_with_script_encryption_key.html)
 - 数据路径 user://:[data_paths 4.7](https://docs.godotengine.org/en/stable/tutorials/io/data_paths.html)
 - Android:[export_for_android 4.7](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_android.html) / OBB 移除 [PR #118283](https://github.com/godotengine/godot/pull/118283) + [godot-obb-plugin](https://github.com/m4gr3d/godot-obb-plugin) / PAD [PR #52526](https://github.com/godotengine/godot/pull/52526) / [Android App Bundle](https://developer.android.com/guide/app-bundle) / [Device and Network Abuse policy](https://support.google.com/googleplay/android-developer/answer/16559646)
-- Web:[exporting_for_web 4.7](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_web.html) / [issue #58013](https://github.com/godotengine/godot/issues/58013) / [proposal #5389](https://github.com/godotengine/godot-proposals/issues/5389)
+- Web:[exporting_for_web 4.7](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_web.html) / [issue #58013](https://github.com/godotengine/godot/issues/58013)(核实:停在 3.4.2、从未 HTML5 复现)/ [proposal #5389](https://github.com/godotengine/godot-proposals/issues/5389) / 其实现 PR [#110820 Add PCK loading from memory](https://github.com/godotengine/godot/pull/110820)(open,milestone 4.x,未合)
 - 哈希/完整性:[FileAccess 4.7](https://docs.godotengine.org/en/stable/classes/class_fileaccess.html)
