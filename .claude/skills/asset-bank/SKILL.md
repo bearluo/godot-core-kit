@@ -65,7 +65,59 @@ godot --headless --path . -s res://.claude/skills/asset-bank/bake_assets.gd -- \
 
 - bank 可 headless 实例化 + 纯 `Image`/样本运算 → 写 `test_<game>_art_bank.gd` / `_sound_bank.gd` 断言 `source_for` 三级走向、`bake_image`/`bake_stream` 非空、尺寸对。
 - 可选:烘焙器冒烟——烘到临时 `user://` 目录,断言文件存在且非空。
+- **必做**:死资源 / 幽灵 key 检查(见下节)。
 - 按 `developing-core-kit`:测试加进 `run_all.ps1`,更新计数。
+
+## 五、死资源 / 幽灵 key 检查(两个方向都要查)
+
+三级接缝有个副作用:**登记与使用是解耦的,两边都能悄悄不一致**。实测踩过:
+某游戏的 `sound_bank` 定义并烘焙了 `hit` 音效,产品代码里**从未调用播放**——
+全仓 grep 只在 `sound_bank.gd` 自己出现。烘焙产物齐全、测试全绿、
+`BRIEF-sound.md` 里有它,看起来「打击音效做好了」,实际游戏全程静音。
+
+| 方向 | 症状 | 为什么危险 |
+|---|---|---|
+| **烘焙了没人用**(死资源) | key 在 `bake_keys()`,产品代码零引用 | 产出物冒充功能存在;白占仓库与烘焙时间 |
+| **用了没登记**(幽灵 key) | 代码 `texture_for(&"typo")`,bank 里没这个 key | 静默落到第 3 级程序化兜底,**不报错**;拼错永远不暴露,也拿不到 AI 升级通道 |
+
+幽灵 key 尤其阴——第 3 级兜底的设计目的是「新 key 也不崩」,代价就是**拼写错误没有任何反馈**。
+
+**做法:让 bank 记录被请求过的 key,在冒烟测试里跑一遍真实流程再对账。**
+
+```gdscript
+# bank 侧加两行接缝
+var _requested: Dictionary = {}
+func texture_for(key: StringName) -> Texture2D:
+    _requested[key] = true          # stream_for 同理
+    ...
+func requested_keys() -> Array: return _requested.keys()
+```
+
+```gdscript
+# test_<game>_smoke.gd:跑完一段真实游戏流程后对账
+var used := bank.requested_keys()
+for k in bank.bake_keys():
+    if not (k in used) and not (k in ALLOW_UNUSED):
+        fail("死资源: %s 烘焙了但流程中从未被取用" % k)
+for k in used:
+    if not (k in bank.bake_keys()):
+        fail("幽灵 key: %s 被取用但未登记,正在吃程序化兜底" % k)
+```
+
+- `ALLOW_UNUSED` 是**显式**豁免名单(如只在失败结局才响的音),写进去要附一句理由——
+  豁免必须是主动决定,不是默认。
+- 冒烟跑不到的分支,补一条静态兜底:全仓 grep 该 key,只在 bank 自身出现即判死。
+- 删死资源时**连 `bake_keys()` 登记、`generated/` 产物、`.import` 边车一起删**,
+  否则下次烘焙又长回来。
+- ⚠️ **别在启动时预热全部资源**(`for k in bake_keys(): stream_for(k)`)——
+  那会让 `requested_keys()` 恒等于 `bake_keys()`,这套对账**直接失效**。
+  要预热就把预热路径排除在记录之外。
+- ⚠️ **取到 ≠ 播出去 / 画出来**。`stream_for(&"hit")` 拿到流,不代表它被 `play` 了。
+  音效这类要在冒烟里再断一层「实际播放记录」(例:`sfx_plays` 计数含该 key),
+  否则死资源会换个姿势活下来。
+
+> 这条同时是 `vision-first-slice` 体验门的一部分:
+> 「烘焙了」≠「玩家听得到/看得到」,别拿产出物当体验证据。
 
 ## 常见错误
 
@@ -76,3 +128,6 @@ godot --headless --path . -s res://.claude/skills/asset-bank/bake_assets.gd -- \
 | 真素材丢进 `generated/` | 真/AI 素材丢 `assets/` 根;`generated/` 只放烘焙基线 |
 | 生成逻辑在 bake 和 runtime 各写一份 | 只写 `_make_*` 一份,两级共用 |
 | bank 里各处硬 `load` 绕过接缝 | 取资源只经 `texture_for`/`stream_for` |
+| **烘焙了却没人调用(死资源)** | 冒烟对账 `bake_keys()` vs `requested_keys()`;删就删干净 |
+| **key 拼错静默吃兜底(幽灵 key)** | 反向对账;第 3 级兜底不报错是设计,不是许可 |
+| **拿「已烘焙」当体验做完了的证据** | 烘焙只证明文件在;要证明玩家真听见/看见 |

@@ -19,10 +19,13 @@ const PALETTE := {
 const DEFAULT_COLOR := Color("9aa0a6")
 
 var _cache: Dictionary = {}   # "key@size" -> Texture2D
+## 本次运行中被取用过的 key(死资源 / 幽灵 key 对账用,见 SKILL.md 第五节)
+var _requested: Dictionary = {}
 
 
 # ---- 接缝:取图(三级)----
 func texture_for(key: StringName, size: int = ICON_SIZE) -> Texture2D:
+	_requested[key] = true
 	var ck := "%s@%d" % [key, size]
 	if _cache.has(ck):
 		return _cache[ck]
@@ -31,6 +34,12 @@ func texture_for(key: StringName, size: int = ICON_SIZE) -> Texture2D:
 		tex = ImageTexture.create_from_image(_make_image(key, size))
 	_cache[ck] = tex
 	return tex
+
+
+## 冒烟测试对账用:跑完一段真实流程后,
+##   bake_keys() 里没出现在这儿的 = 死资源;这儿有而 bake_keys() 没有的 = 幽灵 key。
+func requested_keys() -> Array:
+	return _requested.keys()
 
 
 ## 当前解析来源:asset(真素材)/ baked(烘焙基线)/ procedural(运行时)。

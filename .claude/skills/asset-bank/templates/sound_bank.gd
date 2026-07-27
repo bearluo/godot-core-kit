@@ -19,10 +19,13 @@ const VOICES := {
 const DEFAULT_VOICE := {"freq": 500.0, "dur": 0.10, "wave": "blip", "sweep": 1.0}
 
 var _cache: Dictionary = {}   # key -> AudioStream
+## 本次运行中被取用过的 key(死资源 / 幽灵 key 对账用,见 SKILL.md 第五节)
+var _requested: Dictionary = {}
 
 
 # ---- 接缝:取音(三级)----
 func stream_for(key: StringName) -> AudioStream:
+	_requested[key] = true
 	if _cache.has(key):
 		return _cache[key]
 	var s := _load_first([_real_wav(key), _real_ogg(key), _baked_wav(key)])
@@ -30,6 +33,13 @@ func stream_for(key: StringName) -> AudioStream:
 		s = _make_stream(key)
 	_cache[key] = s
 	return s
+
+
+## 冒烟测试对账用:跑完一段真实流程后,
+##   bake_keys() 里没出现在这儿的 = 死资源;这儿有而 bake_keys() 没有的 = 幽灵 key。
+## ⚠️ 取到 stream ≠ 玩家听见了 —— 还要确认它真的被 play 出去(见 SKILL.md 第五节)。
+func requested_keys() -> Array:
+	return _requested.keys()
 
 
 ## 当前解析来源:asset / baked / procedural。
