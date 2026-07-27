@@ -334,3 +334,13 @@ check(GACHA_MANIFEST_URL)
 **留给用户的真机步骤**(与出 APK 同理,恒是设备侧):出瘦身 base APK(Android preset 排除扭蛋)→ 把
 `build/packs/` 托管到可达地址(改 `world.gd` 的 `GACHA_MANIFEST_URL` 或 CDN)→ 装 base、进扭蛋列点
 「检查/下载」→ 重启 → 扭蛋房出现。见仓库根记忆 [[apk-android-export]] 的出包踩坑。
+
+### Web OTA(headless 浏览器已端到端验证,2026-07-27)
+
+同一套 OTA 在 **Web/HTML5** 上也跑通了(研究文档 §7c):
+
+- **薄壳导出**:`export_presets.cfg` 加一个 `Web` preset(nothreads + GL Compatibility,`exclude_filter` 排掉扭蛋 10 文件),**复用同一个 `gacha-v1.pck`**(纯脚本 + `.tres`,跨平台可挂)。
+- **重启屏障 = 页面 reload**:Web 上 `CoreKit.updater.restart_to_apply()` 返回 `false`(无法自重启),重启屏障由**刷新页面**充当——reload 后 `CoreKit._init` 的 `mount_installed()` 从 `user://`(IDBFS)挂载已下载包,扭蛋房上线。
+- **headless 自测入口**:`world.gd` 的 `_maybe_web_auto_ota()`(仿 `FORTUNE_SMOKE`):URL 带 `?autoota=1` 时自动 `check → download`,并打 `[WEBOTA]` 标记,外部驱动脚本收到 `ready-to-apply` 后 reload 页面。同源取 manifest(规避硬编码的 `localhost:8080`)。
+- **结果**:薄壳 `0 gacha item` → 下载 + sha256 校验 → reload → `[Fortune] ready: … 3 gacha item + 4 gacha upgrades`,与 Android AVD 逐字一致。
+- **依赖 kit v0.24.1**:`HttpPackTransport.fetch_file` 在 Web 上改「body 收内存 → `FileAccess.store_buffer` 落盘」(旧版 `HTTPRequest.download_file` 在浏览器不落 IDBFS → sha256 失败)。详见研究文档 §7c。

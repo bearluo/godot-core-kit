@@ -117,6 +117,7 @@ func _ready() -> void:
 	CoreKit.updater.ready_to_apply.connect(_on_ota_ready)
 	_refresh()
 	_maybe_show_offline()
+	_maybe_web_auto_ota()
 
 
 ## --- FORTUNE_SMOKE:飞镖过关 + 刮刮乐 JACKPOT 跨房 + 柏青哥 DICE 跨房 + 三守卫过关 ---
@@ -743,6 +744,9 @@ func _on_ota_available(plan: Dictionary) -> void:
 
 func _on_ota_ready() -> void:
 	# 下载校验落盘完成;扭蛋房含 GDScript 逻辑 → 必须重启进程才生效(研究 §4b)。
+	# Web 上 restart_to_apply() 返 false,重启屏障 = 由外部 reload 页面(见 _maybe_web_auto_ota)。
+	if OS.has_feature("web"):
+		print("[WEBOTA] ready-to-apply")
 	_ota_set("下载完成 ✓ 重启后扭蛋房出现")
 	if _ota_restart_btn != null:
 		_ota_restart_btn.visible = true
@@ -751,6 +755,24 @@ func _on_ota_ready() -> void:
 func _ota_set(msg: String) -> void:
 	if _ota_status != null:
 		_ota_status.text = msg
+
+
+## Web headless 自驱 OTA(仿 FORTUNE_SMOKE 的自测入口):URL 带 ?autoota=1 时自动跑
+## check→download,外部驱动脚本收到 [WEBOTA] ready-to-apply 后 reload 页面(web 上
+## restart_to_apply() 返 false,重启屏障 = reload)。同源取 manifest,规避硬编码 localhost:8080。
+func _maybe_web_auto_ota() -> void:
+	if not OS.has_feature("web"):
+		return
+	var search := str(JavaScriptBridge.eval("location.search", true))
+	if search.find("autoota=1") == -1:
+		return
+	if FortuneMill.has_gacha():
+		print("[WEBOTA] boot has_gacha=true gacha-online")   # reload 后:包已在 _init 挂载
+		return
+	# kit 0.24.1 起 HttpPackTransport 在 web 自动走 store_buffer 落盘,直接用默认传输即可。
+	var origin := str(JavaScriptBridge.eval("location.origin", true))
+	print("[WEBOTA] boot has_gacha=false auto-check manifest=%s/manifest.json" % origin)
+	CoreKit.updater.check(origin + "/manifest.json")
 
 
 ## Lethal 按钮:进行中 → 放弃;否则开一局速通。
