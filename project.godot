@@ -20,6 +20,16 @@ config/icon="res://icon.svg"
 
 CoreKit="*res://addons/godot-core-kit/core_kit.gd"
 
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/size/window_width_override=540
+window/size/window_height_override=960
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
 [dotnet]
 
 project/assembly_name="godot-core-kit (dev)"

@@ -24,13 +24,13 @@ func _initialize() -> void:
 	])
 
 	# 头 30 秒:选塔→放塔
-	var ok1: bool = root_node.sim.place_tower(1, 3, &"fire")
+	var ok1: bool = root_node.sim.place_tower(1, 4, &"fire")
 	root_node.msg = "召唤! 笃定落下。" if ok1 else root_node.msg
 	print("SESSION_PLACE1 ok=%s gold=%d towers=%d event=%s msg=%s" % [
 		ok1, root_node.sim.gold, root_node.sim.tower_count(), root_node.sim.last_event, root_node.msg])
 	await process_frame
 
-	var ok2: bool = root_node.sim.place_tower(3, 3, &"ice")
+	var ok2: bool = root_node.sim.place_tower(2, 4, &"ice")
 	print("SESSION_PLACE2 ok=%s gold=%d towers=%d event=%s" % [
 		ok2, root_node.sim.gold, root_node.sim.tower_count(), root_node.sim.last_event])
 
@@ -59,20 +59,37 @@ func _initialize() -> void:
 		saw_enemy, max_enemies, root_node.sim.waves_cleared, root_node.sim.gold,
 		root_node.sim.core_hp, root_node.sim.is_game_over(), root_node.sim.last_event])
 
-	# 无塔破核路径(再玩一次的钩子)
+	# 无塔破核路径(失败侧闭环)
 	root_node.sim.reset()
 	print("SESSION_RESET gold=%d hp=%d" % [root_node.sim.gold, root_node.sim.core_hp])
-	for _w in 4:
-		if root_node.sim.is_game_over():
-			break
-		if not root_node.sim.wave_active:
-			root_node.sim.start_wave()
-		for _i in 300:
-			root_node.sim.tick(0.05)
-			if root_node.sim.is_game_over():
-				break
-	print("SESSION_DEFEAT game_over=%s hp=%d waves_touched=%d last_event=%s" % [
-		root_node.sim.is_game_over(), root_node.sim.core_hp, root_node.sim.wave, root_node.sim.last_event])
+	var guard := 0
+	while not root_node.sim.is_round_over() and guard < 20000:
+		root_node.sim.tick(0.05)
+		guard += 1
+	for _f in 4:
+		await process_frame
+	print("SESSION_DEFEAT game_over=%s hp=%d waves_touched=%d last_event=%s result_panel=%s" % [
+		root_node.sim.is_game_over(), root_node.sim.core_hp, root_node.sim.wave,
+		root_node.sim.last_event, root_node.get_node("Result").visible])
+
+	# 通关路径(胜利侧闭环):16 塔固定构筑打完全部波次
+	root_node._on_reset()
+	root_node.sim.gold = 99999
+	for b in [[1, 2, "fire"], [3, 4, "fire"], [1, 6, "fire"], [1, 4, "fire"], [2, 4, "fire"],
+			[2, 2, "ice"], [0, 4, "fire"], [2, 6, "ice"], [1, 0, "fire"], [3, 2, "fire"],
+			[3, 6, "fire"], [0, 0, "fire"], [4, 2, "fire"], [4, 6, "fire"], [3, 1, "fire"],
+			[3, 0, "fire"]]:
+		root_node.sim.place_tower(int(b[0]), int(b[1]), StringName(b[2]))
+	guard = 0
+	while not root_node.sim.is_round_over() and guard < 20000:
+		root_node.sim.tick(0.05)
+		guard += 1
+	for _f2 in 4:
+		await process_frame
+	var s: Dictionary = root_node.sim.summary()
+	print("SESSION_VICTORY victory=%s waves=%d/%d hp=%d kills=%d leaks=%d seconds=%.0f result_panel=%s" % [
+		s["victory"], s["waves_cleared"], s["waves_total"], s["core_hp"], s["kills"],
+		s["leaks"], s["seconds"], root_node.get_node("Result").visible])
 
 	# 反例核对:无走位/无技能瞄准 API
 	var has_move := root_node.sim.get("move_player") != null
