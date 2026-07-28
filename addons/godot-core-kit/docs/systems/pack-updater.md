@@ -80,6 +80,7 @@ func _on_ready() -> void:
 - **`CoreKit` 必须注册在任何加载游戏内容的 autoload 之前**。相 A 靠「在 `_init` 尽早挂包」成立;若别的 autoload 先于 `CoreKit` 加载了内容,那些内容就锁定在旧包上。
 - **引擎版本锁死**:包头会拒收「用比运行引擎更新的版本导出的包」。manifest 与 `state.json` 都带 `engine` 字段并在挂载/检查前严格校验(不匹配 → 不挂/不下)。**升级 Godot 版本时,所有历史内容包都要重新导出。**
 - **原子性**:下载走「暂存区 → 全部 sha256 校验通过 → temp+rename 改写 `state.json`」。任何中途失败都不会让已安装集合处于半更新状态。
+- **web/微信小游戏不用 rename 落地(0.24.3)**:微信小游戏的 `user://`(weapp-adapter FS shim)上 `DirAccess.rename_absolute` **返回 `OK`、目标文件也存在,但内容为空**(DevTools 探针实测,详见 `save-manager.md`)。若照搬 rename,微信下会**静默产出空 `.pck`** —— 包挂不上或挂上是空的,而 `state.json` 却记着已安装。故在 `OS.has_feature("web")` 时:`_write_state_atomic` 直写目标,`_commit_staged` 改整读整写复制暂存包再删源。**暂存语义不变**(仍是全部下载校验通过才提交),只是提交动作从 rename 换成复制。桌面/移动路径逐字节不变。该分支无法被 headless 门覆盖(`OS.has_feature` 不可伪造)。
 - **加密**:起步**不加密**(用官方标准模板)。PCK 加密要求自编译导出模板并全链同 key,会改动整条构建链,留作后续可选项。
 - **导出管线已交付**:产出「薄壳 base + 内容包 + manifest.json」的工具见 [export-pipeline](../tools/export-pipeline.md)(`KitPackManifest` + `build_manifest.gd`,manifest 格式与本子系统 `check()` 逐字咬合)。fortune-mill OTA 已在 **Android 本机模拟器**与 **Web(headless 浏览器)**端到端跑通(下载→挂载→重启/reload→内容上线);`restart_to_apply()` 的 Android 自重启已本机模拟器实证可用(物理真机仍留待),Web 上返回 `false`、重启屏障 = 页面 reload。
 - **Web 传输(0.24.1 修复)**:`HttpPackTransport.fetch_file` 在 **Web/HTML5** 上不用 `HTTPRequest.download_file`——浏览器里它 request 报成功/200 但字节不真正落进 `user://`(IDBFS),随后 sha256 校验失败、永远到不了 `ready_to_apply`。Web 改「`body` 收内存 → `FileAccess.store_buffer` 落盘」(桌面/移动仍用 `download_file` 流式落盘,大包省内存)。详见研究文档 §7c。

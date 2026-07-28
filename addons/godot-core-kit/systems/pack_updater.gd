@@ -158,7 +158,7 @@ func _commit_staged(staged: Array) -> void:
 		state = {"engine": _running_engine(), "installed": []}
 	var installed: Array = state.get("installed", [])
 	for s in staged:
-		DirAccess.rename_absolute(s["tmp"], s["file"])
+		_replace_file(s["tmp"], s["file"])
 		# 同 id 覆盖旧条目
 		installed = installed.filter(func(e): return String(e.get("id", "")) != s["id"])
 		installed.append({
@@ -233,19 +233,39 @@ func _read_state() -> Dictionary:
 
 
 ## 原子写 state.json:temp + rename(照 SaveManager 先例),消除写一半的窗口。
+## web 上直写目标——微信小游戏 FS shim 的 rename 会丢内容,理由同 SaveManager.save。
 func _write_state_atomic(state: Dictionary) -> void:
 	DirAccess.make_dir_recursive_absolute(_base_dir)
 	var target := _base_dir + "/" + STATE_FILE
-	var tmp := target + ".tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	var use_tmp := not OS.has_feature("web")
+	var write_path := target + ".tmp" if use_tmp else target
+	var f := FileAccess.open(write_path, FileAccess.WRITE)
 	if f == null:
 		return
 	f.store_string(JSON.stringify(state))
 	f.close()
-	if DirAccess.rename_absolute(tmp, target) != OK:
+	if not use_tmp:
+		return
+	if DirAccess.rename_absolute(write_path, target) != OK:
 		if FileAccess.file_exists(target):
 			DirAccess.remove_absolute(target)
-			DirAccess.rename_absolute(tmp, target)
+			DirAccess.rename_absolute(write_path, target)
+
+
+## 把暂存文件搬到最终路径。web 上 rename 会报成功但丢内容(微信小游戏 FS shim
+## 实测),故整读整写复制后删源;暂存语义不变(下载全部完成才提交)。
+## ponytail: web 分支整包进内存,包大到吃紧时再换分块流式复制。
+func _replace_file(tmp: String, target: String) -> void:
+	if not OS.has_feature("web"):
+		DirAccess.rename_absolute(tmp, target)
+		return
+	var bytes := FileAccess.get_file_as_bytes(tmp)
+	var f := FileAccess.open(target, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_buffer(bytes)
+	f.close()
+	DirAccess.remove_absolute(tmp)
 
 
 ## 文件内容的 sha256 hex。用流式 HashingContext,大包不必整读进内存。

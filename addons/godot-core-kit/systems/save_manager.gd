@@ -101,17 +101,21 @@ func save(slot: String, data: Dictionary) -> bool:
 
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 	var target := _slot_path(safe_slot)
-	var tmp := target + ".tmp"
+	# web 上不走 temp+rename:微信小游戏的 user:// 是 weapp-adapter FS shim,
+	# rename_absolute 会返回 OK 且目标文件存在,但内容为空(实测,见 v0.24.3)。
+	# 直写在同一 FS 上验过是好的,且 web 无多进程并发写,原子替换本就没有对手。
+	var use_tmp := not OS.has_feature("web")
+	var write_path := target + ".tmp" if use_tmp else target
 
-	var file := FileAccess.open(tmp, FileAccess.WRITE)
+	var file := FileAccess.open(write_path, FileAccess.WRITE)
 	if file == null:
 		save_failed.emit(slot, "open_error:%d" % FileAccess.get_open_error())
 		return false
 	file.store_buffer(bytes)
 	file.close()
 
-	if not _atomic_replace(tmp, target):
-		DirAccess.remove_absolute(tmp)
+	if use_tmp and not _atomic_replace(write_path, target):
+		DirAccess.remove_absolute(write_path)
 		save_failed.emit(slot, "rename_error")
 		return false
 
