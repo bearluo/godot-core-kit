@@ -8,9 +8,12 @@ extends SceneTree
 const Sim := preload("res://game/crystal_line/sim/crystal_line_sim.gd")
 const DT := 0.05
 
-## CL-005 对照:同样 4 座火塔,中路长廊 vs 右上角
+## CL-005 对照:同样 4 座火塔,中路长廊 vs 贴右边缘
+## ⚠️ 两组都必须是**有效样本**——每座塔的路径覆盖都 > 0。
+##    早先的 POOR 用 (4,0)(4,1),这两格覆盖恰好为 0(见 balance_probe 覆盖表),
+##    等于拿「4 座塔 vs 2 座塔」冒充「同样 4 座塔换个位置」,对照本身是假的。
 const GOOD_SPOTS := [Vector2i(0, 4), Vector2i(1, 4), Vector2i(2, 4), Vector2i(3, 4)]
-const POOR_SPOTS := [Vector2i(3, 0), Vector2i(4, 0), Vector2i(4, 1), Vector2i(4, 2)]
+const POOR_SPOTS := [Vector2i(3, 0), Vector2i(3, 1), Vector2i(4, 2), Vector2i(4, 6)]
 
 ## CL-003 通关构筑(参考 test/tools/balance_probe.gd 的 PROBE_BUILD)
 const WIN_BUILD := [
@@ -211,17 +214,35 @@ func _combat_telemetry_cl004() -> void:
 # ---------------------------------------------------------------- CL-005 站位对照
 
 func _placement_contrast_cl005() -> void:
+	_assert_no_degenerate_sample()
 	var good := _run_placement(GOOD_SPOTS)
 	var poor := _run_placement(POOR_SPOTS)
-	print("CL-005 对照 好站位 waves=%d leaks=%d | 坏站位 waves=%d leaks=%d" % [
-		good["waves"], good["leaks"], poor["waves"], poor["leaks"]])
+	print("CL-005 对照 好站位 waves=%d 用时=%.0fs | 坏站位 waves=%d 用时=%.0fs" % [
+		good["waves"], good["elapsed"], poor["waves"], poor["elapsed"]])
 	if int(good["towers"]) != int(poor["towers"]):
 		_fail("CL-005 对照组塔数不同 %d vs %d" % [good["towers"], poor["towers"]])
-	if int(poor["leaks"]) < int(good["leaks"]) + 5:
-		_fail("CL-005 站位对结果无显著影响 good_leaks=%d poor_leaks=%d" % [
-			good["leaks"], poor["leaks"]])
-	if int(good["waves"]) <= int(poor["waves"]):
-		_fail("CL-005 好站位撑过的波数未超过坏站位 %d vs %d" % [good["waves"], poor["waves"]])
+	# 不比 leaks:核只有 START_HP 点血,漏满即破核停表,两边都输时 leaks 恒等于 10,
+	# 是个**饱和指标**——看着在比较,实际约束不到任何东西(和退化样本同类毛病)。
+	if int(good["waves"]) < int(poor["waves"]) + 2:
+		_fail("CL-005 站位对结果无显著影响: 好站位撑 %d 波,坏站位撑 %d 波(覆盖 19.9 vs 6.6)" % [
+			good["waves"], poor["waves"]])
+
+
+## 对照实验的前置条件:两组里**每一座**塔都得真的够得着路径。
+## 只断言「两组塔数相同」是拦不住退化样本的——数量相同、有效数不同,对照就是假的。
+## 判据问法:这一组里有没有哪座塔换成空气结果都一样?有 = 退化样本。
+func _assert_no_degenerate_sample() -> void:
+	var sim = Sim.new()
+	var rng: float = float(sim.TOWER_DEFS[&"fire"]["range"])
+	for group in [["GOOD", GOOD_SPOTS], ["POOR", POOR_SPOTS]]:
+		var total := 0.0
+		for c in group[1]:
+			var cov: float = sim.coverage_at(c.x, c.y, rng)
+			total += cov
+			if cov <= 0.0:
+				_fail("CL-005 %s 含退化样本 (%d,%d) 覆盖=0,它证明不了站位有讲究" % [
+					group[0], c.x, c.y])
+		print("CL-005 样本有效性 %s 总覆盖=%.1f" % [group[0], total])
 
 
 func _run_placement(spots: Array) -> Dictionary:
@@ -230,10 +251,13 @@ func _run_placement(spots: Array) -> Dictionary:
 	for s in spots:
 		sim.place_tower(s.x, s.y, &"fire")
 	var t := 0.0
-	while not sim.is_round_over() and sim.waves_cleared < 4 and t < 400.0:
+	# 跑到局终而不是砍在第 4 波:4 座塔谁都通不了关,差距要有跑道才显出来。
+	# 早先砍在第 4 波,是靠 POOR 组里的死塔才拉开差距的。
+	while not sim.is_round_over() and t < 900.0:
 		sim.tick(DT)
 		t += DT
-	return {"waves": sim.waves_cleared, "leaks": sim.leaks, "towers": sim.tower_count()}
+	return {"waves": sim.waves_cleared, "leaks": sim.leaks, "towers": sim.tower_count(),
+		"elapsed": sim.elapsed}
 
 
 # ---------------------------------------------------------------- CL-003 一局闭环

@@ -22,18 +22,3 @@
 - color: #e74c5e
 - prompt: 手游竖屏塔防 UI 图标 <core>,主色 #e74c5e,底部晶核:脉动红宝石方晶,几何低多边形,清晰剪影,透明底
 
-## path
-- size: 48x48
-- color: #3d4a6b
-- prompt: 手游竖屏塔防 UI 图标 <path>,主色 #3d4a6b,裂隙路径地砖,几何低多边形,清晰剪影,透明底
-
-## cell
-- size: 48x48
-- color: #243056
-- prompt: 手游竖屏塔防 UI 图标 <cell>,主色 #243056,可建造深色格子,几何低多边形,清晰剪影,透明底
-
-## gold
-- size: 48x48
-- color: #f1c40f
-- prompt: 手游竖屏塔防 UI 图标 <gold>,主色 #f1c40f,金币 UI 圆片,几何低多边形,清晰剪影,透明底
-

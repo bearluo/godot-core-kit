@@ -75,6 +75,12 @@ godot --headless --path . -s res://.claude/skills/asset-bank/bake_assets.gd -- \
 全仓 grep 只在 `sound_bank.gd` 自己出现。烘焙产物齐全、测试全绿、
 `BRIEF-sound.md` 里有它,看起来「打击音效做好了」,实际游戏全程静音。
 
+⚠️ **死资源最常见的来源:拿调色板当烘焙清单。** `bake_keys()` 图省事写成 `PALETTE.keys()`,
+于是**只用来取色**的 key 也被烘成了图。实测:某游戏 7 个 PALETTE key 里,`path` / `cell`
+只经 `color_for()` 画 `draw_rect` 根本不需要图,`gold` 连颜色都没人取——3 张 png 照样烘出来、
+提交进仓库、写进 BRIEF,一次都没显示过。**调色板与烘焙清单是两个职责**,分成
+`PALETTE`(取色)和 `TEXTURE_KEYS`(出图)两份,`bake_keys()` 只返回后者。
+
 | 方向 | 症状 | 为什么危险 |
 |---|---|---|
 | **烘焙了没人用**(死资源) | key 在 `bake_keys()`,产品代码零引用 | 产出物冒充功能存在;白占仓库与烘焙时间 |
@@ -138,7 +144,9 @@ for k in used:
 | 真素材丢进 `generated/` | 真/AI 素材丢 `assets/` 根;`generated/` 只放烘焙基线 |
 | 生成逻辑在 bake 和 runtime 各写一份 | 只写 `_make_*` 一份,两级共用 |
 | bank 里各处硬 `load` 绕过接缝 | 取资源只经 `texture_for`/`stream_for` |
+| **`bake_keys()` 写成 `PALETTE.keys()`** | 拆成 `PALETTE`(取色)+ `TEXTURE_KEYS`(出图);只取色的 key 别烘成图 |
 | **烘焙了却没人调用(死资源)** | 冒烟对账 `bake_keys()` vs `requested_keys()`;删就删干净 |
+| 对账把某个 key 报成死资源,但它其实会用到 | 先查是不是**冒烟流程没走到**(如只放了火塔),补流程比加豁免对 |
 | **key 拼错静默吃兜底(幽灵 key)** | 反向对账;第 3 级兜底不报错是设计,不是许可 |
 | **拿「已烘焙」当体验做完了的证据** | 烘焙只证明文件在;要证明玩家真听见/看见 |
 | **只给音效做了播放对账,美术侧没有** | 两侧都要记实际输出(`sfx_plays` / `drawn`),图形「没画出来」更难察觉 |

@@ -28,6 +28,9 @@ var record: Dictionary = {"best_wave": 0, "wins": 0, "plays": 0}
 var sfx_route: String = "local"
 ## key -> 播放次数。给 headless 断言用(证明 hit 等音效真的在流程中被播放,不是死资源)
 var sfx_plays: Dictionary = {}
+## key -> 绘制次数。同上,但管美术侧:`texture_for` 取到图 ≠ 玩家看得见,
+## 还得真的 `draw_texture` 出去。图形「没画出来」比音效「静音」更容易被别的元素盖过去。
+var art_drawn: Dictionary = {}
 
 var _prev_event: String = ""
 var _prev_phase: StringName = &""
@@ -324,6 +327,14 @@ func _coverage_map(type: StringName) -> Dictionary:
 	return out
 
 
+## 唯一的贴图绘制入口:记一笔 art_drawn 再画。
+## 有了它,冒烟才能断言「烘焙清单里每张图都真的出现在画面上」——
+## 只断言 texture_for 被调用是不够的,取到图不等于画出去。
+func _draw_tex(key: StringName, size: int, center: Vector2) -> void:
+	art_drawn[key] = int(art_drawn.get(key, 0)) + 1
+	_board.draw_texture(art.texture_for(key, size), center - Vector2(size, size) * 0.5)
+
+
 func _draw_board() -> void:
 	var m := board_metrics()
 	var cell: float = m["cell"]
@@ -372,8 +383,7 @@ func _draw_board() -> void:
 	# 晶核
 	var core: Vector2i = sim.core_cell()
 	var core_size := int(cell * 0.7)
-	var core_tex: Texture2D = art.texture_for(&"core", core_size)
-	_board.draw_texture(core_tex, _px(m, Vector2(core)) - Vector2(core_size, core_size) * 0.5)
+	_draw_tex(&"core", core_size, _px(m, Vector2(core)))
 	var core_ratio: float = clampf(float(sim.core_hp) / float(sim.START_HP), 0.0, 1.0)
 	_board.draw_arc(_px(m, Vector2(core)), cell * 0.44, -PI * 0.5,
 		-PI * 0.5 + TAU * core_ratio, 32, Color(0.906, 0.298, 0.369, 0.9), maxf(2.0, cell * 0.05))
@@ -396,8 +406,7 @@ func _draw_board() -> void:
 		if juice > 0.0 and Vector2i(int(gpos.x), int(gpos.y)) == juice_cell:
 			_board.draw_circle(center, cell * 0.42, Color(1, 1, 1, juice * 0.45))
 		var key: StringName = &"tower_fire" if tw["type"] == &"fire" else &"tower_ice"
-		var tex: Texture2D = art.texture_for(key, tower_size)
-		_board.draw_texture(tex, center - Vector2(tower_size, tower_size) * 0.5)
+		_draw_tex(key, tower_size, center)
 
 	# 弹道闪光 + 枪口闪
 	for b in _beams:
@@ -412,12 +421,11 @@ func _draw_board() -> void:
 
 	# 怪 + 血条
 	var enemy_size := int(cell * 0.4)
-	var enemy_tex: Texture2D = art.texture_for(&"enemy", enemy_size)
 	var bar_w := cell * 0.62
 	var bar_h := maxf(3.0, cell * 0.06)
 	for e in sim.enemies:
 		var center2 := _px(m, sim.enemy_point(e))
-		_board.draw_texture(enemy_tex, center2 - Vector2(enemy_size, enemy_size) * 0.5)
+		_draw_tex(&"enemy", enemy_size, center2)
 		var ratio: float = clampf(float(e["hp"]) / maxf(float(e["max_hp"]), 0.001), 0.0, 1.0)
 		var bar_pos := center2 - Vector2(bar_w * 0.5, cell * 0.34 + bar_h)
 		_board.draw_rect(Rect2(bar_pos - Vector2(1, 1), Vector2(bar_w + 2, bar_h + 2)),

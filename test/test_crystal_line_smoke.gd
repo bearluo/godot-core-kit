@@ -38,11 +38,15 @@ func _initialize() -> void:
 	root_node.sim.gold = 300
 	root_node._try_place(Vector2i(1, 0))   # 紧贴入口,开波即可交火
 	root_node._try_place(Vector2i(2, 2))
+	# 两种塔都要放:否则 tower_ice 的图在整个冒烟里一次都没画出去,
+	# 美术侧对账会(正确地)把它报成死资源。
+	root_node._select(&"ice")
+	root_node._try_place(Vector2i(3, 2))
 	root_node._on_wave()
 	for _j in 90:
 		await process_frame
 
-	if root_node.sim.tower_count() < 2:
+	if root_node.sim.tower_count() < 3:
 		print("FAIL 4: 放塔未生效 count=%d gold=%d event=%s" % [
 			root_node.sim.tower_count(), root_node.sim.gold, root_node.sim.last_event])
 		failures += 1
@@ -58,6 +62,17 @@ func _initialize() -> void:
 	if not root_node.sfx.bake_keys().has(&"hit"):
 		print("FAIL 7: sound_bank 缺少 hit 键")
 		failures += 1
+
+	# 美术侧对账(与音效侧对称;缺了这一半时曾有 gold/path/cell 三张死图长期没人发现)
+	#   死资源: 烘了图但流程中从未画出   幽灵 key: 取了图但不在烘焙清单(正吃程序化兜底)
+	for k in root_node.art.bake_keys():
+		if int(root_node.art_drawn.get(k, 0)) <= 0:
+			print("FAIL 7b: 死资源 图 %s 烘焙了但流程中从未画出 drawn=%s" % [k, root_node.art_drawn])
+			failures += 1
+	for k in root_node.art.requested_keys():
+		if not root_node.art.bake_keys().has(k):
+			print("FAIL 7c: 幽灵 key 图 %s 被取用但未登记 bake_keys=%s" % [k, root_node.art.bake_keys()])
+			failures += 1
 
 	print("smoke towers=%d enemies=%d wave=%d gold=%d hits=%d sfx=%s route=%s art=%s" % [
 		root_node.sim.tower_count(), root_node.sim.enemy_count(), root_node.sim.wave,

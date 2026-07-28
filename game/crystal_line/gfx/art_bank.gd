@@ -7,7 +7,7 @@ const ASSET_DIR := "res://game/crystal_line/assets"
 const GENERATED_SUBDIR := "generated"
 const ICON_SIZE := 48
 
-## key → 强调色(对齐愿景一页纸配色)
+## key → 强调色(对齐愿景一页纸配色)。**这是调色板,不是烘焙清单。**
 const PALETTE := {
 	&"tower_fire": Color("e67e22"),
 	&"tower_ice": Color("4fc3f7"),
@@ -15,14 +15,22 @@ const PALETTE := {
 	&"core": Color("e74c5e"),
 	&"path": Color("3d4a6b"),
 	&"cell": Color("243056"),
-	&"gold": Color("f1c40f"),
 }
 const DEFAULT_COLOR := Color("9aa0a6")
 
+## 真正要出图的 key。⚠️ 别拿 `PALETTE.keys()` 当烘焙清单:
+## `path` / `cell` 只经 `color_for()` 取色画 `draw_rect`,根本不需要图;
+## 调色板与烘焙清单是两个职责,混成一个会把只取色的 key 也烘成 png,
+## 产出物齐全、测试全绿、BRIEF 里有它,实际没人看——就是「死资源」。
+const TEXTURE_KEYS: Array[StringName] = [&"tower_fire", &"tower_ice", &"enemy", &"core"]
+
 var _cache: Dictionary = {}
+## 本次运行中被取图过的 key(幽灵 key 对账用;「画出去了没」另见 main.gd 的 art_drawn)
+var _requested: Dictionary = {}
 
 
 func texture_for(key: StringName, size: int = ICON_SIZE) -> Texture2D:
+	_requested[key] = true
 	var ck := "%s@%d" % [key, size]
 	if _cache.has(ck):
 		return _cache[ck]
@@ -66,8 +74,14 @@ func generated_dir() -> String:
 	return "%s/%s" % [ASSET_DIR, GENERATED_SUBDIR]
 
 
+## 冒烟对账用:跑完真实流程后,
+##   bake_keys() 里没出现在这儿的 = 死资源;这儿有而 bake_keys() 没有的 = 幽灵 key。
+func requested_keys() -> Array:
+	return _requested.keys()
+
+
 func bake_keys() -> Array:
-	return PALETTE.keys()
+	return TEXTURE_KEYS
 
 
 func bake_image(key: StringName) -> Image:
@@ -90,8 +104,6 @@ func brief(key: StringName) -> Dictionary:
 			shape = "裂隙路径地砖"
 		&"cell":
 			shape = "可建造深色格子"
-		&"gold":
-			shape = "金币 UI 圆片"
 	return {
 		"key": key,
 		"size": "%dx%d" % [ICON_SIZE, ICON_SIZE],
@@ -129,8 +141,6 @@ func _make_image(key: StringName, size: int) -> Image:
 			_draw_tri_down(img, size, Color("2c0a0a"))
 		"core":
 			_draw_square(img, size, Color("fff0f0"))
-		"gold":
-			_draw_diamond(img, size, Color("fff8dc"))
 	return img
 
 

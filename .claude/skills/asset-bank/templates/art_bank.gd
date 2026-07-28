@@ -12,11 +12,17 @@ const GENERATED_SUBDIR := "generated"
 const ICON_SIZE := 48
 
 ## key → 强调色(对象辨识 + 图标底色)。key 对齐你游戏里的动作/对象命名。
+## **这是调色板,不是烘焙清单**——有些 key 只用来 color_for() 画色块,不需要图。
 const PALETTE := {
 	&"key_a": Color("d94f4f"),
 	&"key_b": Color("4f9dd9"),
 }
 const DEFAULT_COLOR := Color("9aa0a6")
+
+## 真正要出图的 key。⚠️ 别把 bake_keys() 写成 PALETTE.keys():
+## 只取色的 key 会被一起烘成 png,产出物齐全、测试全绿、BRIEF 里有它,实际没人看
+## ——这是死资源最常见的来源(见 SKILL.md 第五节)。
+const TEXTURE_KEYS: Array[StringName] = [&"key_a", &"key_b"]
 
 var _cache: Dictionary = {}   # "key@size" -> Texture2D
 ## 本次运行中被取用过的 key(死资源 / 幽灵 key 对账用,见 SKILL.md 第五节)
@@ -80,7 +86,7 @@ func generated_dir() -> String:
 
 
 func bake_keys() -> Array:
-	return PALETTE.keys()
+	return TEXTURE_KEYS
 
 
 func bake_image(key: StringName) -> Image:
