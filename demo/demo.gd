@@ -25,6 +25,8 @@ func _ready() -> void:
 	var data := CoreKit.saves.load("__demo_smoke__")
 	CoreKit.log.info("SaveManager save=%s load=%s" % [ok, data])
 	CoreKit.saves.delete_slot("__demo_smoke__")
+	_probe_persistence()
+	_probe_pack_mount()
 
 	# SaveManager 资源守卫冒烟:含 Object 的 save 被拒(返回 false,不落盘)
 	var guard_ok := CoreKit.saves.save("__demo_guard__", {"bad": Resource.new()})
@@ -195,6 +197,54 @@ func _ready() -> void:
 		CoreKit.updater.mount_errors().size()])
 
 	CoreKit.log.info("CoreKit v%s — all subsystems smoke-tested" % CoreKit.VERSION)
+
+
+## 跨重启持久化探针(spike 专用,不进 main):每次启动把计数 +1 存回。
+## 「本轮存回立读」验的是同会话往返(v0.24.3 修的就是这个);
+## 「上次记录」验的是重启后还在不在——微信小游戏只有 /CustomWritablePath
+## 下的路径才落磁盘,其余走 MEMFS 内存盘,一关就没。若反复重启永远读到 0,
+## 说明 Godot 模板把 user:// 映射到了 MEMFS,那是另一个坑。
+func _probe_persistence() -> void:
+	var prev := CoreKit.saves.load("__persist__")
+	var n := int(prev.get("launches", 0))
+	CoreKit.saves.save("__persist__", {"launches": n + 1})
+	var back := CoreKit.saves.load("__persist__")
+	CoreKit.log.info("PROBE 持久化 上次记录=%d 本轮存回立读=%s (期望 launches=%d)" % [
+		n, back, n + 1])
+
+
+## 挂载探针(spike 专用,不进 main):`CoreKit.updater._mount_one` 在微信上唯一
+## 没被验证过的假设就是 `ProjectSettings.load_resource_pack("user://…")`。
+## 分三段,失败时能分辨是「造不出包」还是「挂不上包」:
+##   ① ZIPPacker 能不能往 user:// 写出非空文件(load_resource_pack 也吃 zip)
+##   ② GODOTSDK 能不能从 GDScript 摸到 + 该文件在微信 FS 里的真实路径
+##   ③ load_resource_pack 挂上后,包内文件是否变成可读的 res:// 资源
+func _probe_pack_mount() -> void:
+	var zip_path := "user://probe_pack.zip"
+	var packer := ZIPPacker.new()
+	var open_err := packer.open(zip_path)
+	if open_err != OK:
+		CoreKit.log.info("PROBE 挂载 ① ZIPPacker.open 失败 err=%d — 造不出包,后两段跳过" % open_err)
+		return
+	packer.start_file("probe_mounted.txt")
+	packer.write_file("hello-from-pack".to_utf8_buffer())
+	packer.close_file()
+	packer.close()
+	var size := FileAccess.get_file_as_bytes(zip_path).size()
+	CoreKit.log.info("PROBE 挂载 ① zip 落盘 size=%d (0 就是没真写进去)" % size)
+
+	var sdk = JavaScriptBridge.get_interface("GODOTSDK") if OS.has_feature("web") else null
+	var wx_path := ""
+	if sdk != null:
+		wx_path = str(sdk.getWxPath(zip_path))
+	CoreKit.log.info("PROBE 挂载 ② GODOTSDK=%s wx 真实路径=%s" % [sdk != null, wx_path])
+
+	var before := FileAccess.file_exists("res://probe_mounted.txt")
+	var mounted := ProjectSettings.load_resource_pack(zip_path, true, 0)
+	var after := FileAccess.file_exists("res://probe_mounted.txt")
+	var content := FileAccess.get_file_as_string("res://probe_mounted.txt") if after else "<无>"
+	CoreKit.log.info("PROBE 挂载 ③ load_resource_pack=%s before=%s after=%s content=%s" % [
+		mounted, before, after, content])
 
 
 func _on_demo_event(payload) -> void:
