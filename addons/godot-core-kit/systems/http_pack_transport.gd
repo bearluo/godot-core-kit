@@ -14,6 +14,48 @@ extends Node
 ## 时的串扰;PackUpdater 的下载本就串行,不存在并发压力。
 
 
+## HTTPRequest 的 `RESULT_*` 中文名。裸数字对排查毫无帮助(`result=4 code=0` 谁也看不懂),
+## 而下载失败的 reason 会一路冒到 `download_failed` 信号、进游戏日志,那是排查现场。
+const RESULT_NAMES := {
+	HTTPRequest.RESULT_SUCCESS: "成功",
+	HTTPRequest.RESULT_CHUNKED_BODY_SIZE_MISMATCH: "分块传输长度对不上",
+	HTTPRequest.RESULT_CANT_CONNECT: "连不上服务器",
+	HTTPRequest.RESULT_CANT_RESOLVE: "域名解析不了",
+	HTTPRequest.RESULT_CONNECTION_ERROR: "连接中断",
+	HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR: "TLS 握手失败",
+	HTTPRequest.RESULT_NO_RESPONSE: "服务器没响应",
+	HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED: "响应体超出大小上限",
+	HTTPRequest.RESULT_BODY_DECOMPRESS_FAILED: "响应体解压失败",
+	HTTPRequest.RESULT_REQUEST_FAILED: "请求失败",
+	HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN: "下载目标文件打不开",
+	HTTPRequest.RESULT_DOWNLOAD_FILE_WRITE_ERROR: "下载目标文件写失败",
+	HTTPRequest.RESULT_REDIRECT_LIMIT_REACHED: "重定向次数超限",
+	HTTPRequest.RESULT_TIMEOUT: "超时",
+}
+
+## 那几个「压根没连上」的 result。它们配 `code == 0` 时,在 Web/微信小游戏里最常见的
+## 真因不是网络坏,而是**目标域名没进 request 合法域名白名单**被运行时直接掐掉 ——
+## 这条提示能省掉一整轮排查,所以直接写进 reason。
+const _NOT_CONNECTED := [
+	HTTPRequest.RESULT_CANT_CONNECT,
+	HTTPRequest.RESULT_CANT_RESOLVE,
+	HTTPRequest.RESULT_CONNECTION_ERROR,
+	HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR,
+	HTTPRequest.RESULT_NO_RESPONSE,
+]
+
+
+## 把 (result, code) 翻成人能读的失败原因。纯函数,由 kit 门覆盖。
+## 保留 `http:<result>/<code>` 前缀 —— 老日志/脚本按它 grep,别破坏。
+func describe_failure(result: int, code: int) -> String:
+	var label: String = RESULT_NAMES.get(result, "未知 result")
+	if code > 0:
+		return "http:%d/%d(%s,HTTP %d)" % [result, code, label, code]
+	if result in _NOT_CONNECTED:
+		return "http:%d/0(%s;若在微信小游戏/浏览器里,先查该域名是否已进 request 合法域名白名单)" % [result, label]
+	return "http:%d/0(%s)" % [result, label]
+
+
 ## 拉取文本(manifest)。成功 = RESULT_SUCCESS 且 HTTP 200。
 func fetch_text(url: String, on_done: Callable) -> void:
 	var req := HTTPRequest.new()
@@ -44,14 +86,14 @@ func fetch_file(url: String, dest_path: String, on_done: Callable) -> void:
 	add_child(req)
 	if req.request(url) != OK:
 		req.queue_free()
-		on_done.call(false, "request_error")
+		on_done.call(false, "request_error(HTTPRequest.request() 没发出去:URL 非法,或节点还没进场景树)")
 		return
 	var res: Array = await req.request_completed
 	req.queue_free()
 	var result := int(res[0])
 	var code := int(res[1])
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-		on_done.call(false, "http:%d/%d" % [result, code])
+		on_done.call(false, describe_failure(result, code))
 		return
 	if buffer_in_memory and not _store_body_to_file(res[3], dest_path):
 		on_done.call(false, "write_error")

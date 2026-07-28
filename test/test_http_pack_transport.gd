@@ -16,6 +16,7 @@ func _initialize() -> void:
 	failures += _test_store_body_roundtrip()
 	failures += _test_store_body_creates_parent_dir()
 	failures += _test_store_body_empty()
+	failures += _test_describe_failure()
 
 	_rm_rf(BASE)
 	if failures == 0:
@@ -69,6 +70,42 @@ func _test_store_body_empty() -> int:
 		print("FAIL 3a: 空 body 也应成功写出文件"); failures += 1
 	elif FileAccess.get_file_as_bytes(dest).size() != 0:
 		print("FAIL 3b: 空 body 文件应为 0 字节"); failures += 1
+	t.free()
+	return failures
+
+
+## 4) 失败原因中文化(纯函数,无网络)。要害是三条:保留 http:<result>/<code> 前缀供 grep、
+##    带上中文说明、以及「没连上 + code==0」时补一句合法域名白名单提示 —— 微信小游戏/浏览器
+##    上最常见的真因就是它,裸 `result=4 code=0` 排查时等于没有信息。
+func _test_describe_failure() -> int:
+	var failures := 0
+	var t = _TransportScript.new()
+
+	var conn: String = t.describe_failure(HTTPRequest.RESULT_CONNECTION_ERROR, 0)
+	if not conn.begins_with("http:4/0"):
+		print("FAIL 4a: 应保留 http:<result>/<code> 前缀,实际 %s" % conn); failures += 1
+	if not conn.contains("连接中断"):
+		print("FAIL 4b: 应含 RESULT_* 中文名,实际 %s" % conn); failures += 1
+	if not conn.contains("合法域名"):
+		print("FAIL 4c: 没连上且 code==0 应提示合法域名白名单,实际 %s" % conn); failures += 1
+
+	# 拿到了 HTTP 状态码 = 确实连上了,就不该再提域名白名单(那会把人带偏)
+	var http404: String = t.describe_failure(HTTPRequest.RESULT_SUCCESS, 404)
+	if not http404.begins_with("http:0/404") or not http404.contains("HTTP 404"):
+		print("FAIL 4d: 应带上 HTTP 状态码,实际 %s" % http404); failures += 1
+	if http404.contains("合法域名"):
+		print("FAIL 4e: 已拿到状态码不该提域名白名单,实际 %s" % http404); failures += 1
+
+	# 超时是连上之后的事,同样不该扯白名单
+	var timeout: String = t.describe_failure(HTTPRequest.RESULT_TIMEOUT, 0)
+	if not timeout.contains("超时") or timeout.contains("合法域名"):
+		print("FAIL 4f: 超时应只报超时,实际 %s" % timeout); failures += 1
+
+	# 未知 result 不能崩,也得留下数字
+	var unknown: String = t.describe_failure(999, 0)
+	if not unknown.begins_with("http:999/0") or not unknown.contains("未知 result"):
+		print("FAIL 4g: 未知 result 应降级而非崩,实际 %s" % unknown); failures += 1
+
 	t.free()
 	return failures
 

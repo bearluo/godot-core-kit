@@ -34,7 +34,7 @@
 | signal `check_failed(reason)` | `transport` / `malformed` / `engine_mismatch:x.y`。 |
 | signal `progress(pack_id, done, total)` | 下载进度。 |
 | signal `downloaded(pack_id)` | 单包下载 + 校验通过。 |
-| signal `download_failed(pack_id, reason)` | `checksum` / `network` 等;暂存丢弃,已安装集合不变。 |
+| signal `download_failed(pack_id, reason)` | `checksum` / `http:<result>/<code>(中文说明)` / `write_error` 等;暂存丢弃,已安装集合不变。 |
 | signal `ready_to_apply()` | 全部包已校验落盘并原子写入暂存状态,可 `restart_to_apply()`。 |
 
 ### 可注入接缝(默认即生产实现)
@@ -85,4 +85,5 @@ func _on_ready() -> void:
 - **加密**:起步**不加密**(用官方标准模板)。PCK 加密要求自编译导出模板并全链同 key,会改动整条构建链,留作后续可选项。
 - **导出管线已交付**:产出「薄壳 base + 内容包 + manifest.json」的工具见 [export-pipeline](../tools/export-pipeline.md)(`KitPackManifest` + `build_manifest.gd`,manifest 格式与本子系统 `check()` 逐字咬合)。fortune-mill OTA 已在 **Android 本机模拟器**与 **Web(headless 浏览器)**端到端跑通(下载→挂载→重启/reload→内容上线);`restart_to_apply()` 的 Android 自重启已本机模拟器实证可用(物理真机仍留待),Web 上返回 `false`、重启屏障 = 页面 reload。
 - **Web 传输(0.24.1 修复)**:`HttpPackTransport.fetch_file` 在 **Web/HTML5** 上不用 `HTTPRequest.download_file`——浏览器里它 request 报成功/200 但字节不真正落进 `user://`(IDBFS),随后 sha256 校验失败、永远到不了 `ready_to_apply`。Web 改「`body` 收内存 → `FileAccess.store_buffer` 落盘」(桌面/移动仍用 `download_file` 流式落盘,大包省内存)。详见研究文档 §7c。
+- **失败原因可读(0.24.4)**:传输失败的 `reason` 形如 `http:4/0(连接中断;若在微信小游戏/浏览器里,先查该域名是否已进 request 合法域名白名单)`。保留 `http:<result>/<code>` 前缀供 grep,后面补 `HTTPRequest.RESULT_*` 的中文名。**`result` 属于「没连上」那几类且 `code == 0` 时**额外提示合法域名白名单——Web/微信小游戏上这个组合最常见的真因是白名单没配,而不是网络故障;拿到了 HTTP 状态码(说明确实连上了)或超时则不提,免得把人带偏。翻译逻辑是纯函数 `HttpPackTransport.describe_failure(result, code)`,由 kit 门覆盖。
 - **测试边界**:`HttpPackTransport` 的 HTTP 收发不被 headless 门覆盖(无网络);`test_pack_updater.gd` 经注入假件覆盖 `check`/`download` 行为,另有一个真 zip → 真 `load_resource_pack` 的端到端集成测;Web 落盘要害 `_store_body_to_file` 由 `test_http_pack_transport.gd` 覆盖。
