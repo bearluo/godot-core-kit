@@ -278,7 +278,10 @@ func _probe_cdn_download() -> void:
 	u.ready_to_apply.connect(_on_cdn_ready_to_apply, CONNECT_ONE_SHOT)
 
 	await get_tree().process_frame  # HTTPRequest 须树跑起来后才发得出(否则 err=3)
-	u.check("http://127.0.0.1:8099/manifest.json")
+	# filebrowser 的公开分享直链(局域网 IP,真机也够得着);/share/<hash> 是给人看的
+	# 页面,机器下载要走 /api/public/dl/<hash>/<文件>。切回本地 py server 就改成
+	# http://127.0.0.1:8099/manifest.json。
+	u.check("http://172.25.50.135:8081/api/public/dl/5MwZWGEX/manifest.json")
 
 
 func _on_cdn_check_failed(reason: String) -> void:

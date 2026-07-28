@@ -2,7 +2,28 @@
 
 验 `CoreKit.updater` 的**下载段**在微信小游戏上能否跑通(挂载段由 `_probe_pack_mount` 单独验)。
 模拟器 `project.config.json` 的 `urlCheck: false` 不校验合法域名,所以本地地址能通 —— **真机不成立**
-(要局域网 IP + 合法域名白名单 + ICP 备案)。
+(要合法域名白名单 + ICP 备案)。
+
+## 两条投递通道(都实测通过)
+
+| | 本地 py server | **filebrowser 公开分享**(推荐) |
+|---|---|---|
+| 起法 | `python3 cdn/serve.py`(前台占终端) | 常驻 Docker,不用起 |
+| URL base | `http://127.0.0.1:8099/` | `http://172.25.50.135:8081/api/public/dl/<hash>/` |
+| 局域网可达 | 否(绑 127.0.0.1) | **是** —— 真机也够得着 |
+| 素材放哪 | `cdn/` | `E:\work\godot-core-kit\build\cdn\`(= 托管根 `build/` 下) |
+
+filebrowser **有鉴权**,`/api/raw/…` 直链要 token。要免登录下载得建**公开分享**;
+对**目录**建 share 后 hash 固定,之后往目录里丢新文件不用重建 share —— 正好是 CDN base URL 语义:
+
+```bash
+TOK=$(curl -s -X POST http://172.25.50.135:8081/api/login \
+  -H "Content-Type: application/json" -d '{"username":"admin","password":"<pw>"}')
+curl -s -X POST "http://172.25.50.135:8081/api/share/cdn" -H "X-Auth: $TOK" -d '{}'
+# → {"hash":"5MwZWGEX","path":"/cdn","expire":0,"hasPassword":false}
+```
+
+⚠️ `http://…/share/<hash>` 是**给人看的页面**;机器下载要走 `http://…/api/public/dl/<hash>/<文件>`。
 
 ## 跑一轮
 

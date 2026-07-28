@@ -1,13 +1,13 @@
 {
 	"engine": "",
-	"url_base": "http://127.0.0.1:8099/",
+	"url_base": "http://172.25.50.135:8081/api/public/dl/5MwZWGEX/",
 	"packs": [
 		{
 			"id": "cdnprobe",
-			"version": 6,
+			"version": 7,
 			"order": 0,
-			"file": "E:/orca/workspaces/godot-core-kit/kit-wechat-spike/cdn/probe_pack-v6.pck",
-			"url": "probe_pack-v6.pck"
+			"file": "E:/work/godot-core-kit/build/cdn/probe_pack-v7.pck",
+			"url": "probe_pack-v7.pck"
 		}
 	]
 }
