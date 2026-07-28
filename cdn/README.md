@@ -11,17 +11,17 @@
 | 起法 | `python3 cdn/serve.py`(前台占终端) | 常驻 Docker,不用起 |
 | URL base | `http://127.0.0.1:8099/` | `http://172.25.50.135:8081/api/public/dl/<hash>/` |
 | 局域网可达 | 否(绑 127.0.0.1) | **是** —— 真机也够得着 |
-| 素材放哪 | `cdn/` | `E:\work\godot-core-kit\build\cdn\`(= 托管根 `build/` 下) |
+| 素材放哪 | `cdn/` | `E:\work\godot-core-kit\build\cdn\`(嵌套挂载到 `/godot-core-kit/cdn`) |
 
-filebrowser **有鉴权**,`/api/raw/…` 直链要 token。要免登录下载得建**公开分享**;
-对**目录**建 share 后 hash 固定,之后往目录里丢新文件不用重建 share —— 正好是 CDN base URL 语义:
+**filebrowser 那条通道的完整用法(建分享、目录规则、URL 形态、坑)已固化成全局 skill
+`filebrowser-cdn`**(`%CLAUDE_KIT%\skills\filebrowser-cdn\`),别在这儿重复手搓:
 
-```bash
-TOK=$(curl -s -X POST http://172.25.50.135:8081/api/login \
-  -H "Content-Type: application/json" -d '{"username":"admin","password":"<pw>"}')
-curl -s -X POST "http://172.25.50.135:8081/api/share/cdn" -H "X-Auth: $TOK" -d '{}'
-# → {"hash":"5MwZWGEX","path":"/cdn","expire":0,"hasPassword":false}
+```powershell
+& "$env:CLAUDE_KIT\skills\filebrowser-cdn\fbshare.ps1" -Project godot-core-kit -Sub cdn
+# → base URL http://172.25.50.135:8081/api/public/dl/ugaHddgi/   (幂等,已存在就复用)
 ```
+
+本项目的 slug 是 `godot-core-kit`,分享 hash `ugaHddgi` 已登记在该 skill 的 `registry.md`。
 
 ⚠️ `http://…/share/<hash>` 是**给人看的页面**;机器下载要走 `http://…/api/public/dl/<hash>/<文件>`。
 

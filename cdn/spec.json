@@ -1,13 +1,13 @@
 {
 	"engine": "",
-	"url_base": "http://172.25.50.135:8081/api/public/dl/5MwZWGEX/",
+	"url_base": "http://172.25.50.135:8081/api/public/dl/ugaHddgi/",
 	"packs": [
 		{
 			"id": "cdnprobe",
-			"version": 7,
+			"version": 8,
 			"order": 0,
-			"file": "E:/work/godot-core-kit/build/cdn/probe_pack-v7.pck",
-			"url": "probe_pack-v7.pck"
+			"file": "E:/work/godot-core-kit/build/cdn/probe_pack-v8.pck",
+			"url": "probe_pack-v8.pck"
 		}
 	]
 }
