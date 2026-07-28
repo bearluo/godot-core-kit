@@ -3,6 +3,9 @@ extends Node
 ## 用 Godot 4 打开工程直接运行(或 headless --quit-after 60)即可,
 ## 输出应看到各子系统按预期响应、无报错。
 
+var _hud: Label = null   # 真机屏幕读数,见 _make_hud/_say
+
+
 func _ready() -> void:
 	CoreKit.log.info("demo scene loaded — core-kit is wired up correctly")
 
@@ -25,9 +28,11 @@ func _ready() -> void:
 	var data := CoreKit.saves.load("__demo_smoke__")
 	CoreKit.log.info("SaveManager save=%s load=%s" % [ok, data])
 	CoreKit.saves.delete_slot("__demo_smoke__")
+	_make_hud()
 	_probe_persistence()
 	_probe_pack_mount()
 	_probe_cdn_download()
+	_probe_raw_download()
 
 	# SaveManager 资源守卫冒烟:含 Object 的 save 被拒(返回 false,不落盘)
 	var guard_ok := CoreKit.saves.save("__demo_guard__", {"bad": Resource.new()})
@@ -248,11 +253,95 @@ func _probe_pack_mount() -> void:
 		mounted, before, after, content])
 
 
+## 真机诊断:绕开 CoreKit.updater,直接用 HTTPRequest 拉同一个 pck,报三个数——
+## 收到多少字节 / 内存里算的 sha256 / 落盘后再算一遍的 sha256。三者一比就能定位:
+##   收到=0            → 传输层根本没给字节
+##   收到≠220 或内存 sha 不符 → 传输被破坏(如二进制被当文本处理)
+##   内存 sha 对但②盘 sha 不对 → 落盘那步坏
+##   ①②都对但④(子目录)不对 → 只有子目录写不住,PackUpdater 的 staging/ 正踩这个
+## 不碰 kit 代码,所以结论对 kit 是独立证据。
+func _probe_raw_download() -> void:
+	_say("PROBE RAW ⓪ web=%s 平台=%s" % [OS.has_feature("web"), OS.get_name()])
+	var req := HTTPRequest.new()
+	add_child(req)
+	await get_tree().process_frame
+	if req.request("http://172.25.50.135:8081/api/public/dl/ugaHddgi/probe_pack-v9.pck") != OK:
+		_say("PROBE RAW ① request 发不出去")
+		return
+	var res: Array = await req.request_completed
+	req.queue_free()
+	var body: PackedByteArray = res[3]
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_SHA256)
+	ctx.update(body)
+	_say("PROBE RAW ① result=%d code=%d 收到=%d 字节 内存sha=%s" % [
+		int(res[0]), int(res[1]), body.size(), ctx.finish().hex_encode().substr(0, 16)])
+
+	var p := "user://raw_probe.pck"
+	var f := FileAccess.open(p, FileAccess.WRITE)
+	if f == null:
+		_say("PROBE RAW ② 落盘失败:开不了文件")
+		return
+	f.store_buffer(body)
+	f.close()
+	var disk := FileAccess.get_file_as_bytes(p)
+	ctx.start(HashingContext.HASH_SHA256)
+	ctx.update(disk)
+	_say("PROBE RAW ② 落盘=%d 字节 盘sha=%s" % [
+		disk.size(), ctx.finish().hex_encode().substr(0, 16)])
+
+	# ④ 子目录落盘。②写的是 user:// 根,而 PackUpdater 落的是 user://kit_updater/staging/。
+	# 模拟器的 WXMEMFS 与微信电脑版/真机的 wxfile FS 语义不同,子目录这条必须单独验——
+	# 电脑版报 checksum 说明传输 ok 且写盘返回成功,那嫌疑就落在"写进子目录后回读丢内容"。
+	var sub := "user://raw_probe_dir/nested/raw_probe.pck"
+	var mk := DirAccess.make_dir_recursive_absolute(sub.get_base_dir())
+	var f2 := FileAccess.open(sub, FileAccess.WRITE)
+	if f2 == null:
+		_say("PROBE RAW ④ 子目录开不了文件 mkdir=%d 错误=%d" % [mk, FileAccess.get_open_error()])
+		return
+	f2.store_buffer(body)
+	f2.close()
+	var disk2 := FileAccess.get_file_as_bytes(sub)
+	ctx.start(HashingContext.HASH_SHA256)
+	ctx.update(disk2)
+	_say("PROBE RAW ④ 子目录落盘=%d 字节 盘sha=%s (mkdir=%d)" % [
+		disk2.size(), ctx.finish().hex_encode().substr(0, 16), mk])
+	_say("PROBE RAW ⑤ 期望 220 字节 sha=40cce60e037d9868")
+
+
+## 屏幕读数:真机上看不到控制台,把探针结果直接画到画布上,看手机就能判读。
+## 用代码建(不改 demo.tscn),字号按手机放大。底色**故意不用纯黑**——上一版用了近黑色,
+## 真机上被当成"黑屏崩了"误判过。
+func _make_hud() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var bg := ColorRect.new()
+	bg.color = Color(0.10, 0.13, 0.28)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	_hud = Label.new()
+	_hud.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hud.offset_left = 16
+	_hud.offset_top = 16
+	_hud.offset_right = -16
+	_hud.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hud.add_theme_font_size_override("font_size", 30)
+	_hud.text = "CoreKit.updater 真机探针\n"
+	layer.add_child(_hud)
+
+
+## 打一行:控制台 + 屏幕各一份。真机只有屏幕这份看得见。
+func _say(msg: String) -> void:
+	CoreKit.log.info(msg)
+	if _hud != null:
+		_hud.text += msg + "\n"
+
+
 ## CDN 下载探针(spike 专用,不进 main):验 `CoreKit.updater` 的**下载段**在微信上
 ## 能否跑通 —— 挂载段已由 `_probe_pack_mount` 证过,check/download 这段是唯一空白。
-## 素材由本机 `cdn/serve.py` 在 http://127.0.0.1:8099 上提供(manifest.json +
-## probe_pack-v1.zip)。模拟器 `urlCheck:false` 不校验合法域名所以本地地址能通,
-## **真机不成立**(要局域网 IP + 白名单 + 备案)。分四段:
+## 素材由本机 filebrowser 的公开分享提供(见全局 skill `filebrowser-cdn`),绑局域网 IP,
+## **真机也够得着**。模拟器靠 `urlCheck:false` 不校验合法域名;真机靠开发版/体验版
+## **打开调试模式跳过域名校验**(正式发布仍需 HTTPS + 白名单 + ICP 备案)。分四段:
 ##   ⓪ 引擎号与本地已装版本 —— manifest 的 engine 对不上 check 会直接失败,先打出来
 ##   ④ 先跑 mount_installed:上轮装过的话这轮该挂上,读到内容 = 端到端闭环
 ##   ① check → update_available / up_to_date / check_failed
@@ -260,12 +349,12 @@ func _probe_pack_mount() -> void:
 func _probe_cdn_download() -> void:
 	var u = CoreKit.updater
 	var info := Engine.get_version_info()
-	CoreKit.log.info("PROBE CDN ⓪ 引擎=%d.%d 已装版本=%d" % [
+	_say("PROBE CDN ⓪ 引擎=%d.%d 已装版本=%d" % [
 		info.major, info.minor, u.local_version("cdnprobe")])
 
 	u.mount_installed()
 	var has := FileAccess.file_exists("res://probe_cdn.txt")
-	CoreKit.log.info("PROBE CDN ④ 重启后 挂上=%s 内容=%s 挂载错误=%s" % [
+	_say("PROBE CDN ④ 重启后 挂上=%s 内容=%s 挂载错误=%s" % [
 		u.mounted_packs(),
 		FileAccess.get_file_as_string("res://probe_cdn.txt") if has else "<无>",
 		u.mount_errors()])
@@ -285,29 +374,29 @@ func _probe_cdn_download() -> void:
 
 
 func _on_cdn_check_failed(reason: String) -> void:
-	CoreKit.log.info("PROBE CDN ① check_failed=%s" % reason)
+	_say("PROBE CDN ① check_failed=%s" % reason)
 
 
 func _on_cdn_up_to_date() -> void:
-	CoreKit.log.info("PROBE CDN ① up_to_date —— 已装最新,本轮不下载")
+	_say("PROBE CDN ① up_to_date —— 已装最新,本轮不下载")
 
 
 func _on_cdn_update_available(plan: Dictionary) -> void:
-	CoreKit.log.info("PROBE CDN ① update_available packs=%d" % plan["packs"].size())
+	_say("PROBE CDN ① update_available packs=%d" % plan["packs"].size())
 	CoreKit.updater.download(plan)
 
 
 func _on_cdn_downloaded(id: String) -> void:
-	CoreKit.log.info("PROBE CDN ② downloaded id=%s" % id)
+	_say("PROBE CDN ② downloaded id=%s" % id)
 
 
 func _on_cdn_download_failed(id: String, reason: String) -> void:
-	CoreKit.log.info("PROBE CDN ② download_failed id=%s reason=%s" % [id, reason])
+	_say("PROBE CDN ② download_failed id=%s reason=%s" % [id, reason])
 
 
 func _on_cdn_ready_to_apply() -> void:
 	var pack := "user://kit_updater/packs/cdnprobe-v%d.pck" % CoreKit.updater.local_version("cdnprobe")
-	CoreKit.log.info("PROBE CDN ③ ready_to_apply 落盘包=%d 字节 state=%s" % [
+	_say("PROBE CDN ③ ready_to_apply 落盘包=%d 字节 state=%s" % [
 		FileAccess.get_file_as_bytes(pack).size(),
 		FileAccess.get_file_as_string("user://kit_updater/state.json")])
 	# ③b 下完立刻挂 —— 验「标准 4.7 导出的 `.pck`(GDPC 头)微信定制运行时收不收」。
@@ -315,7 +404,7 @@ func _on_cdn_ready_to_apply() -> void:
 	# 跨重启持久本身已由 ④ 段与 up_to_date 覆盖。
 	CoreKit.updater.mount_installed()
 	var has := FileAccess.file_exists("res://probe_cdn.txt")
-	CoreKit.log.info("PROBE CDN ③b 本轮即挂 挂上=%s 内容=%s 错误=%s" % [
+	_say("PROBE CDN ③b 本轮即挂 挂上=%s 内容=%s 错误=%s" % [
 		CoreKit.updater.mounted_packs(),
 		FileAccess.get_file_as_string("res://probe_cdn.txt") if has else "<无>",
 		CoreKit.updater.mount_errors()])

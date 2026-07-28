@@ -4,10 +4,10 @@
 	"packs": [
 		{
 			"id": "cdnprobe",
-			"version": 8,
+			"version": 9,
 			"order": 0,
-			"file": "E:/work/godot-core-kit/build/cdn/probe_pack-v8.pck",
-			"url": "probe_pack-v8.pck"
+			"file": "E:/work/godot-core-kit/build/cdn/probe_pack-v9.pck",
+			"url": "probe_pack-v9.pck"
 		}
 	]
 }
