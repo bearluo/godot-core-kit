@@ -1,0 +1,5 @@
+# 生成物:pck 由 make_pck.gd 造、manifest 由 build_manifest.gd 造
+probe_pack-v*.pck
+manifest.json
+probe_cdn.txt
+probe_pack-v*.zip

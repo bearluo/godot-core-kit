@@ -27,6 +27,7 @@ func _ready() -> void:
 	CoreKit.saves.delete_slot("__demo_smoke__")
 	_probe_persistence()
 	_probe_pack_mount()
+	_probe_cdn_download()
 
 	# SaveManager 资源守卫冒烟:含 Object 的 save 被拒(返回 false,不落盘)
 	var guard_ok := CoreKit.saves.save("__demo_guard__", {"bad": Resource.new()})
@@ -245,6 +246,76 @@ func _probe_pack_mount() -> void:
 	var content := FileAccess.get_file_as_string("res://probe_mounted.txt") if after else "<无>"
 	CoreKit.log.info("PROBE 挂载 ③ load_resource_pack=%s before=%s after=%s content=%s" % [
 		mounted, before, after, content])
+
+
+## CDN 下载探针(spike 专用,不进 main):验 `CoreKit.updater` 的**下载段**在微信上
+## 能否跑通 —— 挂载段已由 `_probe_pack_mount` 证过,check/download 这段是唯一空白。
+## 素材由本机 `cdn/serve.py` 在 http://127.0.0.1:8099 上提供(manifest.json +
+## probe_pack-v1.zip)。模拟器 `urlCheck:false` 不校验合法域名所以本地地址能通,
+## **真机不成立**(要局域网 IP + 白名单 + 备案)。分四段:
+##   ⓪ 引擎号与本地已装版本 —— manifest 的 engine 对不上 check 会直接失败,先打出来
+##   ④ 先跑 mount_installed:上轮装过的话这轮该挂上,读到内容 = 端到端闭环
+##   ① check → update_available / up_to_date / check_failed
+##   ②③ download → downloaded → ready_to_apply + state.json
+func _probe_cdn_download() -> void:
+	var u = CoreKit.updater
+	var info := Engine.get_version_info()
+	CoreKit.log.info("PROBE CDN ⓪ 引擎=%d.%d 已装版本=%d" % [
+		info.major, info.minor, u.local_version("cdnprobe")])
+
+	u.mount_installed()
+	var has := FileAccess.file_exists("res://probe_cdn.txt")
+	CoreKit.log.info("PROBE CDN ④ 重启后 挂上=%s 内容=%s 挂载错误=%s" % [
+		u.mounted_packs(),
+		FileAccess.get_file_as_string("res://probe_cdn.txt") if has else "<无>",
+		u.mount_errors()])
+
+	u.check_failed.connect(_on_cdn_check_failed, CONNECT_ONE_SHOT)
+	u.up_to_date.connect(_on_cdn_up_to_date, CONNECT_ONE_SHOT)
+	u.update_available.connect(_on_cdn_update_available, CONNECT_ONE_SHOT)
+	u.downloaded.connect(_on_cdn_downloaded, CONNECT_ONE_SHOT)
+	u.download_failed.connect(_on_cdn_download_failed, CONNECT_ONE_SHOT)
+	u.ready_to_apply.connect(_on_cdn_ready_to_apply, CONNECT_ONE_SHOT)
+
+	await get_tree().process_frame  # HTTPRequest 须树跑起来后才发得出(否则 err=3)
+	u.check("http://127.0.0.1:8099/manifest.json")
+
+
+func _on_cdn_check_failed(reason: String) -> void:
+	CoreKit.log.info("PROBE CDN ① check_failed=%s" % reason)
+
+
+func _on_cdn_up_to_date() -> void:
+	CoreKit.log.info("PROBE CDN ① up_to_date —— 已装最新,本轮不下载")
+
+
+func _on_cdn_update_available(plan: Dictionary) -> void:
+	CoreKit.log.info("PROBE CDN ① update_available packs=%d" % plan["packs"].size())
+	CoreKit.updater.download(plan)
+
+
+func _on_cdn_downloaded(id: String) -> void:
+	CoreKit.log.info("PROBE CDN ② downloaded id=%s" % id)
+
+
+func _on_cdn_download_failed(id: String, reason: String) -> void:
+	CoreKit.log.info("PROBE CDN ② download_failed id=%s reason=%s" % [id, reason])
+
+
+func _on_cdn_ready_to_apply() -> void:
+	var pack := "user://kit_updater/packs/cdnprobe-v%d.pck" % CoreKit.updater.local_version("cdnprobe")
+	CoreKit.log.info("PROBE CDN ③ ready_to_apply 落盘包=%d 字节 state=%s" % [
+		FileAccess.get_file_as_bytes(pack).size(),
+		FileAccess.get_file_as_string("user://kit_updater/state.json")])
+	# ③b 下完立刻挂 —— 验「标准 4.7 导出的 `.pck`(GDPC 头)微信定制运行时收不收」。
+	# 这是 _probe_pack_mount 的 zip 验不到的独立风险(zip 无引擎头),且不必等下次启动:
+	# 跨重启持久本身已由 ④ 段与 up_to_date 覆盖。
+	CoreKit.updater.mount_installed()
+	var has := FileAccess.file_exists("res://probe_cdn.txt")
+	CoreKit.log.info("PROBE CDN ③b 本轮即挂 挂上=%s 内容=%s 错误=%s" % [
+		CoreKit.updater.mounted_packs(),
+		FileAccess.get_file_as_string("res://probe_cdn.txt") if has else "<无>",
+		CoreKit.updater.mount_errors()])
 
 
 func _on_demo_event(payload) -> void:
