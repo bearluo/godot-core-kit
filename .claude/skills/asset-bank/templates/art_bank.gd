@@ -38,6 +38,8 @@ func texture_for(key: StringName, size: int = ICON_SIZE) -> Texture2D:
 
 ## 冒烟测试对账用:跑完一段真实流程后,
 ##   bake_keys() 里没出现在这儿的 = 死资源;这儿有而 bake_keys() 没有的 = 幽灵 key。
+## ⚠️ 取到 Texture2D ≠ 玩家看见了 —— 还要确认它真的被 draw_texture 出去
+##    (绘制入口累加 drawn[key],冒烟里断言每个图 key 都出现过;见 SKILL.md 第五节)。
 func requested_keys() -> Array:
 	return _requested.keys()
 
