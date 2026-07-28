@@ -135,9 +135,13 @@ func _run_step(node, step: String) -> void:
 		"select":
 			node._select(StringName(arg))
 		"place":
+			# ⚠️ 走 _try_place(玩家点格子的那条路),不是直接调 sim.place_tower。
+			# 摆拍走后门就证明不了前门能用:直接调 sim 会绕过「点已有塔 = 升级」的分支,
+			# 截图里于是永远看不到升级效果,而那正是要取证的东西。
 			var p := arg.split(",")
-			var type: StringName = StringName(p[2]) if p.size() > 2 else node.selected
-			node.sim.place_tower(int(p[0]), int(p[1]), type)
+			if p.size() > 2:
+				node._select(StringName(p[2]))
+			node._try_place(Vector2i(int(p[0]), int(p[1])))
 			await process_frame
 		"gold":
 			node.sim.gold = int(arg)

@@ -131,6 +131,11 @@ func _on_board_input(ev: InputEvent) -> void:
 
 
 func _try_place(c: Vector2i) -> void:
+	# 点已有塔 = 升级。格子只有 20 个,后半局的钱必须有第二个去处,
+	# 否则实测 14 个备战窗口里有 7 个玩家无事可做,只能看倒计时。
+	if not sim.tower_at(c.x, c.y).is_empty():
+		_try_upgrade(c)
+		return
 	if sim.place_tower(c.x, c.y, selected):
 		juice = 1.0
 		juice_cell = c
@@ -146,6 +151,24 @@ func _try_place(c: Vector2i) -> void:
 				msg = "不能放这里(路径/已有塔/越界)。"
 			_:
 				msg = "无法放置。"
+		_play(&"deny")
+	_refresh_ui()
+
+
+func _try_upgrade(c: Vector2i) -> void:
+	var lv: int = sim.level_at(c.x, c.y)
+	var cost: int = sim.upgrade_cost(c.x, c.y)
+	if lv >= sim.MAX_LEVEL:
+		msg = "这座已经满级 (Lv%d) 了。" % lv
+		_play(&"deny")
+	elif sim.upgrade_tower(c.x, c.y):
+		juice = 1.0
+		juice_cell = c
+		msg = "升级! Lv%d → Lv%d,伤害与射程都涨。" % [lv, lv + 1]
+		_play(&"place")
+		_prev_event = "upgraded"
+	else:
+		msg = "升级要 %d 金,还差 %d。" % [cost, maxi(0, cost - sim.gold)]
 		_play(&"deny")
 	_refresh_ui()
 
@@ -229,9 +252,14 @@ func _finish_round() -> void:
 		record["wins"] = int(record.get("wins", 0)) + 1
 	_save_record()
 	_r_title.text = "守住了!" if bool(s["victory"]) else "晶核破碎"
-	_r_body.text = "波次 %d/%d   晶核 %d   击杀 %d   漏怪 %d\n塔 %d 座   赚取 %d 金   用时 %s" % [
+	# 归因:只报「漏怪 10」玩家不知道下一局该改什么,得指出从第几波开始扛不住。
+	# 没有这一句,「再来一局」就只是重开,不是复盘。
+	var fl: int = int(s["first_leak_wave"])
+	var attr: String = ("全程未漏怪 —— 这套站位站得住。" if fl <= 0
+		else "第 %d 波开始漏怪 —— 下一局在那之前就要补火力。" % fl)
+	_r_body.text = "波次 %d/%d   晶核 %d   击杀 %d   漏怪 %d\n塔 %d 座   赚取 %d 金   用时 %s\n%s" % [
 		s["waves_cleared"], s["waves_total"], s["core_hp"], s["kills"], s["leaks"],
-		s["towers"], s["gold_earned"], _fmt_time(float(s["seconds"]))]
+		s["towers"], s["gold_earned"], _fmt_time(float(s["seconds"])), attr]
 	_r_record.text = "历史最好 第 %d 波   通关 %d 次   第 %d 局" % [
 		int(record.get("best_wave", 0)), int(record.get("wins", 0)), int(record.get("plays", 0))]
 	_result.visible = true
@@ -286,9 +314,15 @@ func _status_line() -> String:
 	if sim.is_game_over():
 		return "本局失败 —— 点「再来一局」换一套站位。"
 	if sim.phase == sim.PHASE_PREP:
-		return "备战 %.1fs → 第 %d 波(%d 只)。亮点越大的格子覆盖路径越长。" % [
-			maxf(sim.prep_left, 0.0), sim.wave + 1, sim.wave_size(sim.wave + 1)]
-	return "第 %d 波作战中 — 场上 %d 只,还剩 %d 只未出。" % [sim.wave, sim.enemy_count(), sim.spawn_left]
+		var nxt: int = sim.wave + 1
+		if sim.is_boss_wave(nxt):
+			return "备战 %.1fs → ⚠ 第 %d 波是【重潮】(%d 只厚甲)。攒钱升塔,别硬扛。" % [
+				maxf(sim.prep_left, 0.0), nxt, sim.wave_size(nxt)]
+		return "备战 %.1fs → 第 %d 波(%d 只)。点空格建塔,点已有塔升级。" % [
+			maxf(sim.prep_left, 0.0), nxt, sim.wave_size(nxt)]
+	var tag: String = "【重潮】" if sim.is_boss_wave(sim.wave) else ""
+	return "第 %d 波%s作战中 — 场上 %d 只,还剩 %d 只未出。" % [
+		sim.wave, tag, sim.enemy_count(), sim.spawn_left]
 
 
 func _apply_button_icons() -> void:
@@ -407,6 +441,15 @@ func _draw_board() -> void:
 			_board.draw_circle(center, cell * 0.42, Color(1, 1, 1, juice * 0.45))
 		var key: StringName = &"tower_fire" if tw["type"] == &"fire" else &"tower_ice"
 		_draw_tex(key, tower_size, center)
+		# 等级点:Lv2 起在塔下方画 level-1 个金点,让「这座升过几级」一眼可见。
+		# 射程圈本身也会跟着 tw["range"] 变大,两个信号一起读。
+		var lv: int = int(tw["level"])
+		if lv > 1:
+			var gap := cell * 0.14
+			var x0 := center.x - gap * float(lv - 2) * 0.5
+			for p in lv - 1:
+				_board.draw_circle(Vector2(x0 + gap * float(p), center.y + cell * 0.3),
+					cell * 0.055, Color(1, 0.88, 0.45, 0.95))
 
 	# 弹道闪光 + 枪口闪
 	for b in _beams:

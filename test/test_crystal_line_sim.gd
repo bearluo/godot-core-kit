@@ -15,13 +15,7 @@ const DT := 0.05
 const GOOD_SPOTS := [Vector2i(0, 4), Vector2i(1, 4), Vector2i(2, 4), Vector2i(3, 4)]
 const POOR_SPOTS := [Vector2i(3, 0), Vector2i(3, 1), Vector2i(4, 2), Vector2i(4, 6)]
 
-## CL-003 通关构筑(参考 test/tools/balance_probe.gd 的 PROBE_BUILD)
-const WIN_BUILD := [
-	[1, 2, "fire"], [3, 4, "fire"], [1, 6, "fire"], [1, 4, "fire"], [2, 4, "fire"],
-	[2, 2, "ice"], [0, 4, "fire"], [2, 6, "ice"], [1, 0, "fire"], [3, 2, "fire"],
-	[3, 6, "fire"], [0, 0, "fire"], [4, 2, "fire"], [4, 6, "fire"], [3, 1, "fire"],
-	[3, 0, "fire"],
-]
+const SimPlayer := preload("res://test/tools/sim_player.gd")
 
 var failures := 0
 
@@ -262,16 +256,13 @@ func _run_placement(spots: Array) -> Dictionary:
 
 # ---------------------------------------------------------------- CL-003 一局闭环
 
+## 存在通关路径 —— **走真实经济**,不再 gold=99999 一次摆满。
+## 无限金币下摆满 16 座只证明「够多的塔能赢」,证明不了「玩家攒得出这些塔」;
+## 平衡一改这个区别就致命(实测新平衡下 16 座满级零升级的构筑死在第 12 波重潮)。
+## 现在跑的是和 feel_probe 调参时同一个 GOOD 模拟玩家,两边不会各说各话。
 func _victory_path_cl003() -> void:
 	var sim = Sim.new()
-	sim.gold = 99999
-	for b in WIN_BUILD:
-		if not sim.place_tower(int(b[0]), int(b[1]), StringName(b[2])):
-			_fail("CL-003 通关构筑放塔失败 %s" % [b])
-	var t := 0.0
-	while not sim.is_round_over() and t < 900.0:
-		sim.tick(DT)
-		t += DT
+	SimPlayer.new(SimPlayer.GOOD).play(sim, DT)
 	if not sim.is_victory():
 		_fail("CL-003 存在通关路径:该构筑应通关 waves=%d hp=%d" % [sim.waves_cleared, sim.core_hp])
 	if sim.waves_cleared != sim.WAVES_TO_WIN:

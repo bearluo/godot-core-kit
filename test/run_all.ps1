@@ -55,7 +55,7 @@ Write-Output "import exit=$($imp.code)"
 $tests = @('test_log','test_event_bus','test_scene_manager','test_object_pool',
   'test_save_manager','test_settings','test_frame_scheduler','test_state_machine',
   'test_input_manager','test_audio_manager','test_resource_manager','test_kit_context','test_core_kit','test_dev_console','test_locale_manager','test_rebind','test_transition','test_ui_stack','test_layer_manager','test_game_clock','test_kit_inventory','test_kit_data_registry','test_kit_offline','test_kit_modifiers','test_kit_stats','test_kit_achievements','test_pack_updater','test_pack_manifest','test_http_pack_transport',
-  'test_crystal_line_sim','test_crystal_line_art_bank','test_crystal_line_sound_bank','test_crystal_line_layout','test_crystal_line_smoke')
+  'test_crystal_line_sim','test_crystal_line_art_bank','test_crystal_line_sound_bank','test_crystal_line_layout','test_crystal_line_smoke','test_crystal_line_feel')
 $fails = 0
 Write-Output "`n=== tests ==="
 foreach ($t in $tests) {
