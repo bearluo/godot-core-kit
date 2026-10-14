@@ -22,8 +22,8 @@ func _initialize() -> void:
 	await process_frame  # 补一帧,让 CoreKit._ready() 的 bind_* 接线跑完
 
 	# 1. 版本
-	if kit.VERSION != "0.26.0":
-		print("FAIL 1: VERSION 应为 0.26.0,实际 %s" % kit.VERSION)
+	if kit.VERSION != "0.27.0":
+		print("FAIL 1: VERSION 应为 0.27.0,实际 %s" % kit.VERSION)
 		failures += 1
 
 	# 2. 十四个门面属性非 null 且脚本路径正确
@@ -79,6 +79,9 @@ func _initialize() -> void:
 		failures += 1
 	if kit.clock._bus != kit.bus:
 		print("FAIL 4: clock 未绑定 bus")
+		failures += 1
+	if kit.scenes._res != kit.res:
+		print("FAIL 4: scenes 未绑定 res")
 		failures += 1
 
 	# 5. 老 API 经门面冒烟

@@ -133,6 +133,14 @@ func _initialize() -> void:
 		print("FAIL 16: 负 duration 应经 normalized 夹到 0.0,得到 %s" % rt2.duration)
 		failures += 1
 
+	# 17. _dep_path:uid 三段式取 res:// 段;纯 res:// 原样返回
+	if sm._dep_path("uid://abc::Texture2D::res://a.png") != "res://a.png":
+		print("FAIL 17: uid 三段式应取 res://a.png")
+		failures += 1
+	if sm._dep_path("res://b.gd") != "res://b.gd":
+		print("FAIL 17: 纯 res:// 应原样返回")
+		failures += 1
+
 	sm.free()
 
 	if failures == 0:

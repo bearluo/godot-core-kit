@@ -76,6 +76,42 @@ func _initialize() -> void:
 			print("FAIL 4: dir=%s reveal_to 应 %s,得到 %s" % [dir, expect[1], s.slide_reveal_to(size)])
 			failures += 1
 
+	# 5. MASK normalized:无 mask 回退 FADE;有 mask 保留;smoothness 夹到 [0, 0.5]
+	var m = TransitionScript.new()
+	m.type = TransitionScript.Type.MASK
+	m.smoothness = 2.0
+	if m.normalized().type != TransitionScript.Type.FADE:
+		print("FAIL 5: MASK 且 mask==null 应回退 FADE")
+		failures += 1
+	m.mask = GradientTexture2D.new()
+	var mn = m.normalized()
+	if mn.type != TransitionScript.Type.MASK:
+		print("FAIL 5: 有 mask 的 MASK 应保留")
+		failures += 1
+	if mn.smoothness != 0.5:
+		print("FAIL 5: smoothness 2.0 应夹到 0.5,得到 %s" % mn.smoothness)
+		failures += 1
+	m.smoothness = -1.0
+	if m.normalized().smoothness != 0.0:
+		print("FAIL 5: smoothness -1 应夹到 0.0")
+		failures += 1
+
+	# 6. mask_alpha:progress 0 全透明、1 全遮住;中途暗处先遮;invert 反过来
+	for g in [0.0, 0.3, 1.0]:
+		for s2 in [0.0, 0.05, 0.5]:
+			if TransitionScript.mask_alpha(g, 0.0, s2, false) != 0.0:
+				print("FAIL 6: progress=0 gray=%s s=%s 应全透明" % [g, s2])
+				failures += 1
+			if TransitionScript.mask_alpha(g, 1.0, s2, false) != 1.0:
+				print("FAIL 6: progress=1 gray=%s s=%s 应全遮住" % [g, s2])
+				failures += 1
+	if TransitionScript.mask_alpha(0.1, 0.5, 0.05, false) != 1.0 or TransitionScript.mask_alpha(0.9, 0.5, 0.05, false) != 0.0:
+		print("FAIL 6: 进度一半时暗处(0.1)应已遮住、亮处(0.9)应未遮")
+		failures += 1
+	if TransitionScript.mask_alpha(0.1, 0.5, 0.05, true) != 0.0 or TransitionScript.mask_alpha(0.9, 0.5, 0.05, true) != 1.0:
+		print("FAIL 6: invert 时亮处应先遮")
+		failures += 1
+
 	if failures == 0:
 		print("test_transition: ALL PASS")
 		quit(0)

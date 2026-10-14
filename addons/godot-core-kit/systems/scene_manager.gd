@@ -5,19 +5,23 @@ extends Node
 ## 经 CoreKit.scenes 访问（唯一 autoload 是 CoreKit 本身）。统一入口
 ## change_scene(target, options) 把"替换当前活动场景"这件事从零散的
 ## get_tree().change_scene_to_*() 调用收敛为一个可选带淡入淡出过渡、带切换生命周期信号
-## 的协程。同步 load()（不用线程，Web 导出安全）；第 2 参接受 KitTransition（FADE/SLIDE）
+## 的协程。默认同步 load()；options.preload 时经注入的 ResourceManager 预载直接依赖（它在
+## Web 走分帧通道、桌面走线程通道，对本类透明）。第 2 参接受 KitTransition（FADE/SLIDE/MASK）
 ## 或 legacy options 字典，默认无过渡（CanvasLayer + ColorRect + Tween 遮罩常驻本节点下、不受
 ## 场景替换影响）。拒绝重入
-## （_is_changing 守卫），不做排队。
+## （_is_changing 守卫，cover 期间同样占用），不做排队。
 ##
 ## 用法：
 ##   CoreKit.scenes.change_scene("res://levels/level_2.tscn")
 ##   CoreKit.scenes.change_scene(preload("res://levels/boss.tscn"), {"transition": CoreKit.scenes.Transition.FADE})
+##   CoreKit.scenes.change_scene(path, fade, {"preload": true, "loading_screen": screen, "after_swap": place_player})
 ##   await CoreKit.scenes.change_scene(...)   # 原地等待切换完成
 
 signal scene_changing(target_path: String)
 signal scene_changed(scene_path: String, scene: Node)
 signal scene_change_failed(target_path: String, error: int)  # error 为 Error 枚举取值
+## options.preload 时转发预载进度；单位是资源个数（单线程平台拿不到单个资源内部的进度）。
+signal scene_load_progress(loaded: int, total: int)
 
 enum Transition { NONE, FADE }  # legacy Dictionary API 用;KitTransition.Type 为新规范
 enum _Phase { COVER, REVEAL }
@@ -27,9 +31,19 @@ const DEFAULT_FADE_DURATION := 0.3
 const DEFAULT_FADE_COLOR := Color.BLACK
 const _FADE_LAYER := 4096  # = CoreKit.layers.TRANSITION(权威保留带常量,见 systems/layer_manager.gd)
 
+const _MASK_SHADER := preload("res://addons/godot-core-kit/transitions/kit_mask.gdshader")
+
 var _is_changing := false
+var _covered := false
 var _fade_layer: CanvasLayer
 var _fade_rect: ColorRect
+var _mask_material: ShaderMaterial
+## bind_resources 注入的 ResourceManager;untyped,未注入时 preload 选项退化为普通同步加载。
+var _res = null
+
+
+func bind_resources(res) -> void:
+	_res = res
 
 
 func _ready() -> void:
@@ -40,9 +54,13 @@ func _ready() -> void:
 
 ## 把当前活动场景替换为 target。target 为 res:// 路径（String）或 PackedScene。
 ## transition 接受 KitTransition，或 legacy options 字典（{transition/duration/color}，未识别键
-## 静默回退默认），默认 {} = 无过渡。协程：可 fire-and-forget（靠信号感知结果），也可 await
-## 原地等待切换完成。
-func change_scene(target, transition = {}) -> void:
+## 静默回退默认），默认 {} = 无过渡。options 管转场以外的能力（未识别键静默忽略）：
+##   preload: bool          —— 只对路径形式生效：遮住后经 CoreKit.res 预载直接依赖，发 scene_load_progress
+##   loading_screen: PackedScene —— 预载期间挂在遮罩之上；kit 不调它任何方法，它自己连 scene_load_progress
+##   before_swap: Callable  —— 已遮住、旧场景还在（存档、记录状态）；可为协程，会被 await
+##   after_swap: Callable(new_scene) —— 新场景已是 current_scene、还没揭开（挪玩家、设出生点）
+## 协程：可 fire-and-forget（靠信号感知结果），也可 await 原地等待切换完成。
+func change_scene(target, transition = {}, options: Dictionary = {}) -> void:
 	var target_path := _resolve_target_path(target)
 
 	if _is_changing:
@@ -67,9 +85,19 @@ func change_scene(target, transition = {}) -> void:
 		_fade_rect.mouse_filter = Control.MOUSE_FILTER_STOP
 		await _play_transition(t, _Phase.COVER)
 
+	var screen: Node = null
+	var fresh: Array = []
+	if options.get("preload", false) == true and target is String:
+		screen = _mount_loading_screen(options.get("loading_screen"))
+		if screen != null:
+			await get_tree().process_frame  # 让加载屏先画出来再开始加载
+		fresh = await _preload_deps(target)
+
 	var packed_scene := _load_packed_scene(target)
 	if packed_scene == null:
 		CoreKit.log.error("SceneManager.change_scene: 加载失败 '%s'" % target_path)
+		_release(fresh)
+		_unmount(screen)
 		if animated:
 			await _play_transition(t, _Phase.REVEAL)
 			_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -82,6 +110,8 @@ func change_scene(target, transition = {}) -> void:
 	# change_scene_to_* 系列的"延迟切换"保持一致。
 	await get_tree().process_frame
 
+	await _call_hook(options.get("before_swap"), [])
+
 	var new_scene := packed_scene.instantiate()
 	var old_scene := get_tree().current_scene
 	get_tree().root.add_child(new_scene)
@@ -89,12 +119,55 @@ func change_scene(target, transition = {}) -> void:
 	if is_instance_valid(old_scene):
 		old_scene.queue_free()
 
+	await _call_hook(options.get("after_swap"), [new_scene])
+
+	_release(fresh)  # 新场景实例自己持有引用，kit 不再长期钉住整张关卡的资源
+	_unmount(screen)
+
 	if animated:
 		await _play_transition(t, _Phase.REVEAL)
 		_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	_is_changing = false
 	scene_changed.emit(target_path, new_scene)
+
+
+## 对当前场景路径重做一次 change_scene（转场和 options 照传）。当前场景不是从文件来的
+## （路径为空）→ scene_change_failed("", ERR_UNAVAILABLE)。
+func reload_scene(transition = {}, options: Dictionary = {}) -> void:
+	var path := get_current_scene_path()
+	if path.is_empty():
+		CoreKit.log.warn("SceneManager.reload_scene: 当前场景没有文件路径，无法重开")
+		scene_change_failed.emit("", ERR_UNAVAILABLE)
+		return
+	await change_scene(path, transition, options)
+
+
+## 同场景内的黑屏（如传送）：遮住并占用切换守卫，直到 reveal。期间 change_scene 返回 ERR_BUSY。
+func cover(transition = {}) -> void:
+	if _is_changing:
+		CoreKit.log.warn("SceneManager.cover: 正在切换或已遮住，忽略")
+		return
+	_is_changing = true
+	_covered = true
+	var t := _resolve_transition(transition)
+	if not t.is_none():
+		_ensure_fade_overlay()
+		_fade_rect.mouse_filter = Control.MOUSE_FILTER_STOP
+		await _play_transition(t, _Phase.COVER)
+
+
+## 揭开 cover 的遮罩并释放切换守卫。没有先 cover：warn 并返回。
+func reveal(transition = {}) -> void:
+	if not _covered:
+		CoreKit.log.warn("SceneManager.reveal: 没有先 cover，忽略")
+		return
+	var t := _resolve_transition(transition)
+	if not t.is_none():
+		await _play_transition(t, _Phase.REVEAL)
+		_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_covered = false
+	_is_changing = false
 
 
 func is_changing() -> bool:
@@ -177,6 +250,15 @@ func _resolve_transition(arg) -> KitTransition:
 	return t.normalized()
 
 
+## ResourceLoader.get_dependencies 的一项 → res:// 路径。4.x 可能是 "uid://…::Type::res://…"
+## 三段式，取 res:// 那段；纯路径原样返回。
+func _dep_path(dep: String) -> String:
+	for part in dep.split("::"):
+		if part.begins_with("res://"):
+			return part
+	return dep
+
+
 ## legacy Transition 枚举 → KitTransition.Type（FADE→FADE，其余→NONE；SLIDE 仅 KitTransition 可达）。
 func _legacy_transition_to_type(legacy: int) -> int:
 	match legacy:
@@ -226,6 +308,7 @@ func _ensure_fade_overlay() -> void:
 func _play_transition(t: KitTransition, phase: int) -> void:
 	match t.type:
 		KitTransition.Type.FADE:
+			_fade_rect.material = null
 			_fade_rect.color = Color(t.color.r, t.color.g, t.color.b, 1.0)
 			if phase == _Phase.COVER:
 				_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -236,6 +319,7 @@ func _play_transition(t: KitTransition, phase: int) -> void:
 			tween.tween_property(_fade_rect, "modulate:a", target_a, t.duration)
 			await tween.finished
 		KitTransition.Type.SLIDE:
+			_fade_rect.material = null
 			var size := _overlay_size()
 			_fade_rect.color = Color(t.color.r, t.color.g, t.color.b, 1.0)
 			_fade_rect.modulate.a = 1.0
@@ -247,6 +331,24 @@ func _play_transition(t: KitTransition, phase: int) -> void:
 			var tween := create_tween().set_ease(t.ease_type).set_trans(t.trans_type)
 			tween.tween_property(_fade_rect, "position", to_pos, t.duration)
 			await tween.finished
+		KitTransition.Type.MASK:
+			var mat := _mask_mat()
+			mat.set_shader_parameter("mask", t.mask)
+			mat.set_shader_parameter("smoothness", t.smoothness)
+			mat.set_shader_parameter("invert", t.invert)
+			mat.set_shader_parameter("cover_color", t.color)
+			_fade_rect.material = mat
+			_fade_rect.color = Color.WHITE
+			_fade_rect.modulate.a = 1.0
+			if phase == _Phase.COVER:
+				_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+				_fade_rect.position = Vector2.ZERO
+				mat.set_shader_parameter("progress", 0.0)
+			# ponytail: 首次 MASK 有一帧 shader 编译卡顿(落在 COVER 第一帧,仍透明);真成问题时启动时 0 时长 cover/reveal 预热
+			var target_p: float = 1.0 if phase == _Phase.COVER else 0.0
+			var tween := create_tween().set_ease(t.ease_type).set_trans(t.trans_type)
+			tween.tween_property(mat, "shader_parameter/progress", target_p, t.duration)
+			await tween.finished
 		_:
 			pass
 
@@ -257,3 +359,67 @@ func _overlay_size() -> Vector2:
 	if vp != null:
 		return vp.get_visible_rect().size
 	return Vector2(1920, 1080)
+
+
+func _mask_mat() -> ShaderMaterial:
+	if _mask_material == null:
+		_mask_material = ShaderMaterial.new()
+		_mask_material.shader = _MASK_SHADER
+	return _mask_material
+
+
+## 当前 MASK 进度(测试/调试用);从没用过 MASK 时为 0。
+func _mask_progress() -> float:
+	if _mask_material == null:
+		return 0.0
+	return float(_mask_material.get_shader_parameter("progress"))
+
+
+## 实例化加载屏挂到遮罩之上;没传或类型不对返回 null。
+func _mount_loading_screen(screen) -> Node:
+	if not (screen is PackedScene):
+		return null
+	_ensure_fade_overlay()
+	var node: Node = screen.instantiate()
+	_fade_layer.add_child(node)
+	return node
+
+
+func _unmount(node: Node) -> void:
+	if node != null and is_instance_valid(node):
+		node.get_parent().remove_child(node)
+		node.queue_free()
+
+
+## 经 CoreKit.res 预载 path 的直接依赖并转发进度,等整批完成。返回本次新进缓存的路径
+## (切完场景后要 release 的那些)。未注入 ResourceManager → 什么都不做。
+## ponytail: 只展开一层依赖,进度格数偏少;单个依赖很大时再考虑递归展开
+func _preload_deps(path: String) -> Array:
+	if _res == null:
+		return []
+	var deps: Array = []
+	for dep in ResourceLoader.get_dependencies(path):
+		deps.append(_dep_path(dep))
+	var fresh := deps.filter(func(p): return not _res.is_cached(p))
+	var done := [false]
+	var on_done := func() -> void: done[0] = true
+	var on_progress := func(loaded: int, total: int) -> void: scene_load_progress.emit(loaded, total)
+	_res.batch_completed.connect(on_done)
+	_res.batch_progress.connect(on_progress)
+	_res.preload_batch(deps)
+	# 用标志轮询而不是 await 信号:未注入 ticker 的分帧降级会在 preload_batch 内同步发完成信号
+	while not done[0]:
+		await get_tree().process_frame
+	_res.batch_completed.disconnect(on_done)
+	_res.batch_progress.disconnect(on_progress)
+	return fresh
+
+
+func _release(paths: Array) -> void:
+	for p in paths:
+		_res.release(p)
+
+
+func _call_hook(hook, args: Array) -> void:
+	if hook is Callable and hook.is_valid():
+		await hook.callv(args)
