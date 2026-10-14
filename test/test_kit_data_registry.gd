@@ -86,6 +86,52 @@ func _initialize() -> void:
 	if rs.ids(&"alpha").size() != 2:
 		print("FAIL 10: ids 默认应含 2 项"); failures += 1
 
+	# 11. register_records 正常一批:返回条数;存只读副本;改原字典不影响登记值
+	var rr = Reg.new()
+	var src := [{"id": "turnip", "price": 10}, {"id": "potato", "price": 5}]
+	if rr.register_records(&"crop", src) != 2:
+		print("FAIL 11: 应登记 2 条"); failures += 1
+	var tv = rr.get_def(&"crop", &"turnip")
+	if tv != {"id": "turnip", "price": 10} or not (tv as Dictionary).is_read_only():
+		print("FAIL 11: 登记值应等于原记录且只读,实际 %s" % str(tv)); failures += 1
+	src[0]["price"] = 999
+	if rr.get_def(&"crop", &"turnip")["price"] != 10:
+		print("FAIL 11: 改调用方原字典不应影响登记值"); failures += 1
+	if rr.get_def(&"crop", &"turnip").price != 10:
+		print("FAIL 11: 字典定义应支持点号读取"); failures += 1
+
+	# 12. 跳过:非字典 / 缺 id / id 为空 / id 为 null;只计成功
+	var bad := [{"id": "ok"}, 42, {"price": 1}, {"id": ""}, {"id": null}]
+	if rr.register_records(&"bad", bad) != 1 or rr.count(&"bad") != 1:
+		print("FAIL 12: 坏记录应跳过,只计 1 条成功"); failures += 1
+
+	# 13. 数字 id 转 StringName;自定义 id_key;StringName 键
+	rr.register_records(&"num", [{"id": 101, "n": 1}])
+	if not rr.has_def(&"num", &"101"):
+		print("FAIL 13: 数字 id 101 应能用 &\"101\" 查到"); failures += 1
+	rr.register_records(&"sku", [{"code": "A1"}, {&"code": "B2"}], &"code")
+	if not rr.has_def(&"sku", &"A1") or not rr.has_def(&"sku", &"B2"):
+		print("FAIL 13: 自定义 id_key(含 StringName 键)应生效"); failures += 1
+
+	# 14. factory:返回 Resource 存它;返回 null 跳过
+	var mk := func(rec: Dictionary):
+		if rec.get("skip", false):
+			return null
+		var dd = Def.new(); dd.max_stack = rec["max"]; return dd
+	var nf: int = rr.register_records(&"fac", [{"id": "a", "max": 7}, {"id": "b", "skip": true}], &"id", mk)
+	var fa = rr.get_def_or(&"fac", &"a")
+	if nf != 1 or not (fa is Resource) or fa.max_stack != 7 or rr.has_def(&"fac", &"b"):
+		print("FAIL 14: factory 结果应原样存、null 跳过,n=%d" % nf); failures += 1
+
+	# 15. 重复 id:后者覆盖(与 register 一致),两条都算成功
+	if rr.register_records(&"dup", [{"id": "x", "v": 1}, {"id": "x", "v": 2}]) != 2 \
+			or rr.count(&"dup") != 1 or rr.get_def(&"dup", &"x")["v"] != 2:
+		print("FAIL 15: 重复 id 应覆盖为后者"); failures += 1
+
+	# 16. records 不是 Array(如 JSON 解析失败的 null)→ 告警返回 0
+	if rr.register_records(&"j", null) != 0 or rr.register_records(&"j", {"id": "x"}) != 0:
+		print("FAIL 16: 非 Array 输入应返回 0"); failures += 1
+
 	if failures == 0:
 		print("test_kit_data_registry: ALL PASS")
 		quit(0)

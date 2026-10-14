@@ -28,6 +28,40 @@ func register(type: StringName, id: StringName, def: Variant) -> void:
 	bucket[id] = def
 
 
+## 批量登记字典记录(CSV 导入器 .records / JSON 数组 / 远端配置)。返回成功登记条数。
+## 每条取 record[id_key](兼容 String/StringName 键;数字 id 用 str 转)为 id;非字典、
+## 缺 id、id 为空/null → push_warning 跳过。默认存 record 的深拷贝并 make_read_only
+## (只锁顶层);传 factory 则存 factory.call(record) 的返回值(null → 跳过)。
+## 重复 id 走 register:告警后覆盖。records 声明为 Variant,好让 JSON 解析失败的
+## null 等坏输入在这里告警返回 0,而不是在调用处类型报错。
+func register_records(type: StringName, records: Variant, id_key: StringName = &"id",
+		factory: Callable = Callable()) -> int:
+	if not records is Array:
+		push_warning("KitDataRegistry.register_records: records 不是 Array [%s]" % type)
+		return 0
+	var ok := 0
+	for record in records:
+		if not record is Dictionary:
+			push_warning("KitDataRegistry.register_records: 跳过非字典记录 [%s] %s" % [type, str(record)])
+			continue
+		var raw = record.get(String(id_key), record.get(id_key))
+		if raw == null or str(raw) == "":
+			push_warning("KitDataRegistry.register_records: 跳过缺 '%s' 的记录 [%s]" % [id_key, type])
+			continue
+		var def: Variant
+		if factory.is_valid():
+			def = factory.call(record)
+			if def == null:
+				push_warning("KitDataRegistry.register_records: factory 返回 null,跳过 [%s/%s]" % [type, raw])
+				continue
+		else:
+			def = (record as Dictionary).duplicate(true)
+			def.make_read_only()
+		register(type, StringName(str(raw)), def)
+		ok += 1
+	return ok
+
+
 ## 扫 dir_path 下 *.tres / *.res 逐个 load 并按 type 登记。id 取 def 的 id_property 属性
 ## (存在且非空则用),否则文件名 stem。返回成功登记数。目录打不开 → push_warning + 0。
 ## 导出坑:导出包里 .tres 可能呈现为 "xxx.tres.remap",自动剥 .remap 再 load。
