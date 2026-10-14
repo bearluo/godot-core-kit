@@ -22,6 +22,13 @@ func _key(kc: int, pressed := true) -> InputEventKey:
 	return ev
 
 
+func _pad(button: int, pressed := false) -> InputEventJoypadButton:
+	var ev := InputEventJoypadButton.new()
+	ev.button_index = button
+	ev.pressed = pressed
+	return ev
+
+
 func _initialize() -> void:
 	RebindButtonScript = load("res://addons/godot-core-kit/ui/rebind_button.gd")
 	RebindListScript = load("res://addons/godot-core-kit/ui/rebind_list.gd")
@@ -109,8 +116,8 @@ func _initialize() -> void:
 	im.reset_action(A_JUMP)  # 干净起步:jump 回 SPACE
 	var list = RebindListScript.new()
 	list.setup([{"action": A_JUMP, "label": "Jump"}, {"action": A_FIRE, "label": "Fire"}], im)
-	if list._buttons.size() != 2:
-		print("FAIL 7: 列表应建 2 个重绑按钮,实际 %d" % list._buttons.size())
+	if list._buttons.size() != 4:
+		print("FAIL 7: 2 行 × 键盘/手柄两列应建 4 个重绑按钮,实际 %d" % list._buttons.size())
 		failures += 1
 	var list_rebounds := []
 	list.rebound.connect(func(a, e): list_rebounds.append(a))
@@ -123,6 +130,99 @@ func _initialize() -> void:
 		print("FAIL 7: 全部复位应把 jump 回 SPACE")
 		failures += 1
 	list.free()
+
+	# 8. 按槽的按钮:只收本槽事件(异槽忽略且不退出捕获)、显示与复位只针对本槽
+	im.free()
+	InputMap.action_erase_events(A_JUMP)
+	InputMap.action_add_event(A_JUMP, _key(KEY_SPACE, false))
+	InputMap.action_add_event(A_JUMP, _pad(JOY_BUTTON_A))
+	InputMap.action_erase_events(A_FIRE)
+	InputMap.action_add_event(A_FIRE, _key(KEY_G, false))
+	InputMap.action_add_event(A_FIRE, _pad(JOY_BUTTON_B))
+	im = InputManagerScript.new()
+	im._snapshot_defaults()
+	var KBM: int = im.DeviceType.KEYBOARD_MOUSE
+	var PAD: int = im.DeviceType.GAMEPAD
+	var kb = RebindButtonScript.new()
+	kb.setup(A_JUMP, scope, im, KBM)
+	var pb = RebindButtonScript.new()
+	pb.setup(A_JUMP, scope, im, PAD)
+	if kb.text != "Space" or pb.text != "A":
+		print("FAIL 8: 键盘列应显示 Space、手柄列应显示 A,实际 %s / %s" % [kb.text, pb.text])
+		failures += 1
+	var kb_events := []
+	kb.rebound.connect(func(a, e): kb_events.append("ok"))
+	kb.rebind_failed.connect(func(a, r): kb_events.append(r))
+	kb.begin_capture()
+	if kb.capture_event(_pad(JOY_BUTTON_X, true)) or not kb_events.is_empty() or not kb._capturing:
+		print("FAIL 8: 键盘列收到手柄键应忽略:不重绑、不发信号、仍在捕获,实际 %s" % [kb_events])
+		failures += 1
+	if not kb.capture_event(_key(KEY_F)):
+		print("FAIL 8: 键盘列应能绑 F")
+		failures += 1
+	var jump_pad = im.get_action_event(A_JUMP, PAD)
+	if jump_pad == null or jump_pad.button_index != JOY_BUTTON_A:
+		print("FAIL 8: 改键盘键后手柄 A 应保留")
+		failures += 1
+	pb.capture_event(_pad(JOY_BUTTON_Y, true))
+	kb.reset()
+	if im.get_action_event(A_JUMP, KBM).physical_keycode != KEY_SPACE or im.get_action_event(A_JUMP, PAD).button_index != JOY_BUTTON_Y:
+		print("FAIL 8: 键盘列复位只应复位键盘槽(回 Space),手柄 Y 保留")
+		failures += 1
+	kb.free()
+	pb.free()
+
+	# 9. SWAP:有原键时两动作互换;本动作该槽为空时对方被清空;BLOCK 为默认
+	im.reset_action(A_JUMP)
+	im.reset_action(A_FIRE)
+	var sw = RebindButtonScript.new()
+	sw.setup(A_JUMP, scope, im, KBM)
+	if sw.conflict_mode != sw.ConflictMode.BLOCK:
+		print("FAIL 9: conflict_mode 默认应为 BLOCK")
+		failures += 1
+	sw.conflict_mode = sw.ConflictMode.SWAP
+	var sw_ok := []
+	sw.rebound.connect(func(a, e): sw_ok.append(a))
+	if not sw.capture_event(_key(KEY_G)):
+		print("FAIL 9: SWAP 冲突时应成功")
+		failures += 1
+	if im.get_action_event(A_JUMP, KBM).physical_keycode != KEY_G or im.get_action_event(A_FIRE, KBM).physical_keycode != KEY_SPACE:
+		print("FAIL 9: SWAP 后 jump=G、fire=Space")
+		failures += 1
+	if im.get_action_event(A_FIRE, PAD).button_index != JOY_BUTTON_B:
+		print("FAIL 9: SWAP 不应动对方的手柄槽")
+		failures += 1
+	if sw_ok != [A_JUMP]:
+		print("FAIL 9: SWAP 成功应发一次 rebound,实际 %s" % [sw_ok])
+		failures += 1
+	im.unbind_action(A_JUMP, KBM)
+	sw.capture_event(_key(KEY_SPACE))  # fire 占着 Space,jump 键盘槽为空
+	if im.get_action_event(A_JUMP, KBM).physical_keycode != KEY_SPACE or im.get_action_event(A_FIRE, KBM) != null:
+		print("FAIL 9: 本槽为空时 SWAP 应清空对方该槽")
+		failures += 1
+	sw.free()
+
+	# 10. KitRebindList 两列:每行 [键盘, 手柄];devices 可只显示一列;行复位复位整行
+	im.reset_action(A_JUMP)
+	var rows := [{"action": A_JUMP, "label": "Jump"}, {"action": A_FIRE, "label": "Fire"}]
+	var two = RebindListScript.new()
+	two.setup(rows, im)
+	if two._buttons.size() != 4 or two._buttons[0]._device != KBM or two._buttons[1]._device != PAD:
+		print("FAIL 10: 默认每行应为 [键盘, 手柄] 两列")
+		failures += 1
+	two._buttons[0].capture_event(_key(KEY_F))
+	two._buttons[1].capture_event(_pad(JOY_BUTTON_Y, true))
+	two._reset_row(A_JUMP)
+	if im.get_action_event(A_JUMP, KBM).physical_keycode != KEY_SPACE or im.get_action_event(A_JUMP, PAD).button_index != JOY_BUTTON_A:
+		print("FAIL 10: 行复位应把整行(两个槽)恢复默认")
+		failures += 1
+	two.free()
+	var kb_only = RebindListScript.new()
+	kb_only.setup(rows, im, [KBM])
+	if kb_only._buttons.size() != 2 or kb_only._buttons[0]._device != KBM:
+		print("FAIL 10: devices=[KBM] 时每行只应有键盘列")
+		failures += 1
+	kb_only.free()
 
 	# 清理
 	im.free()

@@ -1,8 +1,8 @@
 class_name KitRebindButton
 extends Button
 ## KitRebindButton —— 单动作键位重绑定按钮(off-facade 可复用 UI 组件)。
-## 点击进捕获态 → 玩家按新键 → 冲突检测(检测+拦截)→ 落到 InputManager.rebind_action
-## (替换 InputMap + 持久化 Settings)。只管 UI + 捕获 + 冲突判定;重绑/复位/持久化
+## 点击进捕获态 → 玩家按新键 → 冲突检测(conflict_mode:BLOCK 拦截 / SWAP 互换)→ 落到
+## InputManager.rebind_action(只替换该槽 + 持久化 Settings)。setup 的 device 指定负责的槽。只管 UI + 捕获 + 冲突判定;重绑/复位/持久化
 ## 复用注入的 InputManager(默认 CoreKit.input,可注入 standalone 做 headless 单测)。
 ##
 ## 零门面耦合:不引 CoreKit.log(失败经 rebind_failed 信号上报);对 CoreKit.input 的默认解析是
@@ -16,10 +16,16 @@ signal rebind_failed(action: String, reason: String)
 
 const CAPTURE_PROMPT := "按任意键…(Esc 取消)"
 
+## 冲突处理:BLOCK 拒绝并发 conflict:<other>;SWAP 把对方该槽换成本动作原来的键(原来为空则清空对方该槽)。
+enum ConflictMode { BLOCK, SWAP }
+
+var conflict_mode: ConflictMode = ConflictMode.BLOCK
+
 var _action: String = ""
 var _conflict_scope: PackedStringArray = PackedStringArray()
 var _input_mgr = null                  # untyped:未注入时运行期解析 CoreKit.input
 var _capturing: bool = false
+var _device: int = -1                   # 负责的绑定槽(InputManager.DeviceType);-1 = 不分槽
 
 
 func _ready() -> void:
@@ -28,8 +34,10 @@ func _ready() -> void:
 
 
 ## 绑定动作。input_manager 省略则运行期用 CoreKit.input;conflict_scope 空=冲突扫全部。
-func setup(action: String, conflict_scope := PackedStringArray(), input_manager = null) -> void:
+## device 指定负责的槽(KEYBOARD_MOUSE / GAMEPAD):只收该槽事件,显示与复位只针对该槽;-1 不分槽。
+func setup(action: String, conflict_scope := PackedStringArray(), input_manager = null, device := -1) -> void:
 	_action = action
+	_device = device
 	_conflict_scope = conflict_scope
 	_input_mgr = input_manager
 	refresh()
@@ -42,7 +50,8 @@ func begin_capture() -> void:
 	_capturing = true
 	text = CAPTURE_PROMPT
 	set_process_input(true)
-	grab_focus()
+	if is_inside_tree():
+		grab_focus()
 
 
 ## 编程/UI 取消:退捕获态、刷新、发 cancelled。
@@ -62,10 +71,22 @@ func capture_event(event: InputEvent) -> bool:
 	if not _is_capturable(event):
 		return _fail("unsupported")
 	var mgr = _resolve_input()
+	if _device != -1 and mgr.slot_of(event) != _device:
+		return false  # 异槽事件(如键盘列收到手柄键):忽略,继续捕获
 	var other := String(mgr.action_for_event(event, _conflict_scope))
 	if other != "" and other != _action:
-		return _fail("conflict:%s" % other)
-	if not mgr.rebind_action(_action, event):
+		if conflict_mode == ConflictMode.BLOCK:
+			return _fail("conflict:%s" % other)
+		var slot: int = mgr.slot_of(event)
+		var old: InputEvent = mgr.get_action_event(_action, slot)
+		if old != null:
+			mgr.rebind_action(other, old)
+		else:
+			mgr.unbind_action(other, slot)
+		if not mgr.rebind_action(_action, event):
+			mgr.rebind_action(other, event)  # 回滚:对方拿回原键
+			return _fail("unsupported")
+	elif not mgr.rebind_action(_action, event):
 		return _fail("unsupported")
 	_finish_capture()
 	refresh()
@@ -84,13 +105,17 @@ func _fail(reason: String) -> bool:
 ## 刷新文字为当前绑定的可读名;无绑定显「未绑定」。
 func refresh() -> void:
 	var mgr = _resolve_input()
-	var ev: InputEvent = mgr.get_action_event(_action)
-	text = ev.as_text() if ev != null else "未绑定"
+	var ev: InputEvent = mgr.get_action_event(_action, _device)
+	if ev == null:
+		text = "未绑定"
+		return
+	var label: String = mgr.glyph_text(ev, mgr.get_joypad_brand(mgr.current_joypad))
+	text = label if label != "" else ev.as_text()
 
 
 ## 复位到工程默认(InputManager 内部会发 action_rebound)并刷新。
 func reset() -> void:
-	_resolve_input().reset_action(_action)
+	_resolve_input().reset_action(_action, _device)
 	refresh()
 
 
