@@ -52,6 +52,24 @@ ach.from_dict(save.get("achievements", {}))
 ach.evaluate(stats)   # 读档后自愈:补发本版新增/存档漏判的成就(不再重触已解锁)
 ```
 
+### 接 GodotSteam(仅桌面 Steam 版)
+
+[GodotSteam](https://codeberg.org/godotsteam/godotsteam) 是 GDExtension,只能用在桌面构建,Web 和微信小游戏用不了,所以只在有 `Steam` 单例时挂 sink。成就 id 要和 Steamworks 后台的 API 名一致。API 名以 [godotsteam.com](https://godotsteam.com) 文档为准:
+
+```gdscript
+func _ready() -> void:
+    if Engine.has_singleton("Steam"):
+        var steam := Engine.get_singleton("Steam")
+        steam.steamInitEx()
+        ach.set_steam_sink(func(id: StringName) -> void:
+            steam.setAchievement(String(id))
+            steam.storeStats())          # 上传后 Steam 才弹解锁提示
+
+func _process(_delta: float) -> void:
+    if Engine.has_singleton("Steam"):
+        Engine.get_singleton("Steam").run_callbacks()
+```
+
 ## 注意事项
 
 - **去重是核心契约**：已解锁 id 永不再触发 sink、永不出现在 `evaluate` 的返回列表。据此可安全地在每次统计变更后无脑 `evaluate`。

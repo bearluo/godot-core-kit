@@ -61,6 +61,8 @@ godot --headless --path . -s res://.claude/skills/asset-bank/bake_assets.gd -- \
 
 逐 key 增量升级:今天先升核心瞬间那几个,其余留基线,游戏始终完整可跑。
 
+**音效可以用 gdfxr 调**:[gdfxr](https://github.com/timothyqiu/gdfxr)(纯 GDScript 编辑器插件,MIT)在编辑器里像 sfxr 一样随机、调参生成复古音效,存成 `.sfxr`,导入后就是标准的 `AudioStreamWAV`,运行时不依赖插件。两种接法:在 gdfxr 面板里导出成 `<key>.wav` 放进 `assets/`(零改代码);或者直接把 `<key>.sfxr` 放进 `assets/`,在 sound bank 第 1 级的真素材查找里加上 `.sfxr` 扩展名。
+
 ## 四、进门(gate)
 
 - bank 可 headless 实例化 + 纯 `Image`/样本运算 → 写 `test_<game>_art_bank.gd` / `_sound_bank.gd` 断言 `source_for` 三级走向、`bake_image`/`bake_stream` 非空、尺寸对。

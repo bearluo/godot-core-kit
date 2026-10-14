@@ -42,13 +42,13 @@
 
 | 文档 | 访问 | 一句话 |
 |---|---|---|
-| [state-machine](state-machine.md) | `class_name KitStateMachine` | Node 型有限状态机,每个实体自己一台 |
+| [state-machine](state-machine.md) | `class_name KitStateMachine` | Node 型有限状态机,每个实体自己一台(事件转移、pushdown 栈、延时转移、存读档) |
 | [kit-context](di/kit-context.md) | `class_name KitContext` | 节点绑定的层级服务容器(DI):游戏代码注册自己的服务 |
 | [rebind](ui/rebind.md) | `class_name KitRebindButton` / `KitRebindList` | 键位重绑定 UI 组件(点击捕获 + 冲突拦截 + 复位) |
 | [kit-transition](transitions/kit-transition.md) | `class_name KitTransition` | 可复用场景转场资源(FADE/SLIDE/MASK,由 `CoreKit.scenes` 消费) |
 | [ui-stack](ui/ui-stack.md) | `class_name KitUiStack` / `KitUiScreen` | UI 屏栈导航(push/pop/replace + 被盖屏停用 + 模态挡层 + 返回键兜底) |
 | [kit-inventory](inventory/kit-inventory.md) | `class_name KitInventory` | 槽位制物品容器(自动堆叠/溢出/拖拽合并,游戏多实例) |
-| [kit-data-registry](data/kit-data-registry.md) | `class_name KitDataRegistry` | 定义数据表:type→{id→def} 存 Resource,register + load_dir |
+| [kit-data-registry](data/kit-data-registry.md) | `class_name KitDataRegistry` | 定义数据表:type→{id→def},register / load_dir / register_records(CSV、JSON 记录) |
 | [kit-offline](offline/kit-offline.md) | `class_name KitOffline` | 离线结算器:墙钟差×产率、封顶 8h、时间回拨按 0 防作弊(放置游戏读档补收益) |
 | [kit-modifiers](modifiers/kit-modifiers.md) | `class_name KitModifiers` | 数值修正器栈:(base+Σadd)×Πmul 分层聚合、每条带 source_id、脏标缓存、breakdown 明细(incremental 产出心脏) |
 | [kit-stats](stats/kit-stats.md) | `class_name KitStats` | 统计计数器:add 累加 / record_max 峰值 / set_value 快照 / get_value,to_dict 存档(生涯计数) |
@@ -59,6 +59,18 @@
 | 文档 | 访问 | 一句话 |
 |---|---|---|
 | [export-pipeline](tools/export-pipeline.md) | `class_name KitPackManifest` + `build_manifest.gd` CLI | 导出管线:薄壳 base + 内容包 + 生成 `CoreKit.updater` 消费的 `manifest.json`(sha256/size/引擎版本) |
+
+## 推荐搭配插件
+
+kit 不自建下面这些能力,在游戏层直接装插件即可。依据是仓库里的插件调研报告(`docs/research/2026-10-12-godot-plugin-survey.md`)。除 GodotSteam 外都是纯 GDScript、MIT,Web 和微信小游戏也能用。
+
+| 需求 | 插件 | 和 kit 的关系 |
+|---|---|---|
+| 相机跟随、震屏、多目标镜头 | [Phantom Camera](https://github.com/ramokz/phantom-camera) | kit 没有相机 |
+| 对话树、分支剧情 | [Dialogue Manager](https://github.com/nathanhoad/godot_dialogue_manager)(v4 要求 Godot 4.6+) | kit 没有对话 |
+| 表格配置数据 | [CSV Data Importer](https://github.com/timothyqiu/godot-csv-data-importer) | 导入后的 `.records` 交给 [`KitDataRegistry.register_records`](data/kit-data-registry.md) |
+| 层级、并行、历史状态 | [Godot State Charts](https://github.com/derkork/godot-statecharts) | [`KitStateMachine`](state-machine.md) 只做扁平状态 + pushdown 栈,复杂行为用它 |
+| Steam 成就、统计、云存档 | [GodotSteam](https://codeberg.org/godotsteam/godotsteam) | 接 [`KitAchievements.set_steam_sink`](achievements/kit-achievements.md);**GDExtension,只支持桌面 Steam 构建** |
 
 ## 约定
 

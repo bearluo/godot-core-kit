@@ -57,6 +57,10 @@ func dispatch(event: String) -> bool               # 派发事件:命中则转�
 func push_state(state_name: String) -> void        # 压栈进新态(暂停语义,current.pause())
 func pop_state() -> void                            # 弹栈回挂起态(current 弹出态.resume())
 func stack_depth() -> int                           # 只读当前 pushdown 栈深
+func time_in_state() -> float                       # 当前态已停留秒数
+func add_timed_transition(from_name: String, to_name: String, seconds: float) -> void  # 停留满 N 秒自动转移
+func to_dict() -> Dictionary                        # 存档快照:态名 + 停留时长 + 栈
+func from_dict(d: Dictionary) -> void               # 校验后按正常路径重放恢复
 ```
 
 ## 依赖
@@ -137,6 +141,40 @@ machine.stack_depth()             # 当前栈深
 - **守卫**:未知态 → `push_warning` no-op;栈满(≥ `MAX_STACK` = 32)→ `push_error` 拒绝;转换进行中(`_transitioning`)调 `push_state`/`pop_state` → `push_warning` 拒绝;栈空 `pop_state` → `push_warning` no-op。pushdown 不参与 `MAX_CHAIN` 连锁计数。
 - **栈非空仍可转移**:`transition_to`/`dispatch` 照常替换 `current_state`(栈不动),`pop_state` 仍弹回栈下挂起态。
 - **勿在被压/恢复态的钩子里触发转移**:`push_state`/`pop_state` 不设 `_transitioning` 守卫(不占 `MAX_CHAIN`)。若被 push 的新态在其 `enter`(或恢复态在 `resume`)里立即 `transition_to`/`dispatch`/`push_state`,该重入会同步执行,使 push/pop 尾部的 `state_changed` 在 `current_state` 已被改写后才发出(末条信号指向非当前态)。状态机自身(`_stack`/`current_state`)始终自洽,仅误导监听 `to_name` 的观察者;pushdown 的意图用途(菜单/暂停,进入后不即时转走)不触发此情形。
+
+## 停留计时与延时转移(time_in_state / add_timed_transition)
+
+```gdscript
+# 蓄力超过 1 秒才算重击
+if machine.time_in_state() >= 1.0: heavy_attack()
+
+# 受击硬直 0.4 秒后自动回到 Idle;中途被打进别的态就自然作废
+machine.add_timed_transition("Hurt", "Idle", 0.4)
+```
+
+- **计时来源**:宿主 `_process` 累加 `delta`,所以树暂停和 `Engine.time_scale` 自然生效,不另接时钟。只走 idle 帧,不在 `_physics_process` 计时。
+- **清零**:每次 `enter` 清零,包括 `transition_to(当前态)` 的重进。
+- **pushdown**:`push_state` 时被压态保存已累计的时长,在栈里不计时;`pop_state` 后从保存值继续累加。
+- **延时转移**:每帧在 `update` 之后检查 `time_in_state() >= seconds`,满足就走普通 `transition_to`(照常 exit/enter/`state_changed`,连锁仍受 `MAX_CHAIN` 保护)。每个 from 至多一条,重复登记覆盖并告警;要多个分支就在 enter 里自己判断。
+- **忽略并告警**:from 为 `ANYSTATE`、from 或 to 未注册、`seconds <= 0`(想立即转移就在 enter 里 `transition_to`)。和 `add_transition` 一样须在入树之后登记。
+- **帧粒度**:一帧 `delta` 很大时超出部分直接丢弃,不补偿。
+
+## 存读档(to_dict / from_dict)
+
+```gdscript
+save["ai"] = machine.to_dict()
+# {"state": "Opts", "elapsed": 0.5, "stack": [{"name": "Game", "elapsed": 3.0}, {"name": "Menu", "elapsed": 1.0}]}
+machine.from_dict(save.get("ai", {}))
+```
+
+- **只存拓扑**:态名和停留时长,栈底在前。状态节点自己的成员变量由游戏自己存。不带版本号,整体迁移交给 `CoreKit.saves` 的 data_version。
+- **先校验再动**:缺字段或类型错、引用未注册的态名、栈深超过 `MAX_STACK`、转换进行中、在 `_ready` 之前调用,都 `push_warning` 后原样返回,机器状态不变。数字过一遍 JSON 变成 float 也能读。
+- **按正常路径重放**:先把现有栈 `pop_state` 弹空,再 `transition_to(栈底)`,依次 `push_state` 后续各层和最终的当前态,最后写回每层的 elapsed。每个态都按真实顺序收到 exit/enter/pause,之后 `pop_state` 调 `resume()` 也安全。代价是会连续发出几次 `state_changed`,监听方要能承受。
+- **前提**:各态的 enter 不要在重放时立即转走(决策态),否则重放出来的结构会和快照不同。
+
+## 层级 / 并行 / 历史状态
+
+kit 保持「扁平状态机 + pushdown 栈」的模型,不做层级、并行、历史状态和守卫条件。需要这些时在游戏层用 [Godot State Charts](https://github.com/derkork/godot-statecharts)(纯 GDScript,MIT)。
 
 ## 注意事项
 
