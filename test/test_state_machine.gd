@@ -358,6 +358,151 @@ func _initialize() -> void:
 		failures += 1
 	empty14.free()
 
+	# T1. time_in_state:随 _process 累加;转走清零;重进同一态也清零
+	var bt1: Array = _build([["Idle", ProbeState], ["Run", ProbeState]])
+	var t1 = bt1[0]
+	root.add_child(t1)
+	t1.set_process(false)   # 关自动帧,只用手动 _process 驱动
+	await process_frame
+	t1._process(0.25); t1._process(0.5)
+	if not is_equal_approx(t1.time_in_state(), 0.75):
+		print("FAIL T1: 应累加到 0.75,实际 %f" % t1.time_in_state()); failures += 1
+	t1.transition_to("Run")
+	if t1.time_in_state() != 0.0:
+		print("FAIL T1: 转换后应清零"); failures += 1
+	t1._process(0.5); t1.transition_to("Run")
+	if t1.time_in_state() != 0.0:
+		print("FAIL T1: 重进同一态应清零"); failures += 1
+
+	# T2. push 时被压态保存时长且不计时;pop 后从原值继续
+	t1._process(1.0)                 # Run 已停 1.0
+	t1.push_state("Idle")
+	t1._process(0.5)                 # 只有 Idle 计时
+	if not is_equal_approx(t1.time_in_state(), 0.5):
+		print("FAIL T2: push 进的态应从 0 计时,实际 %f" % t1.time_in_state()); failures += 1
+	t1.pop_state()
+	if not is_equal_approx(t1.time_in_state(), 1.0):
+		print("FAIL T2: pop 后应恢复 Run 的 1.0,实际 %f" % t1.time_in_state()); failures += 1
+	t1._process(0.25)
+	if not is_equal_approx(t1.time_in_state(), 1.25):
+		print("FAIL T2: pop 后应继续累加到 1.25"); failures += 1
+	t1.free()
+
+	# T3. 延时转移:满时长触发恰好一次;中途离开作废
+	var bt3: Array = _build([["Idle", ProbeState], ["Run", ProbeState], ["Jump", ProbeState]])
+	var t3 = bt3[0]
+	var sig3 := []
+	t3.state_changed.connect(func(f: String, t: String) -> void: sig3.append([f, t]))
+	root.add_child(t3)
+	t3.set_process(false)   # 关自动帧,只用手动 _process 驱动
+	await process_frame
+	t3.add_timed_transition("Idle", "Run", 1.0)
+	sig3.clear()
+	t3._process(0.6)
+	if not t3.is_in("Idle"):
+		print("FAIL T3: 未满时长不应转移"); failures += 1
+	t3._process(0.6)
+	if not t3.is_in("Run") or sig3 != [["Idle", "Run"]]:
+		print("FAIL T3: 满时长应转到 Run 恰一次,实际 %s" % [sig3]); failures += 1
+	t3._process(5.0)
+	if sig3.size() != 1:
+		print("FAIL T3: Run 无延时转移,不应再转"); failures += 1
+	t3.transition_to("Idle"); t3._process(0.6); t3.transition_to("Jump"); t3._process(5.0)
+	if not t3.is_in("Jump"):
+		print("FAIL T3: 中途离开后延时转移应作废"); failures += 1
+
+	# T4. 重复登记覆盖;ANYSTATE / 未注册 / seconds<=0 忽略
+	t3.add_timed_transition("Jump", "Run", 1.0)
+	t3.add_timed_transition("Jump", "Idle", 1.0)     # 覆盖 + 告警
+	t3.add_timed_transition(t3.ANYSTATE, "Run", 0.1)  # 忽略
+	t3.add_timed_transition("Idle", "Nope", 0.1)      # 忽略
+	t3.add_timed_transition("Nope", "Idle", 0.1)      # 忽略
+	t3.add_timed_transition("Run", "Idle", 0.0)       # 忽略
+	t3.transition_to("Jump"); t3._process(1.0)
+	if not t3.is_in("Idle"):
+		print("FAIL T4: 重复登记应覆盖为 Idle,实际 %s" % t3.state_name()); failures += 1
+	t3.transition_to("Run"); t3._process(9.0)
+	if not t3.is_in("Run"):
+		print("FAIL T4: seconds<=0 / ANYSTATE 应被忽略,实际 %s" % t3.state_name()); failures += 1
+	t3.free()
+
+	# T5. 延时转移触发的连锁仍受 MAX_CHAIN 保护(Loop.enter 自转 → 截断)
+	var bt5: Array = _build([["Idle", ProbeState], ["Loop", ProbeDecisionState]])
+	var t5 = bt5[0]
+	var j5: Array = bt5[1]
+	t5.get_child(1).next_on_enter = "Loop"
+	root.add_child(t5)
+	t5.set_process(false)   # 关自动帧,只用手动 _process 驱动
+	await process_frame
+	t5.add_timed_transition("Idle", "Loop", 0.5)
+	j5.clear()
+	t5._process(1.0)
+	var loops := j5.filter(func(e): return e[0] == "Loop" and e[1] == "enter").size()
+	if loops != t5.MAX_CHAIN:
+		print("FAIL T5: 连锁应被截断在 MAX_CHAIN=%d,实际 %d" % [t5.MAX_CHAIN, loops]); failures += 1
+	t5.free()
+
+	# T6. to_dict → from_dict 往返:当前态/栈深/各层 elapsed;回调按真实顺序
+	var bt6: Array = _build([["Game", ProbeState], ["Menu", ProbeState], ["Opts", ProbeState]])
+	var t6 = bt6[0]
+	root.add_child(t6)
+	t6.set_process(false)   # 关自动帧,只用手动 _process 驱动
+	await process_frame
+	t6._process(3.0); t6.push_state("Menu"); t6._process(1.0); t6.push_state("Opts"); t6._process(0.5)
+	var snap: Dictionary = t6.to_dict()
+	if snap != {"state": "Opts", "elapsed": 0.5, "stack": [{"name": "Game", "elapsed": 3.0}, {"name": "Menu", "elapsed": 1.0}]}:
+		print("FAIL T6: to_dict 形状不对,实际 %s" % str(snap)); failures += 1
+	t6.free()
+	var bt6b: Array = _build([["Game", ProbeState], ["Menu", ProbeState], ["Opts", ProbeState]])
+	var t6b = bt6b[0]
+	var j6b: Array = bt6b[1]
+	root.add_child(t6b)
+	t6b.set_process(false)   # 关自动帧,只用手动 _process 驱动
+	await process_frame
+	t6b.transition_to("Menu")
+	j6b.clear()
+	t6b.from_dict(JSON.parse_string(JSON.stringify(snap)))   # 过一遍 JSON:数字变 float
+	if t6b.to_dict() != snap:
+		print("FAIL T6: 往返后 to_dict 应一致,实际 %s" % str(t6b.to_dict())); failures += 1
+	var want6 := [["Menu", "exit", "Game"], ["Game", "enter", "Menu"],
+		["Game", "pause"], ["Menu", "enter", "Game"], ["Menu", "pause"], ["Opts", "enter", "Menu"]]
+	if j6b != want6:
+		print("FAIL T6: 重放回调顺序不对,实际 %s" % [j6b]); failures += 1
+	t6b.pop_state(); t6b.pop_state()
+	if not t6b.is_in("Game") or not is_equal_approx(t6b.time_in_state(), 3.0):
+		print("FAIL T6: 弹回 Game 应恢复 elapsed 3.0"); failures += 1
+
+	# T7. from_dict 坏输入:不改状态
+	var before7: Dictionary = t6b.to_dict()
+	t6b.from_dict({"state": "Nope", "elapsed": 0.0, "stack": []})
+	t6b.from_dict({"state": "Menu"})
+	t6b.from_dict({"state": "Menu", "elapsed": 0.0, "stack": [{"name": "Nope", "elapsed": 1.0}]})
+	var deep := []
+	for i in range(t6b.MAX_STACK + 1):
+		deep.append({"name": "Game", "elapsed": 0.0})
+	t6b.from_dict({"state": "Menu", "elapsed": 0.0, "stack": deep})
+	if t6b.to_dict() != before7:
+		print("FAIL T7: 坏输入不应改变机器状态,实际 %s" % str(t6b.to_dict())); failures += 1
+	t6b.free()
+	var bt7: Array = _build([["Start", ProbeDecisionState], ["Menu", ProbeState]])
+	var t7 = bt7[0]
+	t7.get_child(0).from_dict_on_enter = {"state": "Menu", "elapsed": 0.0, "stack": []}
+	root.add_child(t7)
+	await process_frame          # Start.enter(转换中)里调 from_dict → 拒绝
+	if not t7.is_in("Start"):
+		print("FAIL T7: 转换中 from_dict 应被拒,实际 %s" % t7.state_name()); failures += 1
+	t7.free()
+
+	# T8. 入树前 from_dict 忽略
+	var bt8: Array = _build([["Idle", ProbeState], ["Run", ProbeState]])
+	var t8 = bt8[0]
+	t8.from_dict({"state": "Run", "elapsed": 0.0, "stack": []})
+	root.add_child(t8)
+	await process_frame
+	if not t8.is_in("Idle"):
+		print("FAIL T8: _ready 前 from_dict 应被忽略"); failures += 1
+	t8.free()
+
 	if failures == 0:
 		print("test_state_machine: ALL PASS")
 		quit(0)

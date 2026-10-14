@@ -13,7 +13,10 @@ extends Node
 ## 叠加能力(与 transition_to 并存):① 事件 dispatch 解耦——add_transition 登记
 ## "from|event → to"(from 可为 ANYSTATE 通配)、dispatch(event) 派发,命中则复用本
 ## 转换核心;② pushdown 栈——push_state/pop_state 暂停语义(压当前态调 pause()、弹回
-## 调 resume(),现场保留、不重置),栈深守卫 MAX_STACK,不占 MAX_CHAIN 连锁计数。
+## 调 resume(),现场保留、不重置),栈深守卫 MAX_STACK,不占 MAX_CHAIN 连锁计数;
+## ③ 停留计时——time_in_state() + add_timed_transition 停留满 N 秒自动转移;
+## ④ 存读档——to_dict/from_dict 只存态名与停留时长,恢复时按正常路径重放回调。
+## 层级/并行/历史状态不做,需要时用 Godot State Charts。
 
 ## 每次完成一次转换后广播(初始进入也广播,from_name 为 "")。
 signal state_changed(from_name: String, to_name: String)
@@ -37,6 +40,9 @@ var _transitioning: bool = false
 var _pending: Array[String] = []  # 转换执行中收到的后续转换请求
 var _transitions: Dictionary = {} # "from|event" -> to_name(事件派发转移表)
 var _stack: Array[String] = []    # pushdown 被压挂起态名(栈底->栈顶)
+var _stack_elapsed: Array[float] = [] # 与 _stack 平行:各被压态保存的停留时长
+var _elapsed: float = 0.0          # 当前态已停留秒数(_process 累加,enter 清零)
+var _timed: Dictionary = {}        # from_name -> [to_name, seconds](延时转移,每 from 至多一条)
 
 
 func _ready() -> void:
@@ -133,6 +139,8 @@ func push_state(state_name: String) -> void:
 	var paused_name := String(current_state.name)
 	current_state.pause()
 	_stack.append(paused_name)
+	_stack_elapsed.append(_elapsed)
+	_elapsed = 0.0
 	current_state = _states[state_name]
 	current_state.enter(paused_name)
 	state_changed.emit(paused_name, state_name)
@@ -149,6 +157,7 @@ func pop_state() -> void:
 		return
 	var active_name := String(current_state.name)
 	var restored_name: String = _stack.pop_back()
+	_elapsed = _stack_elapsed.pop_back()
 	current_state.exit(restored_name)
 	current_state = _states[restored_name]
 	current_state.resume()
@@ -158,6 +167,84 @@ func pop_state() -> void:
 ## 只读当前 pushdown 栈深(调试/测试)。
 func stack_depth() -> int:
 	return _stack.size()
+
+
+## 当前态已停留秒数。宿主 _process 累加 delta(故随树暂停/time_scale);每次 enter 清零
+## (含重进同一态);push 时被压态保存时长、栈内不计时,pop 后从保存值继续。
+func time_in_state() -> float:
+	return _elapsed
+
+
+## 登记延时转移:在 from_name 停留满 seconds 秒后自动 transition_to(to_name);中途离开
+## 自然作废。每个 from 至多一条,重复登记覆盖 + push_warning。from 为 ANYSTATE、from/to
+## 未注册、seconds <= 0 → push_warning + 忽略(要立即转移就在 enter 里 transition_to)。
+func add_timed_transition(from_name: String, to_name: String, seconds: float) -> void:
+	if from_name == ANYSTATE or not _states.has(from_name) or not _states.has(to_name) or seconds <= 0.0:
+		push_warning("KitStateMachine(%s): add_timed_transition(%s → %s, %s) 参数无效,忽略" % [get_path(), from_name, to_name, seconds])
+		return
+	if _timed.has(from_name):
+		push_warning("KitStateMachine(%s): 延时转移 from '%s' 重复登记,覆盖" % [get_path(), from_name])
+	_timed[from_name] = [to_name, seconds]
+
+
+## 存档快照:只存拓扑(态名 + 停留时长),不存状态节点自己的成员变量。
+## {"state": "Opts", "elapsed": 0.5, "stack": [{"name": "Game", "elapsed": 3.0}, ...]}(栈底在前)
+func to_dict() -> Dictionary:
+	var stack: Array = []
+	for i in _stack.size():
+		stack.append({"name": _stack[i], "elapsed": _stack_elapsed[i]})
+	return {"state": state_name(), "elapsed": _elapsed, "stack": stack}
+
+
+## 从 to_dict 快照恢复。先整体校验,任一不合法(缺字段/类型错/未注册态名/栈超 MAX_STACK/
+## 转换进行中/_ready 之前)→ push_warning 原样返回。通过后按正常路径重放:先把现有栈
+## pop 空,再 transition_to(栈底) 并依次 push_state 后续各层,最后写回各层 elapsed——
+## 每个态都按真实顺序收到 exit/enter/pause,代价是连发几次 state_changed。
+func from_dict(d: Dictionary) -> void:
+	var names := _validate_snapshot(d)
+	if names.is_empty():
+		return
+	while not _stack.is_empty():
+		pop_state()
+	transition_to(names[0])
+	for i in range(1, names.size()):
+		push_state(names[i])
+	var stack: Array = d["stack"]
+	for i in stack.size():
+		_stack_elapsed[i] = float(stack[i]["elapsed"])
+	_elapsed = float(d["elapsed"])
+
+
+## 校验快照;合法返回重放用态名序列(栈底 → 当前态),不合法 push_warning 并返回 []。
+func _validate_snapshot(d: Dictionary) -> Array[String]:
+	var bad := ""
+	if not is_node_ready():
+		bad = "须在 _ready 之后调用"
+	elif _transitioning:
+		bad = "转换进行中"
+	elif not (d.get("state") is String and _is_num(d.get("elapsed")) and d.get("stack") is Array):
+		bad = "缺字段或类型错"
+	elif (d["stack"] as Array).size() > MAX_STACK:
+		bad = "栈深超过 MAX_STACK"
+	var names: Array[String] = []
+	if bad == "":
+		for entry in d["stack"]:
+			if not (entry is Dictionary and entry.get("name") is String and _is_num(entry.get("elapsed"))):
+				bad = "栈条目缺字段或类型错"
+				break
+			names.append(entry["name"])
+		names.append(d["state"])
+		for n in names:
+			if bad == "" and not _states.has(n):
+				bad = "未注册状态 '%s'" % n
+	if bad != "":
+		push_warning("KitStateMachine(%s): from_dict 拒绝:%s" % [get_path() if is_inside_tree() else String(name), bad])
+		names.clear()
+	return names
+
+
+static func _is_num(v: Variant) -> bool:
+	return v is float or v is int
 
 
 ## 执行一次转换,并按序消化期间入队的连锁转换(上限 MAX_CHAIN 防死循环)。
@@ -176,6 +263,7 @@ func _run_transition(from_name: String, to_state: KitState) -> void:
 			current_state.exit(String(next_state.name))
 		var old_name := prev_name
 		current_state = next_state
+		_elapsed = 0.0
 		current_state.enter(old_name)
 		state_changed.emit(old_name, String(current_state.name))
 		prev_name = String(current_state.name)
@@ -187,8 +275,15 @@ func _run_transition(from_name: String, to_state: KitState) -> void:
 
 
 func _process(delta: float) -> void:
-	if current_state != null:
-		current_state.update(delta)
+	if current_state == null:
+		return
+	_elapsed += delta
+	current_state.update(delta)
+	# update 里若已转走,_elapsed 已清零,下面自然不触发
+	# ponytail: 判定只在 _process 帧粒度、超时不补偿;需要物理帧精度或多段补偿时再改
+	var timed: Array = _timed.get(state_name(), [])
+	if not timed.is_empty() and _elapsed >= timed[1]:
+		transition_to(timed[0])
 
 
 func _physics_process(delta: float) -> void:
