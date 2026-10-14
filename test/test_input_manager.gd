@@ -12,6 +12,7 @@ var InputManagerScript
 var SettingsScript
 
 const ACTION := "__test_jump__"
+const SLOT_ACTION := "__test_move_up__"
 const SETTINGS_PATH := "user://__test_input_settings__.json"
 
 
@@ -20,6 +21,55 @@ func _make_key_event(keycode: int, pressed: bool = false) -> InputEventKey:
 	ev.physical_keycode = keycode
 	ev.pressed = pressed
 	return ev
+
+
+func _joy(button: int) -> InputEventJoypadButton:
+	var ev := InputEventJoypadButton.new()
+	ev.button_index = button
+	return ev
+
+
+## SLOT_ACTION 的工程默认:键盘槽两个键(W/↑),手柄槽一个(十字键上)。
+func _slot_defaults() -> Array:
+	return [_make_key_event(KEY_W), _make_key_event(KEY_UP), _joy(JOY_BUTTON_DPAD_UP)]
+
+
+## 把动作当前绑定描述成排序后的字符串数组,便于整体比较。
+func _describe(action: String) -> Array:
+	var out := []
+	for ev in InputMap.action_get_events(action):
+		if ev is InputEventKey:
+			out.append("key:%d" % ev.physical_keycode)
+		elif ev is InputEventJoypadButton:
+			out.append("joy:%d" % ev.button_index)
+		elif ev is InputEventJoypadMotion:
+			out.append("axis:%d:%s" % [ev.axis, ev.axis_value])
+		else:
+			out.append(ev.get_class())
+	out.sort()
+	return out
+
+
+func _sorted_default_desc() -> Array:
+	var out := ["joy:%d" % JOY_BUTTON_DPAD_UP, "key:%d" % KEY_UP, "key:%d" % KEY_W]
+	out.sort()
+	return out
+
+
+## 模拟新会话:InputMap 回工程默认,新实例快照后绑定 settings。
+func _fresh_slot_manager(settings):
+	_restore_slot_default()
+	var m = InputManagerScript.new()
+	m._snapshot_defaults()
+	m.bind_settings(settings)
+	return m
+
+
+## 把 SLOT_ACTION 的 InputMap 恢复为工程默认,模拟新会话。
+func _restore_slot_default() -> void:
+	InputMap.action_erase_events(SLOT_ACTION)
+	for ev in _slot_defaults():
+		InputMap.action_add_event(SLOT_ACTION, ev)
 
 
 ## 把 ACTION 的 InputMap 绑定恢复为默认(KEY_SPACE),模拟"新引擎会话启动时"。
@@ -116,7 +166,7 @@ func _initialize() -> void:
 	im.bind_settings(settings)
 	im.rebind_action(ACTION, _make_key_event(KEY_J))
 	var stored = settings.get_value("input", ACTION)
-	if typeof(stored) != TYPE_DICTIONARY or stored.get("type") != "key":
+	if typeof(stored) != TYPE_DICTIONARY or typeof(stored.get("kbm")) != TYPE_DICTIONARY or stored["kbm"].get("type") != "key":
 		print("FAIL 4: rebind 应把覆盖写进 settings,得到 %s" % [stored])
 		failures += 1
 	_restore_action_default()  # 模拟新会话:InputMap 回到工程默认
@@ -216,7 +266,128 @@ func _initialize() -> void:
 		print("FAIL 8: 不支持事件应返回空")
 		failures += 1
 
+	# 9. 按设备分槽:slot_of;重绑只替换同槽,另一槽保留
+	InputMap.add_action(SLOT_ACTION)
+	for ev in _slot_defaults():
+		InputMap.action_add_event(SLOT_ACTION, ev)
+	var ims = InputManagerScript.new()
+	ims._snapshot_defaults()
+	var KBM: int = ims.DeviceType.KEYBOARD_MOUSE
+	var PAD: int = ims.DeviceType.GAMEPAD
+	if ims.slot_of(_make_key_event(KEY_J)) != KBM or ims.slot_of(mouse_ev) != KBM:
+		print("FAIL 9: 键盘/鼠标事件应归 KEYBOARD_MOUSE 槽")
+		failures += 1
+	if ims.slot_of(joy_btn_ev) != PAD or ims.slot_of(joy_motion_ev) != PAD:
+		print("FAIL 9: 手柄按键/轴应归 GAMEPAD 槽")
+		failures += 1
+	if ims.slot_of(InputEventScreenTouch.new()) != -1:
+		print("FAIL 9: 不可绑定事件应返回 -1")
+		failures += 1
+	ims.rebind_action(SLOT_ACTION, _make_key_event(KEY_J))
+	if _describe(SLOT_ACTION) != ["joy:%d" % JOY_BUTTON_DPAD_UP, "key:%d" % KEY_J]:
+		print("FAIL 9: 改键盘键后应只剩 J + 手柄原键,实际 %s" % [_describe(SLOT_ACTION)])
+		failures += 1
+	ims.rebind_action(SLOT_ACTION, _joy(JOY_BUTTON_B))
+	if _describe(SLOT_ACTION) != ["joy:%d" % JOY_BUTTON_B, "key:%d" % KEY_J]:
+		print("FAIL 9: 改手柄键后键盘 J 应保留,实际 %s" % [_describe(SLOT_ACTION)])
+		failures += 1
+
+	# 10. 按槽查询与复位
+	var kbm_ev = ims.get_action_event(SLOT_ACTION, KBM)
+	var pad_ev = ims.get_action_event(SLOT_ACTION, PAD)
+	if not (kbm_ev is InputEventKey) or kbm_ev.physical_keycode != KEY_J:
+		print("FAIL 10: get_action_event(KBM) 应返回 J")
+		failures += 1
+	if not (pad_ev is InputEventJoypadButton) or pad_ev.button_index != JOY_BUTTON_B:
+		print("FAIL 10: get_action_event(GAMEPAD) 应返回 B")
+		failures += 1
+	ims.reset_action(SLOT_ACTION, KBM)
+	if _describe(SLOT_ACTION) != ["joy:%d" % JOY_BUTTON_B, "key:%d" % KEY_UP, "key:%d" % KEY_W]:
+		print("FAIL 10: 按槽复位键盘应恢复 W/↑ 且保留手柄 B,实际 %s" % [_describe(SLOT_ACTION)])
+		failures += 1
+	ims.reset_action(SLOT_ACTION)
+	if _describe(SLOT_ACTION) != _sorted_default_desc():
+		print("FAIL 10: 不带 device 的 reset 应整体恢复默认")
+		failures += 1
+	ims.free()
+
+	# 11. 新持久化格式:按槽存,只存改过的槽;重启恢复;事件规范化为 device=-1
+	var sset = SettingsScript.new()
+	sset.settings_path = SETTINGS_PATH
+	var im_a = _fresh_slot_manager(sset)
+	var raw := _make_key_event(KEY_J, true)
+	raw.device = 3
+	raw.ctrl_pressed = true
+	im_a.rebind_action(SLOT_ACTION, raw)
+	if sset.get_value("input", SLOT_ACTION) != {"kbm": {"type": "key", "physical_keycode": KEY_J}}:
+		print("FAIL 11: 只应存改过的 kbm 槽,实际 %s" % [sset.get_value("input", SLOT_ACTION)])
+		failures += 1
+	var live = im_a.get_action_event(SLOT_ACTION, KBM)
+	if live.device != -1 or live.ctrl_pressed or live.pressed:
+		print("FAIL 11: 本局生效的事件应规范化(device=-1、无修饰、未按下)")
+		failures += 1
+	var pad_raw := _joy(JOY_BUTTON_B)
+	pad_raw.device = 2
+	im_a.rebind_action(SLOT_ACTION, pad_raw)
+	im_a.free()
+	var im_b = _fresh_slot_manager(sset)
+	if _describe(SLOT_ACTION) != ["joy:%d" % JOY_BUTTON_B, "key:%d" % KEY_J]:
+		print("FAIL 11: 重启后应恢复两个槽的覆盖,实际 %s" % [_describe(SLOT_ACTION)])
+		failures += 1
+	for ev in InputMap.action_get_events(SLOT_ACTION):
+		if ev.device != -1:
+			print("FAIL 11: 恢复出的事件 device 应为 -1,%s 为 %d" % [ev.get_class(), ev.device])
+			failures += 1
+	# 12. 按槽复位只删该槽记录;unbind 存 null,重启仍为空槽
+	im_b.reset_action(SLOT_ACTION, KBM)
+	if sset.get_value("input", SLOT_ACTION) != {"gamepad": {"type": "joypad_button", "button_index": JOY_BUTTON_B}}:
+		print("FAIL 12: 按槽复位应只删 kbm 记录,实际 %s" % [sset.get_value("input", SLOT_ACTION)])
+		failures += 1
+	if not im_b.unbind_action(SLOT_ACTION, PAD):
+		print("FAIL 12: unbind_action 应返回 true")
+		failures += 1
+	if im_b.get_action_event(SLOT_ACTION, PAD) != null:
+		print("FAIL 12: unbind 后手柄槽应为空")
+		failures += 1
+	if sset.get_value("input", SLOT_ACTION) != {"gamepad": null}:
+		print("FAIL 12: unbind 应存 null,实际 %s" % [sset.get_value("input", SLOT_ACTION)])
+		failures += 1
+	if im_b.unbind_action("__no_such_action__", PAD) or im_b.unbind_action(SLOT_ACTION, im_b.DeviceType.TOUCH):
+		print("FAIL 12: 未知动作或非法槽 unbind 应返回 false")
+		failures += 1
+	im_b.free()
+	var im_c = _fresh_slot_manager(sset)
+	if _describe(SLOT_ACTION) != ["key:%d" % KEY_UP, "key:%d" % KEY_W]:
+		print("FAIL 12: 重启后手柄槽应保持清空,实际 %s" % [_describe(SLOT_ACTION)])
+		failures += 1
+	im_c.free()
+
+	# 13. 旧格式:只覆盖对应槽,另一槽用默认;下次写入才转新格式
+	sset.set_value("input", SLOT_ACTION, {"type": "key", "physical_keycode": KEY_J})
+	var im_d = _fresh_slot_manager(sset)
+	if _describe(SLOT_ACTION) != ["joy:%d" % JOY_BUTTON_DPAD_UP, "key:%d" % KEY_J]:
+		print("FAIL 13: 旧格式应只覆盖键盘槽,实际 %s" % [_describe(SLOT_ACTION)])
+		failures += 1
+	if sset.get_value("input", SLOT_ACTION) != {"type": "key", "physical_keycode": KEY_J}:
+		print("FAIL 13: 读取时不应改写旧格式")
+		failures += 1
+	im_d.rebind_action(SLOT_ACTION, _joy(JOY_BUTTON_X))
+	if sset.get_value("input", SLOT_ACTION) != {"kbm": {"type": "key", "physical_keycode": KEY_J}, "gamepad": {"type": "joypad_button", "button_index": JOY_BUTTON_X}}:
+		print("FAIL 13: 下次写入应转成新格式,实际 %s" % [sset.get_value("input", SLOT_ACTION)])
+		failures += 1
+	im_d.free()
+
+	# 14. 单槽损坏只跳过该槽
+	sset.set_value("input", SLOT_ACTION, {"kbm": {"type": "alien"}, "gamepad": {"type": "joypad_button", "button_index": JOY_BUTTON_B}})
+	var im_e = _fresh_slot_manager(sset)
+	if _describe(SLOT_ACTION) != ["joy:%d" % JOY_BUTTON_B, "key:%d" % KEY_UP, "key:%d" % KEY_W]:
+		print("FAIL 14: 损坏的 kbm 槽应跳过、gamepad 槽照常,实际 %s" % [_describe(SLOT_ACTION)])
+		failures += 1
+	im_e.free()
+	sset.free()
+
 	# 清理
+	InputMap.erase_action(SLOT_ACTION)
 	im.free()
 	settings.free()
 	InputMap.erase_action(ACTION)

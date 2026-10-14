@@ -18,6 +18,8 @@ signal device_changed(device_type: DeviceType)
 signal action_rebound(action: String)
 
 const SETTINGS_SECTION := "input"
+## 绑定槽在存档里的 key(固定字符串,调整枚举不影响存档)。
+const SLOT_KEYS := {DeviceType.KEYBOARD_MOUSE: "kbm", DeviceType.GAMEPAD: "gamepad"}
 ## 摇杆漂移噪声门限:JoypadMotion 低于此幅值不算"玩家在用手柄"。
 const MOTION_DEADZONE := 0.2
 
@@ -61,14 +63,20 @@ func bind_settings(settings) -> void:
 		if typeof(stored) != TYPE_DICTIONARY:
 			push_warning("InputManager: 动作 '%s' 的键位覆盖损坏(非 dict),已跳过" % action_name)
 			continue
-		var event := _dict_to_event(stored)
-		if event == null:
-			push_warning("InputManager: 动作 '%s' 的键位覆盖损坏(无法解码),已跳过" % action_name)
-			continue
-		_apply_binding(action_name, event)
+		var overrides := _decode_overrides(stored)
+		for slot in overrides:
+			var dict = overrides[slot]
+			if dict == null:
+				_clear_slot(action_name, slot)
+				continue
+			var event := _dict_to_event(dict)
+			if event == null or slot_of(event) != slot:
+				push_warning("InputManager: 动作 '%s' 的 %s 槽覆盖损坏,已跳过" % [action_name, SLOT_KEYS[slot]])
+				continue
+			_apply_binding(action_name, event)
 
 
-## 把 action 的绑定整体替换为单个 event 并持久化。
+## 把 event 所在槽的绑定替换为这一个事件并持久化,另一个槽不受影响。
 ## action 不存在 / 事件类型不支持 → CoreKit.log.warn + false。
 func rebind_action(action: String, event: InputEvent) -> bool:
 	if not InputMap.has_action(action):
@@ -78,22 +86,42 @@ func rebind_action(action: String, event: InputEvent) -> bool:
 	if encoded.is_empty():
 		CoreKit.log.warn("InputManager: 不支持的事件类型 %s,忽略重绑定" % event.get_class())
 		return false
-	_apply_binding(action, event)
-	if _settings != null:
-		_settings.set_value(SETTINGS_SECTION, action, encoded)
+	# 经序列化格式走一遍:本局生效的事件与重启后恢复的完全一致(device=-1、无修饰键)。
+	var normalized := _dict_to_event(encoded)
+	_apply_binding(action, normalized)
+	_write_override(action, slot_of(normalized), encoded)
+	action_rebound.emit(action)
+	return true
+
+
+## 清空 action 的一个槽并持久化「清空」(存 null,重启后仍为空)。
+## 未知动作 / 非绑定槽 → false。
+func unbind_action(action: String, device: int) -> bool:
+	if not InputMap.has_action(action) or not SLOT_KEYS.has(device):
+		return false
+	_clear_slot(action, device)
+	_write_override(action, device, null)
 	action_rebound.emit(action)
 	return true
 
 
 ## 恢复 action 到工程默认(启动时快照)并清除持久化覆盖。
-func reset_action(action: String) -> void:
+## device = -1 整个动作复位;传槽(DeviceType)则只复位该槽。
+func reset_action(action: String, device := -1) -> void:
 	if not _defaults.has(action):
 		return
-	InputMap.action_erase_events(action)
+	if device == -1:
+		InputMap.action_erase_events(action)
+	else:
+		_clear_slot(action, device)
 	for ev in _defaults[action]:
-		InputMap.action_add_event(action, ev.duplicate())
-	if _settings != null:
-		_settings.erase_value(SETTINGS_SECTION, action)
+		if device == -1 or slot_of(ev) == device:
+			InputMap.action_add_event(action, ev.duplicate())
+	if device == -1:
+		if _settings != null:
+			_settings.erase_value(SETTINGS_SECTION, action)
+	else:
+		_write_override(action, device, null, true)
 	action_rebound.emit(action)
 
 
@@ -103,13 +131,14 @@ func reset_all() -> void:
 
 
 ## 取 action 当前第一个绑定事件(UI 显示用);无绑定/未知 action 返回 null。
-func get_action_event(action: String) -> InputEvent:
+## device = -1 不分槽;传槽(DeviceType)则只在该槽里找,空槽返回 null。
+func get_action_event(action: String, device := -1) -> InputEvent:
 	if not InputMap.has_action(action):
 		return null
-	var events := InputMap.action_get_events(action)
-	if events.is_empty():
-		return null
-	return events[0]
+	for ev in InputMap.action_get_events(action):
+		if device == -1 or slot_of(ev) == device:
+			return ev
+	return null
 
 
 ## 返回当前占用该事件的动作名;among 空=扫全部动作,否则只扫子集;无占用返回 ""。
@@ -146,10 +175,64 @@ func _input(event: InputEvent) -> void:
 	_record_buffer(event)
 
 
+## 事件所属绑定槽:键盘/鼠标按键 → KEYBOARD_MOUSE,手柄按键/轴 → GAMEPAD;
+## 不可绑定的事件(触屏、鼠标移动等)返回 -1。
+func slot_of(event: InputEvent) -> int:
+	if event is InputEventKey or event is InputEventMouseButton:
+		return DeviceType.KEYBOARD_MOUSE
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		return DeviceType.GAMEPAD
+	return -1
+
+
+## 只替换 event 所在槽的绑定,另一个槽原样保留。
 func _apply_binding(action: String, event: InputEvent) -> void:
-	InputMap.action_erase_events(action)
+	_clear_slot(action, slot_of(event))
 	# duplicate() 防止 InputMap 持有调用方传入的同一个 InputEvent 引用(别名)。
 	InputMap.action_add_event(action, event.duplicate())
+
+
+func _clear_slot(action: String, slot: int) -> void:
+	for ev in InputMap.action_get_events(action):
+		if slot_of(ev) == slot:
+			InputMap.action_erase_event(action, ev)
+
+
+## 存档值 → {槽: 事件 dict | null}。新格式 {"kbm":…, "gamepad":…};
+## 旧格式(带 "type" 的单事件 dict)归到它解码后所在的槽,解不出则为空表。
+func _decode_overrides(stored: Dictionary) -> Dictionary:
+	var out := {}
+	if stored.has("type"):
+		var legacy := _dict_to_event(stored)
+		if legacy == null:
+			push_warning("InputManager: 旧格式键位覆盖损坏(无法解码),已跳过")
+		else:
+			out[slot_of(legacy)] = stored
+		return out
+	for slot in SLOT_KEYS:
+		if stored.has(SLOT_KEYS[slot]):
+			out[slot] = stored[SLOT_KEYS[slot]]
+	return out
+
+
+## 写一个槽的覆盖(value 为事件 dict 或 null=显式清空);erase=true 则删掉该槽的覆盖记录。
+## 旧格式在这里顺带转成新格式。
+func _write_override(action: String, slot: int, value, erase := false) -> void:
+	if _settings == null:
+		return
+	var stored = _settings.get_value(SETTINGS_SECTION, action)
+	var overrides := _decode_overrides(stored) if typeof(stored) == TYPE_DICTIONARY else {}
+	if erase:
+		overrides.erase(slot)
+	else:
+		overrides[slot] = value
+	if overrides.is_empty():
+		_settings.erase_value(SETTINGS_SECTION, action)
+		return
+	var out := {}
+	for s in overrides:
+		out[SLOT_KEYS[s]] = overrides[s]
+	_settings.set_value(SETTINGS_SECTION, action, out)
 
 
 func _update_device(event: InputEvent) -> void:
@@ -189,7 +272,16 @@ func _event_to_dict(event: InputEvent) -> Dictionary:
 	return {}
 
 
+## 解出的事件 device 统一为 -1(任意设备):InputEvent.device 默认 0,
+## 不规范化的话改过的手柄键只认 0 号手柄。
 func _dict_to_event(dict: Dictionary) -> InputEvent:
+	var ev := _decode_event(dict)
+	if ev != null:
+		ev.device = -1
+	return ev
+
+
+func _decode_event(dict: Dictionary) -> InputEvent:
 	match dict.get("type"):
 		"key":
 			if typeof(dict.get("physical_keycode")) not in [TYPE_INT, TYPE_FLOAT]:
