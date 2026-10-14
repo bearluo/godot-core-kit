@@ -10,6 +10,43 @@ extends Node
 ## coyote time、组合键、多绑定槽、多玩家路由均不在 v1 范围。
 
 enum DeviceType { KEYBOARD_MOUSE, GAMEPAD, TOUCH }
+## 手柄品牌:只决定显示什么图标/文字,按键逻辑统一用 Godot 位置语义(JOY_BUTTON_A=底部键)。
+enum JoypadBrand { GENERIC, XBOX, PLAYSTATION, SWITCH }
+
+const _BRAND_VIDS := {0x045e: JoypadBrand.XBOX, 0x054c: JoypadBrand.PLAYSTATION, 0x057e: JoypadBrand.SWITCH}
+## 名字关键字(小写),按顺序匹配,更具体的放前面。
+const _BRAND_KEYWORDS := [
+	["joy-con", JoypadBrand.SWITCH], ["pro controller", JoypadBrand.SWITCH], ["switch", JoypadBrand.SWITCH],
+	["dualsense", JoypadBrand.PLAYSTATION], ["dualshock", JoypadBrand.PLAYSTATION],
+	["playstation", JoypadBrand.PLAYSTATION], ["ps4", JoypadBrand.PLAYSTATION], ["ps5", JoypadBrand.PLAYSTATION],
+	["xbox", JoypadBrand.XBOX], ["xinput", JoypadBrand.XBOX],
+]
+
+## --- 按键图标键名表:[键名, 文字兜底] ---
+const _BRAND_PREFIX := {
+	JoypadBrand.GENERIC: "generic", JoypadBrand.XBOX: "xbox",
+	JoypadBrand.PLAYSTATION: "playstation", JoypadBrand.SWITCH: "switch",
+}
+const _DPAD := [["dpad_up", "↑"], ["dpad_down", "↓"], ["dpad_left", "←"], ["dpad_right", "→"]]
+## 下标 = JOY_BUTTON_*(0 A/南 … 10 右肩),十字键 11–14 各品牌共用 _DPAD。
+## Switch 的南键印的是 B、东键是 A(位置语义不变,只换叫法)。
+var _PAD_BUTTONS := {
+	JoypadBrand.GENERIC: [["south", "A"], ["east", "B"], ["west", "X"], ["north", "Y"], ["back", "Back"], ["guide", "Guide"], ["start", "Start"], ["left_stick", "L3"], ["right_stick", "R3"], ["left_shoulder", "LB"], ["right_shoulder", "RB"]] + _DPAD,
+	JoypadBrand.XBOX: [["a", "A"], ["b", "B"], ["x", "X"], ["y", "Y"], ["view", "View"], ["guide", "Xbox"], ["menu", "Menu"], ["ls", "LS"], ["rs", "RS"], ["lb", "LB"], ["rb", "RB"]] + _DPAD,
+	JoypadBrand.PLAYSTATION: [["cross", "✕"], ["circle", "○"], ["square", "□"], ["triangle", "△"], ["create", "Create"], ["ps", "PS"], ["options", "Options"], ["l3", "L3"], ["r3", "R3"], ["l1", "L1"], ["r1", "R1"]] + _DPAD,
+	JoypadBrand.SWITCH: [["b", "B"], ["a", "A"], ["y", "Y"], ["x", "X"], ["minus", "-"], ["home", "Home"], ["plus", "+"], ["ls", "LS"], ["rs", "RS"], ["l", "L"], ["r", "R"]] + _DPAD,
+}
+const _TRIGGERS := {
+	JoypadBrand.GENERIC: [["left_trigger", "LT"], ["right_trigger", "RT"]],
+	JoypadBrand.XBOX: [["lt", "LT"], ["rt", "RT"]],
+	JoypadBrand.PLAYSTATION: [["l2", "L2"], ["r2", "R2"]],
+	JoypadBrand.SWITCH: [["zl", "ZL"], ["zr", "ZR"]],
+}
+const _MOUSE_GLYPHS := {
+	MOUSE_BUTTON_LEFT: ["mouse_left", "LMB"], MOUSE_BUTTON_RIGHT: ["mouse_right", "RMB"],
+	MOUSE_BUTTON_MIDDLE: ["mouse_middle", "MMB"], MOUSE_BUTTON_WHEEL_UP: ["mouse_wheel_up", "Wheel ↑"],
+	MOUSE_BUTTON_WHEEL_DOWN: ["mouse_wheel_down", "Wheel ↓"],
+}
 
 ## 输入来源设备变化时广播(仅变化时,不逐事件)。
 signal device_changed(device_type: DeviceType)
@@ -17,13 +54,26 @@ signal device_changed(device_type: DeviceType)
 ## 某动作被重绑定/重置后广播。
 signal action_rebound(action: String)
 
+## 当前手柄(最近产生输入的那个)或它的品牌变化时广播,UI 据此换按键图标。
+signal joypad_changed(device: int, brand: JoypadBrand)
+
 const SETTINGS_SECTION := "input"
+## 震动开关在 input 段的保留 key(下划线开头,不与动作名冲突)。
+const RUMBLE_KEY := "_rumble_enabled"
 ## 绑定槽在存档里的 key(固定字符串,调整枚举不影响存档)。
 const SLOT_KEYS := {DeviceType.KEYBOARD_MOUSE: "kbm", DeviceType.GAMEPAD: "gamepad"}
 ## 摇杆漂移噪声门限:JoypadMotion 低于此幅值不算"玩家在用手柄"。
 const MOTION_DEADZONE := 0.2
 
 var current_device: int = DeviceType.KEYBOARD_MOUSE
+## 最近一次产生手柄输入的设备号;还没有手柄输入时为 -1。
+var current_joypad: int = -1
+## 震动总开关(无障碍/偏好),默认开;赋值即持久化到 input._rumble_enabled。
+var rumble_enabled: bool = true:
+	set(value):
+		rumble_enabled = value
+		if _settings != null:
+			_settings.set_value(SETTINGS_SECTION, RUMBLE_KEY, value)
 
 ## bind_settings 注入;untyped:未注入(脱离门面单测/消费方不持久化)时为 null。
 var _settings = null
@@ -32,10 +82,77 @@ var _actions: Array = []                # 缓冲扫描用的动作名列表(Stri
 var _last_pressed_msec: Dictionary = {} # action(String) -> 按下时刻(msec)
 ## 测试接缝:缓冲计时经此取时,测试注入假时钟。
 var _ticks_msec_func: Callable = Time.get_ticks_msec
+## 测试接缝:手柄信息与震动经此调用,测试注入替身。
+var _input_backend = Input
+var _joy_brands: Dictionary = {}   # device -> JoypadBrand(连接时算好,不在 _input 里逐事件算)
+var _current_brand: int = JoypadBrand.GENERIC
 
 
 func _ready() -> void:
 	_snapshot_defaults()
+	_refresh_joypads()
+	Input.joy_connection_changed.connect(_on_joy_connection_changed)
+
+
+## 设备的手柄品牌(读缓存);未连接返回 GENERIC。
+func get_joypad_brand(device: int) -> JoypadBrand:
+	return _joy_brands.get(device, JoypadBrand.GENERIC)
+
+
+## 统一震动:能震的手柄就震手柄,否则震机身(手机);桌面无可震设备时 vibrate_handheld 本身无效果。
+## device = -1 时取当前手柄,前提是当前输入设备是手柄。duration_sec ≤ 0 什么都不做
+## (SDL 上 duration=0 等于震 65 秒);strength 先 clamp 到 [0,1](超范围 Godot 会静默丢弃)。
+func rumble(strength: float, duration_sec: float, device := -1) -> void:
+	if not rumble_enabled or duration_sec <= 0.0:
+		return
+	strength = clampf(strength, 0.0, 1.0)
+	var pad := _rumble_target(device)
+	if pad != -1 and _input_backend.has_joy_vibration(pad):
+		_input_backend.start_joy_vibration(pad, strength, strength, duration_sec)
+	else:
+		_input_backend.vibrate_handheld(int(duration_sec * 1000.0), strength)
+
+
+func stop_rumble(device := -1) -> void:
+	var pad := _rumble_target(device)
+	if pad != -1:
+		_input_backend.stop_joy_vibration(pad)
+
+
+func _rumble_target(device: int) -> int:
+	if device != -1:
+		return device
+	return current_joypad if current_device == DeviceType.GAMEPAD else -1
+
+
+## 给启动前就插着的手柄补算品牌缓存。
+func _refresh_joypads() -> void:
+	_joy_brands.clear()
+	for device in _input_backend.get_connected_joypads():
+		_joy_brands[device] = _detect_brand(device)
+
+
+func _detect_brand(device: int) -> JoypadBrand:
+	var info: Dictionary = _input_backend.get_joy_info(device)
+	return brand_from(str(info.get("vendor_id", "")), _input_backend.get_joy_name(device))
+
+
+func _on_joy_connection_changed(device: int, connected: bool) -> void:
+	if connected:
+		_joy_brands[device] = _detect_brand(device)
+	else:
+		_joy_brands.erase(device)
+	if device == current_joypad:
+		_set_current_joypad(device)
+
+
+func _set_current_joypad(device: int) -> void:
+	var brand := get_joypad_brand(device)
+	if device == current_joypad and brand == _current_brand:
+		return
+	current_joypad = device
+	_current_brand = brand
+	joypad_changed.emit(device, brand)
 
 
 ## 快照工程默认键位(须在应用任何覆盖之前调用;_ready 自动调,
@@ -56,6 +173,9 @@ func bind_settings(settings) -> void:
 	_settings = settings
 	if _settings == null:
 		return
+	var rumble_on = _settings.get_value(SETTINGS_SECTION, RUMBLE_KEY)
+	if typeof(rumble_on) == TYPE_BOOL:
+		rumble_enabled = rumble_on
 	for action_name in _defaults.keys():
 		var stored = _settings.get_value(SETTINGS_SECTION, action_name)
 		if stored == null:
@@ -185,6 +305,62 @@ func slot_of(event: InputEvent) -> int:
 	return -1
 
 
+## 由 get_joy_info 的 vendor_id(十进制字符串)和手柄名判品牌:VID → 名字关键字 → GENERIC。
+## Android/Web 上 vendor_id 为空,只能靠名字;Web 名字常是 "Standard Gamepad Mapping" → GENERIC。
+func brand_from(vendor_id: String, joy_name: String) -> JoypadBrand:
+	var vid := vendor_id.to_int()
+	if _BRAND_VIDS.has(vid):
+		return _BRAND_VIDS[vid]
+	var lower := joy_name.to_lower()
+	for pair in _BRAND_KEYWORDS:
+		if lower.contains(pair[0]):
+			return pair[1]
+	return JoypadBrand.GENERIC
+
+
+## 稳定的按键图标键名,游戏用它查自己的贴图(如 res://ui/glyphs/<key>.png);kit 不带图。
+## 形如 kbm/key_space、kbm/mouse_left、xbox/a、playstation/cross、generic/left_stick_up;
+## 不支持的事件返回 ""。
+func glyph_key(event: InputEvent, brand := JoypadBrand.GENERIC) -> String:
+	var names := _glyph_names(event, brand)
+	return names[0] if not names.is_empty() else ""
+
+
+## 没有图标资源时的可读文字兜底(如 "A"、"✕"、"Space")。不支持的事件返回 ""。
+func glyph_text(event: InputEvent, brand := JoypadBrand.GENERIC) -> String:
+	var names := _glyph_names(event, brand)
+	return names[1] if not names.is_empty() else ""
+
+
+## 返回 [键名, 文字];不支持返回 []。
+func _glyph_names(event: InputEvent, brand: int) -> Array:
+	var prefix: String = _BRAND_PREFIX[brand]
+	if event is InputEventKey:
+		var label := OS.get_keycode_string(event.physical_keycode)
+		return ["kbm/key_" + label.to_lower().replace(" ", "_"), label]
+	if event is InputEventMouseButton:
+		var mouse: Array = _MOUSE_GLYPHS.get(event.button_index, ["mouse_%d" % event.button_index, "Mouse %d" % event.button_index])
+		return ["kbm/" + mouse[0], mouse[1]]
+	if event is InputEventJoypadButton:
+		if event.button_index < 0 or event.button_index >= _PAD_BUTTONS[brand].size():
+			return [prefix + "/button_%d" % event.button_index, "#%d" % event.button_index]
+		var pad: Array = _PAD_BUTTONS[brand][event.button_index]
+		return [prefix + "/" + pad[0], pad[1]]
+	if event is InputEventJoypadMotion:
+		if event.axis == JOY_AXIS_TRIGGER_LEFT or event.axis == JOY_AXIS_TRIGGER_RIGHT:
+			var trig: Array = _TRIGGERS[brand][0 if event.axis == JOY_AXIS_TRIGGER_LEFT else 1]
+			return [prefix + "/" + trig[0], trig[1]]
+		var stick := "left_stick" if event.axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y] else "right_stick"
+		var dir: String
+		if event.axis in [JOY_AXIS_LEFT_X, JOY_AXIS_RIGHT_X]:
+			dir = "left" if event.axis_value < 0 else "right"
+		else:
+			dir = "up" if event.axis_value < 0 else "down"
+		var arrows := {"up": "↑", "down": "↓", "left": "←", "right": "→"}
+		return [prefix + "/%s_%s" % [stick, dir], ("L" if stick == "left_stick" else "R") + arrows[dir]]
+	return []
+
+
 ## 只替换 event 所在槽的绑定,另一个槽原样保留。
 func _apply_binding(action: String, event: InputEvent) -> void:
 	_clear_slot(action, slot_of(event))
@@ -246,6 +422,8 @@ func _update_device(event: InputEvent) -> void:
 			detected = DeviceType.GAMEPAD
 	elif event is InputEventScreenTouch or event is InputEventScreenDrag:
 		detected = DeviceType.TOUCH
+	if detected == DeviceType.GAMEPAD:
+		_set_current_joypad(event.device)
 	if detected != -1 and detected != current_device:
 		current_device = detected
 		device_changed.emit(current_device)
