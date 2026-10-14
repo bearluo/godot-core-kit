@@ -1,4 +1,4 @@
-# godot-core-kit 全量验证:import -> 30 个断言测试 -> demo 冒烟
+# godot-core-kit 全量验证:import -> 31 个断言测试 -> demo 冒烟
 # 用法(在仓库根目录): powershell -File test\run_all.ps1
 $ErrorActionPreference = 'Continue'
 Set-Location (Split-Path $PSScriptRoot -Parent)

@@ -20,7 +20,7 @@
 
 | 文档 | 访问 | 一句话 |
 |---|---|---|
-| [scene-manager](systems/scene-manager.md) | `CoreKit.scenes` | 场景切换 |
+| [scene-manager](systems/scene-manager.md) | `CoreKit.scenes` | 场景切换(钩子、预载加载屏、reload、cover/reveal) |
 | [object-pool](systems/object-pool.md) | `CoreKit.pool` | 对象池复用 |
 | [save-manager](systems/save-manager.md) | `CoreKit.saves` | 存档槽读写 |
 | [frame-scheduler](systems/frame-scheduler.md) | `CoreKit.ticker` | 帧分频器:降频 tick + 预算队列 |
@@ -45,7 +45,7 @@
 | [state-machine](state-machine.md) | `class_name KitStateMachine` | Node 型有限状态机,每个实体自己一台 |
 | [kit-context](di/kit-context.md) | `class_name KitContext` | 节点绑定的层级服务容器(DI):游戏代码注册自己的服务 |
 | [rebind](ui/rebind.md) | `class_name KitRebindButton` / `KitRebindList` | 键位重绑定 UI 组件(点击捕获 + 冲突拦截 + 复位) |
-| [kit-transition](transitions/kit-transition.md) | `class_name KitTransition` | 可复用场景转场资源(FADE/SLIDE,由 `CoreKit.scenes` 消费) |
+| [kit-transition](transitions/kit-transition.md) | `class_name KitTransition` | 可复用场景转场资源(FADE/SLIDE/MASK,由 `CoreKit.scenes` 消费) |
 | [ui-stack](ui/ui-stack.md) | `class_name KitUiStack` / `KitUiScreen` | UI 屏栈导航(push/pop/replace + 被盖屏停用 + 模态挡层 + 返回键兜底) |
 | [kit-inventory](inventory/kit-inventory.md) | `class_name KitInventory` | 槽位制物品容器(自动堆叠/溢出/拖拽合并,游戏多实例) |
 | [kit-data-registry](data/kit-data-registry.md) | `class_name KitDataRegistry` | 定义数据表:type→{id→def} 存 Resource,register + load_dir |
