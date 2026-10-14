@@ -211,6 +211,26 @@ func _initialize() -> void:
 	if FileAccess.file_exists(SETTINGS_PATH):
 		DirAccess.remove_absolute(SETTINGS_PATH)
 
+	# 5. 微信小游戏:机身震动改走 wx.vibrateShort(按强度分档)/ vibrateLong(≥0.2s);手柄不受影响
+	var wf := FakeInput.new()
+	wf.joys = {2: ["", "Xbox Controller"]}
+	wf.vibratable = {2: true}
+	var wm = InputManagerScript.new()
+	wm._input_backend = wf
+	wm._refresh_joypads()
+	var wx_calls: Array = []
+	wm._wx_vibrate = func(kind: String) -> void: wx_calls.append(kind)
+	wm.rumble(0.2, 0.05)
+	wm.rumble(0.5, 0.05)
+	wm.rumble(1.0, 0.1)
+	wm.rumble(0.3, 0.5)
+	_check(wx_calls == ["light", "medium", "heavy", "long"], "微信应按强度/时长分档,实际 %s" % [wx_calls])
+	_check(wf.calls.is_empty(), "有 wx 时不应再调 vibrate_handheld,实际 %s" % [wf.calls])
+	wm._input(_pad_button(2))
+	wm.rumble(0.5, 0.3)
+	_check(wf.calls == [["joy", 2, 0.5, 0.5, 0.3]] and wx_calls.size() == 4, "可震手柄仍应走手柄")
+	wm.free()
+
 	if failures == 0:
 		print("test_input_joypad: ALL PASS")
 		quit(0)

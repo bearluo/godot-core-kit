@@ -84,6 +84,10 @@ var _last_pressed_msec: Dictionary = {} # action(String) -> 按下时刻(msec)
 var _ticks_msec_func: Callable = Time.get_ticks_msec
 ## 测试接缝:手柄信息与震动经此调用,测试注入替身。
 var _input_backend = Input
+## 微信小游戏机身震动:Web 导出的 vibrate_handheld 走 navigator.vibrate,微信运行时没有它
+## (不震且每次刷 "does not support vibration")。_ready 在 web 上拿到 wx 接口时设为调
+## wx.vibrateShort/Long 的闭包;参数为 _wx_kind 的档位。也是测试接缝。
+var _wx_vibrate: Callable = Callable()
 var _joy_brands: Dictionary = {}   # device -> JoypadBrand(连接时算好,不在 _input 里逐事件算)
 var _current_brand: int = JoypadBrand.GENERIC
 
@@ -92,6 +96,8 @@ func _ready() -> void:
 	_snapshot_defaults()
 	_refresh_joypads()
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
+	if OS.has_feature("web"):
+		_wx_vibrate = _make_wx_vibrate()
 
 
 ## 设备的手柄品牌(读缓存);未连接返回 GENERIC。
@@ -109,8 +115,34 @@ func rumble(strength: float, duration_sec: float, device := -1) -> void:
 	var pad := _rumble_target(device)
 	if pad != -1 and _input_backend.has_joy_vibration(pad):
 		_input_backend.start_joy_vibration(pad, strength, strength, duration_sec)
+	elif _wx_vibrate.is_valid():
+		_wx_vibrate.call(_wx_kind(strength, duration_sec))
 	else:
 		_input_backend.vibrate_handheld(int(duration_sec * 1000.0), strength)
+
+
+## 微信震动只有两种:短震(约 15ms,type 分 light/medium/heavy)和长震(约 400ms)。
+## 按时长 ≥ 0.2s 选长震,否则按强度三等分选短震档位。
+static func _wx_kind(strength: float, duration_sec: float) -> String:
+	if duration_sec >= 0.2:
+		return "long"
+	if strength < 1.0 / 3.0:
+		return "light"
+	return "medium" if strength < 2.0 / 3.0 else "heavy"
+
+
+## web 上拿得到 wx 接口(微信小游戏)才返回调用闭包;普通浏览器返回空 Callable,照旧走 navigator.vibrate。
+func _make_wx_vibrate() -> Callable:
+	var wx = JavaScriptBridge.get_interface("wx")
+	if wx == null:
+		return Callable()
+	return func(kind: String) -> void:
+		if kind == "long":
+			wx.vibrateLong()
+		else:
+			var opt = JavaScriptBridge.create_object("Object")
+			opt.type = kind
+			wx.vibrateShort(opt)
 
 
 func stop_rumble(device := -1) -> void:

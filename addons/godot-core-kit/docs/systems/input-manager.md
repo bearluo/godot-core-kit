@@ -86,7 +86,7 @@ if CoreKit.input.is_action_buffered("jump", 0.15):
 - **一个槽可以有多个默认键**(如 W 和 ↑)。玩家重绑后这个槽只剩一个键;按槽复位后恢复成多个。
 - **品牌识别**:桌面和 iOS 按 `get_joy_info().vendor_id`(十进制字符串)→ 名字关键字 → GENERIC 判断;Android 只能靠名字,判不出就是 GENERIC;Web 和微信小游戏上名字是 `"Standard Gamepad Mapping"`,一律 GENERIC。品牌只影响显示,按键逻辑统一用 Godot 的位置语义(`JOY_BUTTON_A` 是底部键),**不按品牌交换 A/B**。Switch 的底部键印的是 B,所以 `glyph_key` 返回 `switch/b`。
 - **图标**:kit 不带任何图标资源(主机厂按键图有商标问题,美术风格也该由游戏定)。推荐 Kenney Input Prompts(CC0),用一张映射表把 `glyph_key` 对到它的文件名即可。
-- **震动**:`duration_sec <= 0` 什么都不做(SDL 上 duration=0 等于震 65 秒);`strength` 先 clamp 到 [0,1]。`device = -1` 时只在当前输入设备是手柄时震当前手柄,否则回退 `Input.vibrate_handheld`。手柄震动只在 SDL 平台(桌面、iOS)生效;Android 和 Web 上震的是手机机身;Android 导出需勾选 `VIBRATE` 权限;桌面上没有可震设备时什么都不发生。
+- **震动**:`duration_sec <= 0` 什么都不做(SDL 上 duration=0 等于震 65 秒);`strength` 先 clamp 到 [0,1]。`device = -1` 时只在当前输入设备是手柄时震当前手柄,否则回退 `Input.vibrate_handheld`。手柄震动只在 SDL 平台(桌面、iOS)生效;Android 和 Web 上震的是手机机身;微信小游戏没有 `navigator.vibrate`,kit 在 Web 上能拿到 `wx` 时改调微信震动——微信只有短震(约 15ms,按 `strength` 三等分映射 light / medium / heavy)和长震(约 400ms,`duration_sec ≥ 0.2` 时用),所以 `duration_sec` 只用来选这两种,不能精确控制时长;Android 导出需勾选 `VIBRATE` 权限;桌面上没有可震设备时什么都不发生。
 - 摇杆漂移噪声门限 `MOTION_DEADZONE = 0.2`:低于此幅值的摇杆事件不切换设备,也不切换当前手柄。
 - 键盘绑定用 `physical_keycode`(布局无关)。
 - `_snapshot_defaults()` 必须在应用任何覆盖之前调用;`_ready` 会自动调,脱离场景树的测试需手动调。
