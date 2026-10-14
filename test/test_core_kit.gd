@@ -22,8 +22,8 @@ func _initialize() -> void:
 	await process_frame  # 补一帧,让 CoreKit._ready() 的 bind_* 接线跑完
 
 	# 1. 版本
-	if kit.VERSION != "0.24.4":
-		print("FAIL 1: VERSION 应为 0.24.4,实际 %s" % kit.VERSION)
+	if kit.VERSION != "0.25.0":
+		print("FAIL 1: VERSION 应为 0.25.0,实际 %s" % kit.VERSION)
 		failures += 1
 
 	# 2. 十四个门面属性非 null 且脚本路径正确

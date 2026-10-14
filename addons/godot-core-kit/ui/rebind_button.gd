@@ -2,8 +2,8 @@ class_name KitRebindButton
 extends Button
 ## KitRebindButton —— 单动作键位重绑定按钮(off-facade 可复用 UI 组件)。
 ## 点击进捕获态 → 玩家按新键 → 冲突检测(conflict_mode:BLOCK 拦截 / SWAP 互换)→ 落到
-## InputManager.rebind_action(只替换该槽 + 持久化 Settings)。setup 的 device 指定负责的槽。只管 UI + 捕获 + 冲突判定;重绑/复位/持久化
-## 复用注入的 InputManager(默认 CoreKit.input,可注入 standalone 做 headless 单测)。
+## InputManager.rebind_action(只替换该槽 + 持久化 Settings)。setup 的 device 指定负责的槽。
+## 只管 UI + 捕获 + 冲突判定;重绑/复位/持久化复用注入的 InputManager(默认 CoreKit.input,可注入 standalone 做 headless 单测)。
 ##
 ## 零门面耦合:不引 CoreKit.log(失败经 rebind_failed 信号上报);对 CoreKit.input 的默认解析是
 ## 消费侧便利,测试注入 standalone InputManager 绕开。捕获 Key/MouseButton/JoypadButton
